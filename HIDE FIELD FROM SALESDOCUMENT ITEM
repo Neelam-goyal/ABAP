@@ -1,0 +1,16 @@
+
+    loop at field_properties assigning field-symbol(<fs_field_properties>).
+      if  <fs_field_properties>-field_name = 'YY1_HSNCODE_SDI'
+      or  <fs_field_properties>-field_name = 'YY1_DISCOUNT_RATE1_SDI'
+      or  <fs_field_properties>-field_name = 'YY1_DISCOUNT_RATE1_SDIC'.
+          <fs_field_properties>-invisible = 'X'.
+      endif.
+    endloop.
+ if salesdocument-salesdocumenttype = 'AG'.
+    loop at field_properties assigning field-symbol(<fs_field_properties1>).
+      if <fs_field_properties1>-field_name = 'YY1_TRADENAME_SOITEM_SDI'.
+         <fs_field_properties1>-invisible = 'X'.
+      endif.
+    endloop.
+   endif.
+* YY1_TRADENAME_SOITEM_SDI added by uk
