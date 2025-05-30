@@ -1,0 +1,305 @@
+  billingdoc_extension_out = billingdoc_extension_in.
+    billingdocdescr_extension_out = billingdocdescr_extension_in.
+
+    SELECT SINGLE FROM i_billingdocument AS a
+    INNER JOIN i_customer AS b ON b~customer = a~soldtoparty
+    inner join i_countrytext as c on b~country = c~country
+    FIELDS b~taxnumber3, b~telephonenumber1, c~countryname
+    WHERE a~billingdocument = @billingdoc-billingdocument
+    INTO @DATA(work_area)
+    PRIVILEGED ACCESS.
+    data:pan type string.
+    pan = work_area-taxnumber3+2(10).
+
+    billingdoc_extension_out-yy1_pannumber_bd_head_bdh = pan.
+    billingdoc_extension_out-yy1_telephone_bdh = work_area-telephonenumber1.
+    billingdoc_extension_out-yy1_countryname_bdh = work_area-countryname.
+
+*  for port loading,pre carriage, discahrge
+    SELECT SINGLE FROM i_billingdocumentitem AS a
+       " INNER JOIN i_salesorder as b on b~salesorder = a~salesdocument
+    INNER JOIN i_salesdocument AS c ON c~salesdocument = a~salesdocument
+
+    FIELDS a~salesdocument, c~yy1_portofdicharge_sdh, c~yy1_portofloading_sdh,
+    c~yy1_precarriageby_sdh
+
+    WHERE a~billingdocument = @billingdoc-billingdocument
+    INTO @DATA(work1)
+    PRIVILEGED ACCESS.
+    if sy-subrc eq 0.
+    billingdoc_extension_out-yy1_portofdischarge__bdh = work1-yy1_portofdicharge_sdh.
+    billingdoc_extension_out-yy1_portofloading_bd_bdh = work1-yy1_portofloading_sdh.
+    billingdoc_extension_out-yy1_precarriage_bd_h_bdh = work1-yy1_precarriageby_sdh.
+    endif.
+
+
+    SELECT SINGLE FROM i_billingdocumentitem AS a
+    INNER JOIN i_salesdocument AS b ON b~salesdocument = a~salesdocument
+    FIELDS a~salesdocument , b~yy1_dono_sdh, b~yy1_dodate_sdh, b~yy1_poamendmentno_sdh, b~yy1_poamendmentdate_sdh, b~customerpurchaseorderdate
+    WHERE a~billingdocument = @billingdoc-billingdocument
+    INTO @DATA(wa)
+    PRIVILEGED ACCESS.
+
+    billingdoc_extension_out-yy1_dono_bd_bdh = wa-yy1_dono_sdh.
+    billingdoc_extension_out-yy1_dodatebd_bdh = wa-yy1_dodate_sdh.
+    billingdoc_extension_out-yy1_amendmentno_bd_bdh = wa-yy1_poamendmentno_sdh.
+    billingdoc_extension_out-yy1_amendmentdate_bd_bdh = wa-yy1_poamendmentdate_sdh.
+
+
+* Customer PO Date by Uttam
+billingdoc_extension_out-yy1_custpodate_bd_h_bdh = wa-customerpurchaseorderdate.
+
+
+
+* issue and removal time and date
+
+  select single from I_billingdocument as a
+  fields a~creationtime , a~creationdate
+  where a~billingdocument = @billingdoc-billingdocument
+  into @data(lv_issue)
+  PRIVILEGED ACCESS.
+  BILLINGDOC_EXTENSION_OUT-yy1_issuetime_bd_bdh = lv_issue-creationtime .
+
+   select single from I_billingdocumentitem as a
+   inner join i_deliverydocumentitem as b on a~referencesddocument = b~deliverydocument and a~referencesddocumentitem = b~deliverydocumentitem
+   inner join i_deliverydocument as c on b~deliverydocument = c~deliverydocument
+  fields c~actualgoodsmovementdate , c~actualgoodsmovementtime
+  where a~billingdocument = @billingdoc-billingdocument
+  into @data(lv_removal)
+  PRIVILEGED ACCESS.
+  BILLINGDOC_EXTENSION_OUT-yy1_removal_date_bd_bdh = lv_removal-actualgoodsmovementdate.
+  BILLINGDOC_EXTENSION_OUT-yy1_removal_time_bd_bdh = lv_removal-actualgoodsmovementtime.
+
+
+* Transport GST
+Select single from i_supplier as a
+FIELDS
+a~taxnumber3
+WHERE a~supplier = @billingdoc-yy1_transportdetails_bdh
+  into @data(Transport_GST)
+  PRIVILEGED ACCESS.
+BILLINGDOC_EXTENSION_OUT-yy1_transportgst_bd_h_bdh = transport_gst.
+
+
+*Code for adding removal good date & time for RM Return Challan Print Porm by Uttam ( MM Module)
+
+select single from i_billingdocument
+FIELDS creationdate, creationtime
+where billingdocument = @billingdoc-billingdocument
+into @data(lv_date_time)
+  PRIVILEGED ACCESS.
+  BILLINGDOC_EXTENSION_OUT-yy1_removal_goods_date_bdh = lv_date_time-creationdate.
+  BILLINGDOC_EXTENSION_OUT-yy1_removal_goods_time_bdh = lv_date_time-creationtime.
+
+
+
+  select single from i_billingdocumentitem as a
+  inner join i_salesdocument as b on a~salesdocument = b~salesdocument
+  inner join i_billingdocument as c on b~assignmentreference = c~billingdocument
+
+  FIELDS c~creationdate , c~documentreferenceid
+    where a~billingdocument = @billingdoc-billingdocument
+    into @data(lv_serial)
+  PRIVILEGED ACCESS.
+  BILLINGDOC_EXTENSION_OUT-yy1_serialtaxinvoice_b_bdh = lv_serial-documentreferenceid.
+  BILLINGDOC_EXTENSION_OUT-yy1_serialdate_bd_h_bdh = lv_serial-creationdate.
+
+
+
+
+* Add logic of Challan No for Rm Return By Uttam
+
+select single from i_billingdocument as a
+inner join i_billingdocumentitem as b on a~billingdocument = b~billingdocument
+inner join I_PURCHASEORDERHISTORYAPI01 as c on b~batch = c~batch AND C~goodsmovementtype = '101'
+inner join i_inbounddelivery as d on c~deliverydocument = d~inbounddelivery
+fields d~deliverydocumentbysupplier
+ WHERE
+
+ b~billingdocument = @BILLINGDOC-billingdocument
+
+    INTO @DATA(lv_challannn)
+    PRIVILEGED ACCESS.
+    BILLINGDOC_EXTENSION_OUT-yy1_challan_bd_po_rm_bdh = lv_challannn.
+
+
+
+* Add logic of vendor Challan date for RM return by Uttam
+select single from I_billingdocument as a
+inner join i_billingdocumentitem as b on a~billingdocument = b~billingdocument
+inner join i_purchaseorderhistoryapi01 as c on b~batch = c~batch AND c~goodsmovementtype = '101'
+inner join I_MATERIALDOCUMENTITEM_2 as d on d~purchaseorder = c~purchaseorder AND d~goodsmovementtype = '101'
+inner join I_MaterialDocumentHeader_2 as e on d~materialdocument = e~materialdocument
+fields e~documentdate
+
+ WHERE
+
+ b~billingdocument = @BILLINGDOC-billingdocument
+
+    INTO @DATA(lv_vendor_challan_date)
+    PRIVILEGED ACCESS.
+    BILLINGDOC_EXTENSION_OUT-yy1_challandate_bd_rm_bdh = lv_vendor_challan_date.
+
+*update terms of delivery in print form/
+
+select single from i_billingdocument as a
+inner join i_billingdocumentitem as b on a~billingdocument = b~billingdocument
+inner join i_salesdocument as c on b~salesdocument = c~salesdocument
+inner join i_salesquotation as d on c~referencesddocument = d~salesquotation
+fields d~creationdate,
+d~yy1_termsofdelivery_sd_sdh,
+d~yy1_termsofpayment_soh_sdh
+ WHERE
+ b~billingdocument = @BILLINGDOC-billingdocument
+    INTO @DATA(lv_print)
+    PRIVILEGED ACCESS.
+    if sy-subrc eq 0.
+    BILLINGDOC_EXTENSION_OUT-yy1_pidate_bdh = lv_print-creationdate.
+    BILLINGDOC_EXTENSION_OUT-yy1_termsofpaymentvf_bdh = lv_print-yy1_termsofpayment_soh_sdh.
+    BILLINGDOC_EXTENSION_OUT-yy1_termofdeliveryvf_bdh = lv_print-yy1_termsofdelivery_sd_sdh.
+endif.
+
+select single b~referencesddocument,c~creationdate
+from I_BILLINGDOCUMENTITEM as a
+left join I_SALESDOCUMENT as b on a~salesdocument = b~salesdocument
+left join I_SALESQUOTATION as c on b~referencesddocument = c~salesquotation
+where a~billingdocument = @BILLINGDOC-BILLINGDOCUMENT
+into @data(lv_pr)
+PRIVILEGED ACCESS.
+
+BILLINGDOC_EXTENSION_OUT-yy1_proforma_inv_bdh = lv_pr-referencesddocument.
+BILLINGDOC_EXTENSION_OUT-yy1_record_cr_date_bdh = lv_pr-creationdate.
+
+select single from
+i_billingdocumentitem as a
+left join i_salesdocument as b on a~salesdocument = b~salesdocument
+FIELDS
+b~referencesddocument
+where a~billingdocument = @BILLINGDOC-BILLINGDOCUMENT
+into @data(wa_matgdes) PRIVILEGED ACCESS.
+
+select single from
+i_salesdocument as a
+FIELDS
+a~yy1_materialgroupdes_sdh
+where a~salesdocument = @wa_matgdes
+into @data(wa_matdes2) PRIVILEGED ACCESS.
+
+BILLINGDOC_EXTENSION_OUT-yy1_materialgroupdescr_bdh = wa_matdes2.
+
+
+Data : PLANT_ADD   TYPE STRING.
+Data : P_ADD1  TYPE STRING.
+Data : P_ADD2 TYPE STRING.
+Data : P_CITY TYPE STRING.
+Data : P_DIST TYPE STRING.
+Data : P_STATE TYPE STRING.
+Data : P_PIN TYPE STRING.
+Data : P_COUNTRY TYPE STRING.
+SELECT SINGLE
+c~GSTIN_NO ,
+c~state_code2 ,
+c~plant_name1 ,
+c~address1 ,
+c~address2 ,
+c~city ,
+c~district ,
+c~state_name ,
+c~pin ,
+c~country
+FROM I_BILLINGDOCUMENT as a
+LEFT JOIN I_BILLINGDOCUMENTITEM AS b ON b~billingdocument = a~billingdocument
+LEFT JOIN ZTABLE_PLANT AS c ON c~PLANT_CODE = b~plant
+WHERE b~billingdocument = @BILLINGDOC-BILLINGDOCUMENT
+INTO @DATA(wa_plant)
+PRIVILEGED ACCESS.
+
+P_ADD1 = wa_plant-address1 && ',' .
+P_ADD2 = wa_plant-address2 && ','.
+P_DIST = wa_plant-district && ','.
+P_CITY = wa_plant-city && ','.
+P_STATE = wa_plant-state_name .
+P_PIN =  wa_plant-pin .
+P_COUNTRY =  '(' &&  wa_plant-country && ')' .
+
+
+CONCATENATE P_ADD1  P_ADD2  P_DIST P_CITY   P_STATE '-' P_PIN  P_COUNTRY INTO plant_add SEPARATED BY SPACE.
+BILLINGDOC_EXTENSION_OUT-yy1_plant_com_add_bdh = PLANT_ADD.
+BILLINGDOC_EXTENSION_OUT-yy1_plant_com_name_bdh = wa_plant-plant_name1.
+BILLINGDOC_EXTENSION_OUT-yy1_plant_gstin_no_bdh = wa_plant-gstin_no.
+BILLINGDOC_EXTENSION_OUT-yy1_plant_state_code_bdh = wa_plant-state_code2.
+
+
+select single from I_BILLINGDOCUMENT as a
+fields
+a~creationtime,
+a~creationdate
+where a~billingdocument = @BILLINGDOC-BILLINGDOCUMENT
+into @data(wa_dt) PRIVILEGED ACCESS.
+
+BILLINGDOC_EXTENSION_OUT-YY1_INVOICEDATE_SD_BDH = wa_dt-creationdate.
+BILLINGDOC_EXTENSION_OUT-YY1_INOVICETIME_SD_BDH = wa_dt-creationtime.
+
+SELECT SUM( conditionamount )
+  FROM I_BILLINGDOCITEMPRCGELMNTBASIC
+  WHERE I_BILLINGDOCITEMPRCGELMNTBASIC~BillingDocument = @BILLINGDOC-BILLINGDOCUMENT
+    AND I_BILLINGDOCITEMPRCGELMNTBASIC~ConditionType = 'ZFRT'
+  INTO @DATA(wa_freight) PRIVILEGED ACCESS.
+
+ BILLINGDOC_EXTENSION_OUT-yy1_freightamount_bdh = wa_freight.
+
+ SELECT SUM( conditionamount )
+  FROM I_BILLINGDOCITEMPRCGELMNTBASIC
+  WHERE I_BILLINGDOCITEMPRCGELMNTBASIC~BillingDocument = @BILLINGDOC-BILLINGDOCUMENT
+    AND I_BILLINGDOCITEMPRCGELMNTBASIC~ConditionType IN ('ZINC' , 'ZINP' , 'ZINS')
+  INTO @DATA(wa_insurance) PRIVILEGED ACCESS.
+
+  BILLINGDOC_EXTENSION_OUT-yy1_insuranceamount_bdh = wa_insurance.
+
+  select
+b~BusinessPartner,
+b~BPIdentificationType,
+b~BPIdentificationNumber
+from
+I_billingdocument as a
+inner join I_BuPaIdentification as b on a~SOLDTOPARTY = b~BusinessPartner
+where a~billingdocument = @BILLINGDOC-BILLINGDOCUMENT and
+a~soldtoparty is not initial
+into table @data(lt_identification) PRIVILEGED ACCESS.
+
+read table lt_identification into data(wa_identification) with key BPIdentificationType = 'TIN'.
+BILLINGDOC_EXTENSION_OUT-yy1_tin_billing_bdh = wa_identification-BPIdentificationNumber.
+clear wa_identification.
+read table lt_identification into wa_identification with key BPIdentificationType = 'IMREGD'.
+BILLINGDOC_EXTENSION_OUT-yy1_regdn_biiling_bdh = wa_identification-BPIdentificationNumber.
+*read table lt_identification into wa_identification with key BPIdentificationType = 'VAT'.
+*BILLINGDOC_EXTENSION_OUT-yy1_regdn_biiling_bdh = wa_identification-BPIdentificationNumber.
+clear wa_identification.
+
+select single from
+I_BILLINGDOCUMENTITEM as a left join
+I_SALESDOCUMENT as b on a~SALESDOCUMENT = b~SALESDOCUMENT
+fields
+a~billingdocument,
+b~SALESDOCUMENT,
+b~YY1_ADVANCELICENSE_SD_SDH
+where a~billingdocument = @BILLINGDOC-BILLINGDOCUMENT
+into @data(lv_oth_ref) PRIVILEGED ACCESS.
+
+BILLINGDOC_EXTENSION_OUT-yy1_otherref_billing_bdh = lv_oth_ref-YY1_ADVANCELICENSE_SD_SDH.
+
+select single from
+I_BILLINGDOCUMENTITEM as a left join
+I_DELIVERYDOCUMENT as b on a~REFERENCESDDOCUMENT = b~DELIVERYDOCUMENT
+fields
+a~billingdocument,
+b~YY1_LCA_DLH,
+b~YY1_LCADATE_DLH
+where a~billingdocument = @BILLINGDOC-BILLINGDOCUMENT and b~DELIVERYDOCUMENTTYPE = 'LF'
+into @data(lv_lca) PRIVILEGED ACCESS.
+
+BILLINGDOC_EXTENSION_OUT-yy1_lca_billing_bdh = lv_lca-yy1_lca_dlh.
+BILLINGDOC_EXTENSION_OUT-yy1_lca_date_bdh = lv_lca-YY1_LCADATE_DLH.
+
+
+
