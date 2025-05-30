@@ -1,0 +1,67 @@
+**   This method can be used to perform a final check on the sales document before saving.
+**   Abortion of document saving can be triggered, if necessary.
+**   Results of the check have to be provided in the MESSAGES table.
+**   To have document saving aborted a message of type 'E' has to be added to the MESSAGES table.
+**   Example:
+*
+*DATA: LV_WEIGHT TYPE ntgew_ap.
+*DATA: LV_PACK TYPE  characters.
+*DATA: LV_QTY TYPE menge_d.
+*data : flag type characters.
+*flag = 'F'.
+*
+*
+***IF DOCUMENTPROCESSINGMODE = 'CREATE'./,
+**    if salesdocument-salesdocumenttype = 'TA'.
+***      append value #(  messagetype = 'E' messagetext = 'This document cannot be saved due to field YY1_FIELD_SDH.' ) to messages.
+**    endif.
+*
+*clear : lv_weight.
+*    read table SALESDOCUMENTITEMS into data(WA_SOITEM) index 1.
+*if sy-subrc = 0.
+* lv_weight  = WA_SOITEM-ITEMNETWEIGHT / WA_SOITEM-orderquantity.
+*endif.
+*
+*loop at SALESDOCUMENTITEMS into data(wa_mfg).
+*if sy-tabix <= 1.
+*
+* read table SALESDOCUMENTITEMS_EXTENSION into data(WA_SOITEMEXT) index 1.
+*   if sy-subrc = 0.
+*   lv_pack  =  WA_mfg-orderquantity / lv_weight.
+*endif.
+*
+*
+*if   wa_soitemext-yy1_noofpack_sd_sdi = lv_pack.
+*      lv_pack = wa_soitemext-yy1_noofpack_sd_sdi.
+*   else.
+*     append value #(  messagetype = 'E' messagetext = 'Please maintain correct No of Packs' ) to messages.
+*endif.
+*endif.
+*
+*clear lv_qty.
+*clear: lv_pack.
+*endloop.
+*
+*
+**ENDIF.
+*
+*
+data: lv_ap type string.
+if salesdocument-salesdocumenttype = 'TA' and
+   DOCUMENTPROCESSINGMODE = 'CREATE'.
+  loop at SALESDOCUMENTPARTNERS into data(wa).
+    if wa-partnerfunction = 'AP'.
+        lv_ap = 'AP'.
+    endif.
+  ENDLOOP.
+  if lv_ap is initial.
+    append value #(  messagetype = 'E' messagetext = 'Kindly Maintain Sales Person in Customer Master' ) to messages.
+  endif.
+endif.
+
+
+
+
+
+
+
