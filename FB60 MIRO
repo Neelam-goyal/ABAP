@@ -1,0 +1,33 @@
+    DATA: ls_item       TYPE fins_acdoc_item_in.
+    DATA: lt_item       TYPE fin_t_acdoc_item_in.
+
+    CLEAR: validationmessage.
+
+*    lt_item[] = accountingdocitems[].
+******************************TEXT FIELD MANDATORY FOR TRANSACTIONCODE FB60 TCODE******************
+    IF (  accountingdocheader-transactioncode = 'FB60'   )  .
+    SELECT SINGLE * FROM I_JOURNALENTRY INTO @DATA(LV_FB60)
+    WHERE COMPANYCODE = @accountingdocheader-companycode
+    AND   FISCALYEAR = @accountingdocheader-fiscalyear
+    AND   documentreferenceid = @accountingdocheader-ACCOUNTINGDOCEXTERNALREFERENCE
+    and   transactioncode IN ( 'FB60','FB65','FB70','FB75','MIRO'  )
+    AND   isreversed = ''
+    and   ISREVERSAL = '' .
+    CONCATENATE 'This Ref.No.Already Posted on' LV_FB60-companycode LV_FB60-accountingdocument LV_FB60-fiscalyear INTO DATA(LC_MSG) SEPARATED BY SPACE.
+    IF LV_FB60-documentreferenceid = accountingdocheader-ACCOUNTINGDOCEXTERNALREFERENCE.
+
+        validationmessage-msgid = 'FIN_SUB_VAL'.
+        validationmessage-msgty = 'E'.
+        validationmessage-msgno = '000'.
+        validationmessage-msgv1 = ''.
+        validationmessage-msgv2 = ''.
+        validationmessage-msgv3 = LC_MSG.
+        validationmessage-msgv4 = ''.
+
+        RETURN.
+      ENDIF.
+    ENDIF.
+
+******************************TEXT FIELD MANDATORY FOR TRANSACTIONCODE FB60 TCODE******************
+
+
