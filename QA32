@@ -1,0 +1,16 @@
+IF inspectionlotdata-material IS NOT INITIAL.
+
+   DATA lv_mat TYPE c LENGTH 40.
+
+   lv_mat = | { inspectionlotdata-material ALPHA = OUT } |.
+   CONDENSE lv_mat.
+
+   SELECT SINGLE * FROM zmaterial_table
+   WHERE mat = @lv_mat
+   INTO @DATA(wa_trade)
+   PRIVILEGED ACCESS.
+
+   inspectionlotextension-yy1_tradename_ilh = wa_trade-trade_name.
+   inspectionlotextension-yy1_techincalname_ilh = wa_trade-technical_name.
+
+ENDIF.
