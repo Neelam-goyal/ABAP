@@ -1,0 +1,67 @@
+DATA(current_date) = cl_abap_context_info=>get_system_date( ). "20241121
+ DATA: lv_month_day TYPE c LENGTH 2.
+
+
+  data  ls_message like line of messages.
+
+if PURCHASEORDER is not initial.
+    if purchaseorder-include-yy1_advancelicenseno_pdh is not initial .
+        read table PURCHASEORDERITEMS into data(pitem) index 1.
+        if pitem-purchaseorderitem is not initial.
+*       if pitem-purchaseorderitem is not initial.
+*            ls_message-messagetype = 'E'.
+*            ls_message-messagevariable1 = 'Please remove line item for maintaing advance license number '.
+*            APPEND ls_message TO messages.
+*            else.
+*            ls_message-messagetype = 'E'.
+*            ls_message-messagevariable1 = 'maintain valid licence'.
+*            APPEND ls_message TO messages.
+SHIFT pitem-material LEFT DELETING LEADING '0'.
+      select single Advancelic,Advancelicitemno,Productcode  from YY1_IMP_LIC
+               where productcode = @pitem-material
+          AND     advancelic = @purchaseorder-include-yy1_advancelicenseno_pdh
+               into @data(lv_productcode)
+                PRIVILEGED ACCESS.
+         endif.
+
+
+
+       if lv_productcode is not initial.
+
+       else.
+         if lv_productcode-productcode <> pitem-material
+AND  lv_productcode-advancelic <> purchaseorder-include-yy1_advancelicenseno_pdh.
+         ls_message-messagetype = 'E'.
+         ls_message-messagevariable1 = 'line item should be advance license item '.
+         APPEND ls_message TO messages.
+       endif.
+     endif.
+
+         if purchaseorder-include-yy1_advancelicenseno_pdh is not initial.
+               select single advancelic,currencycode ,importvalidupto from YY1_advLIcno
+               where advancelic = @purchaseorder-include-yy1_advancelicenseno_pdh
+               into @data(lv_advlic)
+            PRIVILEGED ACCESS.
+
+            if lv_advlic is not initial.
+                if lv_advlic-currencycode <> purchaseorder-DOCUMENTCURRENCY .
+                    ls_message-messagetype = 'E'.
+                    ls_message-messagevariable1 = 'Currency code is incorrect '.
+                    APPEND ls_message TO messages.
+                endif.
+
+                if lv_advlic-importvalidupto <= PURCHASEORDER-PURCHASEORDERDATE.
+                    ls_message-messagetype = 'E'.
+                    ls_message-messagevariable1 = 'Advance Licence Number has been expired '.
+                    APPEND ls_message TO messages.
+                endif.
+
+            else.
+                ls_message-messagetype = 'E'.
+                ls_message-messagevariable1 = 'Please enter valid advance licence '.
+                APPEND ls_message TO messages.
+            endif.
+        endif.
+    endif .
+
+endif.
