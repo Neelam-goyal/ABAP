@@ -1,0 +1,23 @@
+
+MOVE-CORRESPONDING delivery_document_in TO delivery_document_out.
+delivery_document_items_out = delivery_document_items_in.
+
+IF delivery_document_in-sddocumentcategory = 'LF' OR delivery_document_in-sddocumentcategory = 'LO'.
+ENDIF.
+
+LOOP AT delivery_document_items_out INTO DATA(wa).
+  SELECT SINGLE
+  FROM i_deliverydocumentitem AS a
+  FIELDS a~itemgrossweight,
+  a~itemnetweight, a~deliveryquantityunit
+  WHERE a~deliverydocument = @wa-deliverydocument AND
+  a~deliverydocumentitem = @wa-deliverydocumentitem
+  INTO @DATA(lt_gross) PRIVILEGED ACCESS.
+
+  wa-yy1_grossweight_dli = lt_gross-itemgrossweight.
+  wa-yy1_netgrossweight_dli = lt_gross-itemnetweight.
+  wa-yy1_netgrossweight_dliu = lt_gross-deliveryquantityunit.
+  MODIFY delivery_document_items_out FROM wa.
+  CLEAR wa.
+ENDLOOP.
+
