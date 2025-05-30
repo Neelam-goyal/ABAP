@@ -1,0 +1,10 @@
+   DATA(current_date) = cl_abap_context_info=>get_system_date( ).
+    data  ls_message like line of messages.
+
+     IF SALESDOCUMENT-CUSTOMERPURCHASEORDERDATE < current_date.
+      ls_message-messagetype = 'E'.
+      ls_message-messagetext = 'Please change date as on current date.' .
+      APPEND ls_message TO messages.
+      ENDIF.
+
+
