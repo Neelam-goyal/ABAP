@@ -1,0 +1,16 @@
+
+   billingdocitem_ext_out = billingdocitem_ext_in.
+   billingdocitemdescr_ext_out = billingdocitemdescr_ext_in.
+
+   SELECT SINGLE FROM i_billingdocumentitem
+   FIELDS billingquantity , billingquantityunit
+   WHERE billingquantityunit = 'KAR' AND billingdocument = @billingdocitem-billingdocument
+   AND billingdocumentitem = @billingdocitem-billingdocumentitem
+   INTO ( @billingdocitem_ext_out-yy1_quantity_box_bdi, @billingdocitem_ext_out-yy1_quantity_box_bdiu )
+   PRIVILEGED ACCESS.
+
+   SELECT SINGLE FROM i_productunitsofmeasure
+   FIELDS quantitynumerator , baseunit
+   WHERE product = @billingdocitem-product AND alternativeunit = 'ST'
+   INTO ( @billingdocitem_ext_out-yy1_quantitypcs_bdi, @billingdocitem_ext_out-yy1_quantitypcs_bdiu )
+   PRIVILEGED ACCESS.
