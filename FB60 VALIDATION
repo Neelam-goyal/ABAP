@@ -1,0 +1,55 @@
+    DATA: ls_item       TYPE fins_acdoc_item_in.
+    DATA: lt_item       TYPE fin_t_acdoc_item_in.
+
+    CLEAR: validationmessage.
+
+    lt_item[] = accountingdocitems[].
+******************************TEXT FIELD MANDATORY FOR TRANSACTIONCODE FB60 TCODE******************
+    IF accountingdocheader-transactioncode = 'FB60' .
+
+      READ TABLE lt_item INTO DATA(wa_accounting_doc_items) WITH KEY financialaccounttype = 'K' .
+
+      IF wa_accounting_doc_items-businessplace = ''.
+        validationmessage-msgid = 'FIN_SUB_VAL'.
+        validationmessage-msgty = 'E'.
+        validationmessage-msgno = '000'.
+        validationmessage-msgv1 = ''.
+        validationmessage-msgv2 = ''.
+        validationmessage-msgv3 = 'Bus.Place Required in Header-Basic Data.'.
+        validationmessage-msgv4 = ''.
+
+        RETURN.
+      ENDIF.
+       IF wa_accounting_doc_items-businessplace is not initial.
+        if  wa_accounting_doc_items-TAXSECTION = ''.
+        validationmessage-msgid = 'FIN_SUB_VAL'.
+        validationmessage-msgty = 'E'.
+        validationmessage-msgno = '000'.
+        validationmessage-msgv1 = ''.
+        validationmessage-msgv2 = ''.
+        validationmessage-msgv3 = 'Section code Required in Header-Basic Data.'.
+        validationmessage-msgv4 = ''.
+
+        RETURN.
+      ENDIF.
+    ENDIF.
+    endif.
+  if  accountingdocheader-transactioncode = 'MIRO'.
+    READ TABLE lt_item INTO DATA(wa_accounting_doc_items1) WITH KEY financialaccounttype = 'K' .
+
+      IF wa_accounting_doc_items1-TAXSECTION = ''.
+        validationmessage-msgid = 'FIN_SUB_VAL'.
+        validationmessage-msgty = 'E'.
+        validationmessage-msgno = '000'.
+        validationmessage-msgv1 = ''.
+        validationmessage-msgv2 = ''.
+        validationmessage-msgv3 = 'Bupla & Section Code is Req in Header-Basic Data.'.
+        validationmessage-msgv4 = ''.
+
+        RETURN.
+      ENDIF.
+    ENDIF.
+
+******************************TEXT FIELD MANDATORY FOR TRANSACTIONCODE FB60 TCODE******************
+
+
