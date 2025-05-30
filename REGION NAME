@@ -1,0 +1,12 @@
+* IF form_data-formlanguage = 'E' AND form_data-sendercountry = 'DE'.
+*    SELECT SINGLE FROM I_PurchaseOrderAPI01 AS A
+*        LEFT JOIN I_PurchaseOrderitemAPI01 as b on b~purchaseorder = a~purchaseorder
+*        LEFT JOIN I_PLANT AS C ON c~plant = b~plant
+*        LEFT JOIN I_REGIONTEXT AS d ON
+*        FIELDS B~regionname , A~region
+*        WHERE A~plant = @purchaseorder
+*        INTO @DATA(WA_DATA)
+*            PRIVILEGED ACCESS.
+
+*PURDOC_EXTENSION-yy1_regionname_pdh = wa_data-regionname.
+*ENDIF.
