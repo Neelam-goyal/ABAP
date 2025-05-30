@@ -1,0 +1,80 @@
+
+
+salesdocumentitem_extension_o = salesdocumentitem_extension_i.
+
+IF salesdocument-salesdocumenttype = 'TA'.
+
+   SELECT SINGLE FROM I_SALESQUOTATION AS a
+   FIELDS a~salesquotation
+   WHERE a~salesquotation = @SALESDOCUMENT-referencesddocument
+   AND a~salesquotationtype = 'AG'
+   INTO @DATA(work)
+   PRIVILEGED ACCESS.
+   if sy-subrc eq 0.
+       SELECT SINGLE FROM I_SALESQUOTATIONitem AS a
+       FIELDS a~yy1_sohscode_sdi
+       WHERE a~salesquotation = @salesdocument-referencesddocument
+       AND a~salesquotationitem = @salesdocumentitem-referencesddocumentitem
+       INTO @DATA(work12)
+       PRIVILEGED ACCESS.
+  if sy-subrc eq 0.
+    SALESDOCUMENTITEM_EXTENSION_O-yy1_sohscode_sdi = work12.
+   endif.
+endif.
+endif.
+
+SELECT SINGLE FROM i_salesdocumentitem AS a
+  INNER JOIN i_productplantbasic AS b ON a~originallyrequestedmaterial = b~product
+  FIELDS b~consumptiontaxctrlcode
+  WHERE a~salesdocument = @salesdocumentitem-salesdocument
+  AND a~salesdocumentitem = @salesdocumentitem-salesdocumentitem
+  INTO @salesdocumentitem_extension_o-yy1_hsncode_sdi
+  PRIVILEGED ACCESS.
+
+
+SELECT SINGLE FROM i_salesdocitempricingelement
+FIELDS conditionratevalue, conditioncurrency
+WHERE salesdocument = @salesdocumentitem-salesdocument
+AND salesdocumentitem = @salesdocumentitem-salesdocumentitem
+AND conditiontype = 'ZDIS'
+INTO ( @salesdocumentitem_extension_o-yy1_discount_rate1_sdi,
+@salesdocumentitem_extension_o-yy1_discount_rate1_sdic )
+PRIVILEGED ACCESS.
+
+**********************update Pack size fields base of net weight
+
+*SELECT SINGLE FROM i_salesdocumentitem AS a
+*  INNER JOIN i_product AS b ON a~material = B~product
+*  FIELDS b~netweight,b~baseunit
+*  WHERE a~salesdocument = @salesdocumentitem-salesdocument
+*  and a~salesdocumentitem = @salesdocumentitem-salesdocumentitem
+*  INTO @data(lv_pack)
+*  PRIVILEGED ACCESS.
+*  salesdocumentitem_extension_o-YY1_PACKSIZE_SD_SDI = lv_pack-netweight.
+*   salesdocumentitem_extension_o-YY1_PACKSIZE_SD_SDIU = lv_pack-baseunit.
+
+*************************SO Line Item Trade Field**************************************
+
+
+
+SELECT SINGLE FROM i_salesdocumentitem AS a
+  INNER JOIN zi_dd_mat AS b ON a~material = b~mat
+  FIELDS b~tradename
+  WHERE a~material = @salesdocumentitem-material
+  INTO @DATA(lv_trade)
+  PRIVILEGED ACCESS.
+salesdocumentitem_extension_o-yy1_tradename_soitem_sdi = lv_trade.
+
+
+*  **********************************update No of pacs field
+*  salesdocumentitem_extension_o-YY1_NOOFPACK_SD_SDI = SALESDOCUMENTITEM-ORDERQUANTITY / lv_pack-netweight.
+
+
+*  **********************************update Basic Material for Export Quotation field
+SELECT SINGLE FROM i_product
+FIELDS basicmaterial
+WHERE product = @salesdocumentitem-material
+INTO @DATA(lv_matnrbasic)
+PRIVILEGED ACCESS.
+
+salesdocumentitem_extension_o-yy1_basicmaterial_sd_l_sdi = lv_matnrbasic.
