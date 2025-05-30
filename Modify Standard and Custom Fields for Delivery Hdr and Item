@@ -1,0 +1,291 @@
+DATA: ls_message1 LIKE LINE OF messages.
+
+DATA: lv_plant_address  TYPE string,
+      lv_plant_city_pin TYPE string,
+      lv_plant_state    TYPE string,
+      lv_packing        TYPE string.
+IF delivery_document_in-deliverydocumenttype EQ 'EL'.
+  IF delivery_document_in-deliverydocumentbysupplier IS INITIAL.
+    ls_message1-messagetype = 'E'.
+    ls_message1-messagetext = 'Please Enter External ID number'.
+    APPEND ls_message1 TO messages.
+    CLEAR: ls_message1.
+  ENDIF.
+ENDIF.
+
+MOVE-CORRESPONDING delivery_document_in TO delivery_document_out.
+delivery_document_items_out = delivery_document_items_in.
+
+
+SELECT
+b~businesspartner,
+b~bpidentificationtype,
+b~bpidentificationnumber
+FROM
+i_deliverydocument AS a
+INNER JOIN i_bupaidentification AS b ON a~soldtoparty = b~businesspartner
+WHERE a~deliverydocument = @delivery_document_out-deliverydocument AND
+a~soldtoparty IS NOT INITIAL
+INTO TABLE @DATA(lt_identification) PRIVILEGED ACCESS.
+
+READ TABLE lt_identification INTO DATA(wa_identification) WITH KEY bpidentificationtype = 'TIN'.
+delivery_document_out-yy1_tin_dlh = wa_identification-bpidentificationnumber.
+CLEAR wa_identification.
+READ TABLE lt_identification INTO wa_identification WITH KEY bpidentificationtype = 'VAT'.
+delivery_document_out-yy1_vat_dlh = wa_identification-bpidentificationnumber.
+CLEAR wa_identification.
+READ TABLE lt_identification INTO wa_identification WITH KEY bpidentificationtype = 'IMREGD'.
+delivery_document_out-yy1_regdn_dlh = wa_identification-bpidentificationnumber.
+CLEAR wa_identification.
+
+SELECT SINGLE FROM
+i_deliverydocumentitem AS a LEFT JOIN
+i_salesdocument AS b ON a~referencesddocument = b~salesdocument
+FIELDS
+a~deliverydocument,
+b~salesdocument,
+b~yy1_advancelicense_sd_sdh
+WHERE a~deliverydocument = @delivery_document_out-deliverydocument AND
+a~deliverydocumentitemcategory = 'TAN'
+INTO @DATA(lv_oth_ref) PRIVILEGED ACCESS.
+
+delivery_document_out-yy1_otherref_dlh = lv_oth_ref-yy1_advancelicense_sd_sdh.
+
+SELECT SINGLE
+    from i_deliverydocumentitem as a left join
+      i_salesdocument AS b on a~referencesddocument = b~salesdocument
+      fields
+      b~referencesddocument
+      WHERE a~deliverydocument = @delivery_document_out-deliverydocument
+      and a~deliverydocumentitemcategory = 'TAN'
+      INTO @DATA(lv_ref2)
+      PRIVILEGED ACCESS.
+
+    SELECT single from
+    i_salesdocument as a
+    fields
+    a~yy1_materialgroupdes_sdh
+    where a~salesdocument = @lv_ref2
+    into @data(lv_sq2) PRIVILEGED ACCESS.
+
+    delivery_document_out-yy1_materialgroupdesc_dlh = lv_sq2.
+
+    select single from
+    i_deliverydocumentitem as a
+    left join i_salesdocumentitem as b on a~referencesddocument = b~salesdocument
+    left join i_salesquotation as c on b~referencesddocument = c~salesquotation
+    fields
+    c~creationdate
+    where a~deliverydocument = @delivery_document_out-deliverydocument
+    into @data(lv_quotationdate) PRIVILEGED ACCESS.
+
+
+    delivery_document_out-yy1_quotationdate_dlh = lv_quotationdate.
+
+
+LOOP AT delivery_document_items_out INTO DATA(wa).
+
+  SELECT SINGLE FROM i_salesdocumentitem AS a
+  left join i_salesquotation as b on a~referencesddocument = b~salesquotation
+     FIELDS
+     a~referencesddocument, a~referencesddocumentitem,
+     a~salesdocument, a~salesdocumentitem,
+     a~yy1_sohscode_sdi, a~yy1_packsize_sd_sdiu, a~yy1_packsize_sd_sdi,
+     b~creationdate
+     WHERE a~salesdocument = @wa-referencesddocument
+     AND a~salesdocumentitem = @wa-referencesddocumentitem
+     AND a~salesdocumentitemcategory = 'TAN'
+    INTO  @DATA(lv_line) PRIVILEGED ACCESS.
+
+*  READ TABLE lv_line INTO DATA(wa_line) WITH KEY deliverydocument = wa-deliverydocument.
+
+  wa-yy1_hscode_deli_dli = lv_line-yy1_sohscode_sdi.
+  wa-yy1_quotation_dli = lv_line-referencesddocument.
+*  delivery_document_out-yy1_quotationdate_dlh = lv_line-creationdate.
+
+  CLEAR lv_packing.
+  lv_packing = lv_line-yy1_packsize_sd_sdi.
+  CONCATENATE lv_packing lv_line-yy1_packsize_sd_sdiu INTO lv_packing SEPARATED BY '/'.
+  wa-yy1_packing_dli = lv_packing.
+
+  SELECT SINGLE  a~consumptiontaxctrlcode , a~product
+  FROM i_productplantbasic AS a
+  WHERE a~product = @wa-material
+  INTO  @DATA(it_hsn)
+  PRIVILEGED ACCESS.
+
+  DATA: lv_mat TYPE string.
+  lv_mat = wa-material.
+  SHIFT lv_mat LEFT DELETING LEADING '0'.
+
+  SELECT SINGLE
+  a~tradename
+  FROM yy1_zmaterial_pkg AS a
+  WHERE a~mat = @lv_mat
+  INTO @DATA(lv_description) PRIVILEGED ACCESS.
+
+  IF lv_description IS INITIAL.
+    SELECT SINGLE
+    a~productname
+    FROM i_producttext AS a
+    WHERE a~product = @wa-material
+    INTO @lv_description PRIVILEGED ACCESS.
+  ENDIF.
+
+  wa-yy1_material_dli = lv_description.
+
+
+
+*  READ TABLE it_hsn INTO DATA(wa_hsn) WITH KEY product = wa-material.
+  wa-yy1_hsncode_del_dli = it_hsn-consumptiontaxctrlcode.
+
+  SELECT SINGLE address1, address2, city, pin , state_code2 , state_name
+  , gstin_no , cin_no
+    FROM ztable_plant AS a
+    INNER JOIN i_deliverydocumentitem AS b ON a~plant_code = b~plant
+    WHERE a~plant_code = @wa-plant
+    AND b~deliverydocument = @wa-deliverydocument
+    INTO @DATA(lv_plant)
+   PRIVILEGED ACCESS.
+
+  SELECT SINGLE
+  a~referencesddocument,
+  b~CUSTOMERPURCHASEORDERDATE,
+  b~PURCHASEORDERBYCUSTOMER,
+  a~creationdate
+  FROM i_deliverydocumentitem AS a
+  left join i_salesdocument as b on a~referencesddocument = b~SALESDOCUMENT
+    WHERE a~deliverydocument = @wa-deliverydocument
+    AND a~referencesddocument IS NOT INITIAL
+    INTO @DATA(lv_buers)
+    PRIVILEGED ACCESS.
+
+
+  SELECT SINGLE yy1_portofdicharge_sdh , yy1_portofloading_sdh,
+  yy1_precarriageby_sdh , yy1_termsofdelivery_sd_sdh ,
+  yy1_termsofpayment_soh_sdh
+  FROM i_salesquotation AS a
+  WHERE a~salesquotation = @wa-yy1_quotation_dli
+  INTO @DATA(lv_sq)
+  PRIVILEGED ACCESS.
+
+  SELECT SINGLE
+   b~billingdocument,
+   b~creationdate
+FROM i_billingdocumentitem AS a
+LEFT JOIN i_billingdocument AS b
+ON a~billingdocument = b~billingdocument
+WHERE a~referencesddocument = @wa-deliverydocument
+AND a~salesdocumentitemcategory = 'TAN'
+AND b~billingdocumenttype = 'F8'
+INTO @DATA(inv)
+PRIVILEGED ACCESS.
+
+  SELECT SINGLE b~product , alternativeunit , quantitynumerator , quantitydenominator , a~cumulativebatchqtyinbaseunit
+  FROM   i_deliverydocumentitem AS a
+  LEFT JOIN i_productunitsofmeasure AS b ON a~product = b~product
+  WHERE a~product = @wa-material AND b~alternativeunit = 'KG'
+  AND a~deliverydocument = @wa-deliverydocument
+  AND a~deliverydocumentitemcategory = 'TAN'
+  INTO  @DATA(it_prd)
+  PRIVILEGED ACCESS.
+
+*  READ TABLE it_prd INTO DATA(wa_prd) WITH KEY product = wa-material.
+  wa-yy1_net_weight_dli = it_prd-cumulativebatchqtyinbaseunit * ( it_prd-quantitydenominator / it_prd-quantitynumerator ).
+
+
+
+
+  lv_plant_address = lv_plant-address1.
+  CONCATENATE lv_plant_address lv_plant-address2 INTO lv_plant_address SEPARATED BY space.
+
+
+  lv_plant_city_pin = lv_plant-city.
+  CONCATENATE lv_plant_city_pin lv_plant-pin INTO lv_plant_city_pin SEPARATED BY space.
+
+  lv_plant_state = lv_plant-state_code2.
+  CONCATENATE lv_plant_state lv_plant-state_name INTO lv_plant_state SEPARATED BY space.
+
+
+
+  SELECT SINGLE FROM i_handlingunititem AS a INNER JOIN
+                     i_handlingunitheader AS b ON b~handlingunitexternalid = a~handlingunitexternalid
+  FIELDS a~handlingunitexternalid,
+         b~packagingmaterial
+  WHERE a~handlingunitreferencedocument = @wa-deliverydocument
+  AND a~material = @wa-material
+  INTO @DATA(wa_pkg_matnr_text) PRIVILEGED ACCESS.
+
+  DATA(lv_matnr) = |{ wa_pkg_matnr_text-packagingmaterial ALPHA = OUT }|.
+
+  IF wa_pkg_matnr_text-packagingmaterial IS NOT INITIAL.
+    SELECT SINGLE FROM zmaterial_table FIELDS trade_name
+    WHERE mat = @lv_matnr
+    INTO @DATA(lv_matnr_pkg_desc) PRIVILEGED ACCESS.
+  ENDIF.
+
+
+  IF lv_matnr_pkg_desc IS INITIAL.
+    SELECT SINGLE a~productname
+    FROM i_producttext AS a
+    WHERE a~product = @wa_pkg_matnr_text-packagingmaterial
+    INTO @DATA(wa_desc2)  PRIVILEGED ACCESS.
+    wa-yy1_product_desc_dli = wa_desc2.
+  ELSE.
+    wa-yy1_product_desc_dli = lv_matnr_pkg_desc ."wa_pkg_matnr_text-trade_name.
+  ENDIF.
+
+  SELECT SINGLE a~cumulativebatchqtyinbaseunit ,  a~product
+  FROM i_deliverydocumentitem AS a
+  WHERE
+    a~deliverydocument = @wa-deliverydocument AND
+    a~product = @wa-material
+    AND a~deliverydocumentitemcategory = 'TAN'
+  INTO @DATA(wa_qty)
+  PRIVILEGED ACCESS.
+
+  SELECT SINGLE
+  FROM i_deliverydocumentitem AS a LEFT JOIN
+  i_salesdocumentitem AS b ON a~referencesddocument = b~salesdocument AND a~deliverydocumentitemcategory = 'TAN'
+  FIELDS
+  b~materialbycustomer
+  WHERE a~deliverydocument = @wa-deliverydocument AND
+  b~material = @wa-material
+  INTO @DATA(lv_itemtext) PRIVILEGED ACCESS.
+
+
+  SELECT SINGLE FROM
+  i_deliverydocumentitem AS a LEFT JOIN
+  i_salesdocument AS b ON a~referencesddocument = b~salesdocument LEFT JOIN
+  i_salesdocumentitem AS c ON b~referencesddocument = c~salesdocument AND c~material = @wa-material
+  FIELDS
+  c~yy1_desofgood_sdi
+  WHERE a~deliverydocument = @wa-deliverydocument AND a~deliverydocumentitemcategory = 'TAN'
+  INTO @DATA(lv_desgoods)
+  PRIVILEGED ACCESS.
+
+  wa-yy1_desofgoods_dli = lv_desgoods.
+  wa-yy1_linetext_dli = lv_itemtext.
+  wa-yy1_plantaddress_dli = lv_plant_address.
+  wa-yy1_plantcity_dli = lv_plant_city_pin.
+  wa-yy1_plantstate_dli = lv_plant_state.
+  wa-yy1_plantgstin_dli = lv_plant-gstin_no.
+  wa-yy1_plantcin_dli = lv_plant-cin_no.
+  wa-yy1_buyer_ord_no_dli = lv_buers-purchaseorderbycustomer.
+  wa-yy1_buyers_ord_date_dli = lv_buers-customerpurchaseorderdate.
+  wa-yy1_pre_car_by_dli = lv_sq-yy1_precarriageby_sdh.
+  wa-yy1_port_of_loading1_dli = lv_sq-yy1_portofloading_sdh.
+  wa-yy1_port_of_discharge_dli = lv_sq-yy1_portofdicharge_sdh.
+  wa-yy1_terms_of_payment_dli = lv_sq-yy1_termsofpayment_soh_sdh.
+  wa-yy1_terms_of_delivery_dli = lv_sq-yy1_termsofdelivery_sd_sdh.
+  wa-yy1_invoice_no_dli = inv-billingdocument.
+  wa-yy1_invoice_date_dli = inv-creationdate.
+  wa-yy1_delivery_qty_dli = wa_qty-cumulativebatchqtyinbaseunit.
+
+  MODIFY delivery_document_items_out FROM wa.
+  CLEAR: lv_plant_city_pin, lv_plant_address, wa, lv_plant, lv_packing, it_prd, it_hsn, lv_line , lv_matnr, wa_pkg_matnr_text , wa_qty, wa_desc2, lv_plant_state.
+  CLEAR: lv_description.
+  CLEAR: lv_mat.
+  CLEAR lv_itemtext.
+  CLEAR : lv_desgoods .
+ENDLOOP.
