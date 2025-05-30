@@ -1,0 +1,209 @@
+Description
+Check Item Data in Material Documents
+ID
+MMIM_ITEM_CHECK_DATA
+Affected Business Contexts
+MATERIALDOCUMENTITEM
+Documentation
+View Documentation
+
+DATA: ls_message TYPE if_mmim_head_check_data=>ts_messages.
+  data(lv_mat) = item-material.
+shift lv_mat LEFT DELETING LEADING '0'.
+data(lv_itm) = item-purchaseorderitem.
+shift lv_itm LEFT DELETING LEADING '0'.
+
+* SELECT SINGLE purchaseordertype FROM i_purchaseorderapi01
+*      WHERE purchaseorder = @item-purchaseorder
+*      INTO @DATA(lv_potype) PRIVILEGED ACCESS.
+
+   IF header-materialdocumentheadertext IS  INITIAL AND
+  ( item-goodsmovementtype = '101' ) and
+  ( item-plant = '02AG' OR item-plant = '05SB' OR item-plant = '02EP' ).
+
+      ls_message-messagetype = 'E'.
+      ls_message-messagetext = 'Please Enter Gate Entry No in Header Text'.
+      APPEND ls_message TO messages.
+      clear : ls_message.
+   ENDIF.
+
+IF header-materialdocumentheadertext IS NOT INITIAL
+AND (  item-goodsmovementtype = '101' ) AND
+  (  item-plant = '02AG' OR item-plant = '05SB' OR item-plant = '02EP' ).
+
+ SELECT SINGLE * FROM zgateentryheader
+ WHERE gateno = @header-materialdocumentheadertext
+ and cancelled ne 'X'
+  INTO @DATA(lv_no) PRIVILEGED ACCESS.
+
+  IF lv_no IS INITIAL .
+    ls_message-messagetype = 'E'.
+    ls_message-messagetext = 'Gate entry no does not exist'.
+    APPEND ls_message TO messages.
+      clear ls_message.
+  ENDIF.
+endif.
+
+
+ IF header-materialdocumentheadertext IS not INITIAL AND
+  ( item-goodsmovementtype = '101' ) and
+  ( item-plant = '02AG' OR item-plant = '05SB' OR item-plant = '02EP' ).
+
+if lv_no is not INITIAL.
+  SELECT SINGLE * FROM zgateentrylines
+  WHERE gateentryno = @lv_no-gateentryno
+*and productcode = @item-material
+  AND documentno = @item-purchaseorder
+  and documentitem = @item-purchaseorderitem
+  INTO @DATA(lv_record) PRIVILEGED ACCESS.
+
+   if lv_record-documentno ne item-purchaseorder.
+    ls_message-messagetype = 'E'.
+    ls_message-messagetext = | Gate Pass No. should of same PO for which GRN is created |.
+    APPEND ls_message TO messages.
+      clear ls_message.
+  ENDIF.
+
+  else.
+
+    ls_message-messagetype = 'E'.
+    ls_message-messagetext = | Gate entry needs to be done for item no : { lv_itm } |.
+    APPEND ls_message TO messages.
+      clear ls_message.
+  ENDIF.
+  endif.
+
+ IF header-materialdocumentheadertext IS not INITIAL AND
+  ( item-goodsmovementtype = '101' ) and
+  ( item-plant = '02AG' OR item-plant = '05SB' OR item-plant = '02EP' ).
+
+  SELECT SINGLE FROM i_materialdocumentheader FIELDS materialdocument , materialdocumentyear
+  WHERE materialdocumentheadertext = @header-materialdocumentheadertext
+*  and goodsmovementiscancelled = ''
+  INTO @DATA(lv_head) PRIVILEGED ACCESS.
+*
+  if lv_head   is  not initial.
+        SELECT SINGLE * FROM i_materialdocumentitem_2
+        WHERE materialdocument = @lv_head-materialdocument and materialdocumentyear = @lv_head-materialdocumentyear
+        and goodsmovementiscancelled = ''
+        and goodsmovementtype = '101'
+        INTO @DATA(lv_item) PRIVILEGED ACCESS.
+
+       if lv_item is not initial.
+          ls_message-messagetype = 'E'.
+          ls_message-messagetext = | gate entry number has  already been used for po : { lv_item-purchaseorder } |.
+          APPEND ls_message TO messages.
+          clear : ls_message.
+       endif.
+endif.
+
+   SELECT SINGLE * FROM zgateentryheader
+ WHERE gateno = @header-materialdocumentheadertext
+ AND cancelled = ''
+  INTO @DATA(lv_iscancelled) PRIVILEGED ACCESS.
+
+   IF lv_iscancelled IS INITIAL." AND (  lv_potype NE 'ZSRV' OR lv_potype NE 'ZRET' OR lv_potype NE 'ZSTO' ).
+    ls_message-messagetype = 'E'.
+    ls_message-messagetext = | Gate entry is Cancelled for item no : { lv_itm } |.
+    APPEND ls_message TO messages.
+    clear ls_message.
+  ENDIF.
+endif.
+
+
+SELECT SINGLE purchaseordertype FROM i_purchaseorderapi01
+      WHERE purchaseorder = @item-purchaseorder
+      INTO @DATA(lv_potype) PRIVILEGED ACCESS.
+
+   IF header-materialdocumentheadertext IS  INITIAL AND
+  ( item-goodsmovementtype = '101' ) and
+  ( item-plant = '02BN' and lv_potype <> 'ZSUB' ).
+
+      ls_message-messagetype = 'E'.
+      ls_message-messagetext = 'Please Enter Gate Entry No in Header Text'.
+      APPEND ls_message TO messages.
+      clear : ls_message.
+   ENDIF.
+
+IF header-materialdocumentheadertext IS NOT INITIAL
+AND (  item-goodsmovementtype = '101' ) AND
+  ( item-plant = '02BN' and lv_potype <> 'ZSUB' ).
+
+ SELECT SINGLE * FROM zgateentryheader
+ WHERE gateno = @header-materialdocumentheadertext
+ and cancelled ne 'X'
+  INTO @DATA(lv_no1) PRIVILEGED ACCESS.
+
+  IF lv_no1 IS INITIAL .
+    ls_message-messagetype = 'E'.
+    ls_message-messagetext = 'Gate entry no does not exist'.
+    APPEND ls_message TO messages.
+      clear ls_message.
+  ENDIF.
+endif.
+
+
+ IF header-materialdocumentheadertext IS not INITIAL AND
+  ( item-goodsmovementtype = '101'  ) and
+( item-plant = '02BN' and lv_potype <> 'ZSUB' ).
+
+if lv_no1 is not INITIAL.
+  SELECT SINGLE * FROM zgateentrylines
+  WHERE gateentryno = @lv_no1-gateentryno
+*and productcode = @item-material
+  AND documentno = @item-purchaseorder
+  and documentitem = @item-purchaseorderitem
+  INTO @DATA(lv_record1) PRIVILEGED ACCESS.
+
+   if lv_record1-documentno ne item-purchaseorder.
+    ls_message-messagetype = 'E'.
+    ls_message-messagetext = | Gate Pass No. should of same PO for which GRN is created |.
+    APPEND ls_message TO messages.
+      clear ls_message.
+  ENDIF.
+
+  else.
+
+    ls_message-messagetype = 'E'.
+    ls_message-messagetext = | Gate entry needs to be done for item no : { lv_itm } |.
+    APPEND ls_message TO messages.
+      clear ls_message.
+  ENDIF.
+  endif.
+
+ IF header-materialdocumentheadertext IS not INITIAL AND
+  ( item-goodsmovementtype = '101'  ) and
+  ( item-plant = '02BN' and lv_potype <> 'ZSUB' ).
+
+  SELECT SINGLE FROM i_materialdocumentheader FIELDS materialdocument , materialdocumentyear
+  WHERE materialdocumentheadertext = @header-materialdocumentheadertext
+*  and goodsmovementiscancelled = ''
+  INTO @DATA(lv_head1) PRIVILEGED ACCESS.
+*
+  if lv_head1  is  not initial.
+        SELECT SINGLE * FROM i_materialdocumentitem_2
+        WHERE materialdocument = @lv_head1-materialdocument and materialdocumentyear = @lv_head1-materialdocumentyear
+        and goodsmovementiscancelled = ''
+        and goodsmovementtype = '101'
+        INTO @DATA(lv_item1) PRIVILEGED ACCESS.
+
+       if lv_item1 is not initial.
+          ls_message-messagetype = 'E'.
+          ls_message-messagetext = | gate entry number has  already been used for po : { lv_item1-purchaseorder } |.
+          APPEND ls_message TO messages.
+          clear : ls_message.
+       endif.
+endif.
+
+   SELECT SINGLE * FROM zgateentryheader
+ WHERE gateno = @header-materialdocumentheadertext
+ AND cancelled = ''
+  INTO @DATA(lv_iscancelled1) PRIVILEGED ACCESS.
+
+   IF lv_iscancelled1 IS INITIAL." AND (  lv_potype NE 'ZSRV' OR lv_potype NE 'ZRET' OR lv_potype NE 'ZSTO' ).
+    ls_message-messagetype = 'E'.
+    ls_message-messagetext = | Gate entry is Cancelled for item no : { lv_itm } |.
+    APPEND ls_message TO messages.
+    clear ls_message.
+  ENDIF.
+endif.
