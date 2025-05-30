@@ -1,0 +1,99 @@
+* if delivery_document_in-sddocumentcategory = 'LF' or delivery_document_in-sddocumentcategory = 'LO'.
+
+    select from i_deliverydocumentitem as a
+     left join i_salesorder as b on a~referencesddocument = b~salesorder
+     left join i_companycode as c on b~billingcompanycode = c~companycode
+     left join i_plant as d on a~plant = d~plant
+     left join i_address_2 as e on d~addressid = e~addressid
+     left join i_regiontext as r on e~region = r~region
+     left join i_countrytext as cn on e~country = cn~country
+    fields a~ReferenceSDDocument, b~SalesDistrict, c~companycodename,
+        e~housenumber, e~streetname, e~streetprefixname1, e~streetprefixname2,
+        e~streetsuffixname1, e~streetsuffixname2, e~cityname, e~PostalCode,
+        r~regionname, cn~CountryName
+       where a~deliverydocument = @delivery_document_in-deliverydocument
+*       and a~deliverydocumentitem = @delivery_document_items-
+     into @data(details)
+     PRIVILEGED Access.
+    endselect.
+
+  Select from i_deliverydocumentitem as a
+    left join i_salesorderitempartner as b on a~referencesddocument = b~salesorder
+  fields b~fullname, b~customer
+   where a~deliverydocument = @delivery_document_in-deliverydocument
+*       and a~deliverydocumentitem = @delivery_document_items-DELIVERYDOCUMENTITEM
+       and  b~partnerfunction = 'RE'
+    into @data(bill_details)
+    PRIVILEGED Access.
+  EndSelect.
+
+
+data : address1 type string.
+data : address2 type string.
+
+CONCATENATE details-housenumber details-streetname details-streetprefixname1
+            details-streetprefixname2 details-streetsuffixname1 details-streetsuffixname2
+            into address1.
+
+CONCATENATE details-cityname details-regionname details-countryname details-PostalCode
+            INTO address2.
+
+MOVE-CORRESPONDING delivery_document_in TO delivery_document_out.
+
+       delivery_document_out-yy1_companyname_dlh = details-companycodename.
+       delivery_document_out-yy1_plantaddress_dlh = address1.
+       delivery_document_out-yy1_plantaddress2_dlh = address2.
+       delivery_document_out-yy1_salesdistrict_dlh = details-salesdistrict.
+       delivery_document_out-yy1_sonumber_dlh = details-referencesddocument.
+       delivery_document_out-yy1_billtocode_dlh = bill_details-customer.
+       delivery_document_out-yy1_billtoname_dlh = bill_details-fullname.
+
+* endif.
+
+SELECT SINGLE FROM I_DELIVERYDOCUMENT AS A
+LEFT JOIN I_CUSTOMER AS B ON B~customer = A~soldtoparty
+FIELDS A~deliverydocument , A~salesorganization , A~soldtoparty , B~customername
+WHERE A~deliverydocument = @delivery_document_in-deliverydocument
+INTO @DATA(WA_COMP)
+ PRIVILEGED Access.
+
+  delivery_document_out-yy1_companycode_dlh = WA_COMP-salesorganization.
+  delivery_document_out-yy1_customercode_dlh = WA_COMP-soldtoparty.
+  delivery_document_out-yy1_customername_dlh = WA_COMP-customername.
+  delivery_document_out-yy1_delicompcode_dlh = WA_COMP-salesorganization.
+
+
+SELECT SINGLE FROM i_deliverydocumentitem AS A
+LEFT JOIN zi_planttable AS B ON B~plantcode = A~plant
+FIELDS A~deliverydocument , A~deliverydocumentitem , B~address1  , B~address2 , B~city , B~statename , B~country , B~pin
+WHERE A~deliverydocument = @delivery_document_in-deliverydocument
+INTO @DATA(WA_PLNTADD)
+PRIVILEGED ACCESS.
+
+*DATA : PLANT_ADD TYPE STRING.
+*CONCATENATE WA_PLNTADD-address1  WA_PLNTADD-address2 WA_PLNTADD-city ',' WA_PLNTADD-statename ',' WA_PLNTADD-country '-' WA_PLNTADD-pin INTO PLANT_ADD SEPARATED BY  SPACE.
+
+
+*delivery_document_out-yy1_del_plant_add_dlh = PLANT_ADD.
+
+
+
+DATA: PLANT_ADD TYPE string,
+      NEWLINE   TYPE string VALUE cl_abap_char_utilities=>newline.
+
+CONCATENATE
+  WA_PLNTADD-address1
+  WA_PLNTADD-address2
+  WA_PLNTADD-city
+  ','
+  WA_PLNTADD-statename
+  ','
+  NEWLINE
+  WA_PLNTADD-country
+  '-'
+  WA_PLNTADD-pin
+INTO PLANT_ADD
+SEPARATED BY space.
+
+delivery_document_out-yy1_del_plant_add_dlh = PLANT_ADD.
+
