@@ -1,0 +1,22 @@
+ if salesdocument-salesdocumenttype = 'AG'.
+    loop at field_properties assigning field-symbol(<fs_field_properties>).
+      if <fs_field_properties>-field_name = 'YY1_PORECEIVEDDATE_SDH' or
+         <fs_field_properties>-field_name = 'YY1_DONO_SDH' or
+         <fs_field_properties>-field_name = 'YY1_DODATE_SDH' or
+         <fs_field_properties>-field_name = 'YY1_TRANSPORTNAME_SDH' or
+         <fs_field_properties>-field_name = 'YY1_REMARKS_SO_SDH'.
+         <fs_field_properties>-invisible = 'X'.
+      endif.
+    endloop.
+   endif.
+
+ if salesdocument-salesdocumenttype = 'TA'.
+    loop at field_properties assigning field-symbol(<fs_field>).
+      if <fs_field>-field_name = 'YY1_SHIPMENT_SD_H_SDH' or
+         <fs_field>-field_name = 'YY1_TERMSOFDELIVERY_SD_SDH' or
+         <fs_field>-field_name = 'YY1_PACKING_SD_H_SDH' or
+         <fs_field>-field_name = 'YY1_TERMSOFPAYMENT_SOH_SDH'.
+         <fs_field>-invisible = 'X'.
+      endif.
+    endloop.
+   endif.
