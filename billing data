@@ -1,0 +1,17 @@
+*MOVE-CORRESPONDING salesdocumentitem_in TO salesdocumentitem_out.
+**salesdocumentitem_out = SALESDOCUMENTITEM_IN.
+* data  ls_message like line of messages.
+
+select single referencesddocument , referencesddocumentitem
+from i_billingdocumentitem where referencesddocument = @salesdocument-referencesddocument
+into @data(lv_bill)  PRIVILEGED ACCESS.
+
+if lv_bill is not INITIAL.
+  select single yy1_scheme_code_del_dli,yy1_schemegroupcode_dl_dli
+    from i_deliverydocumentitem where deliverydocument = @lv_bill-referencesddocument
+                                  and deliverydocumentitem = @lv_bill-referencesddocumentitem
+into @data(lv_scheme) PRIVILEGED ACCESS.
+endif.
+
+sALESDOCUMENTITEM_OUT-YY1_SCHEMECODE_SDI = lv_scheme-yy1_scheme_code_del_dli.
+salesdocumentitem_out-YY1_SCHEMEGROUPCODE_SDI = lv_scheme-yy1_schemegroupcode_dl_dli.
