@@ -1,0 +1,9 @@
+IF ct_item  IS INITIAL.
+      RAISE EXCEPTION TYPE cx_ble_runtime_error  .
+ENDIF.
+
+LOOP AT ct_item ASSIGNING FIELD-SYMBOL(<fs_item>)
+                    WHERE vbeln = '1'.
+
+   <fs_item>-yy1_grossweight_dli = '1234.59'.
+ENDLOOP.
