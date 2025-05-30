@@ -1,0 +1,44 @@
+    IF form_data-sendercountry = 'IN' and form_data-formlanguage = 'E'.
+
+        SELECT SINGLE FROM I_PurchaseOrderAPI01 AS A
+        INNER JOIN I_PURCHASEORDERPARTNERAPI01 AS B ON A~purchaseorder = B~purchaseorder AND B~partnerfunction = 'FS'
+        INNER JOIN I_SUPPLIER AS C ON B~supplier = C~supplier
+        INNER JOIN I_REGIONTEXT AS D ON C~region = D~REGION
+        FIELDS C~suppliername, C~bpaddrstreetname, C~streetname, C~cityname, C~postalcode,
+               D~regionname
+        WHERE A~PURCHASEORDER = @purchaseorder
+        INTO @DATA(WA)
+            PRIVILEGED ACCESS.
+
+        DATA : ADD TYPE STRING.
+        DATA : ADD2 TYPE STRING.
+        DATA : ADD3 TYPE STRING.
+* In Address Supplier Name only remove region by uttam on 27.01.2025*
+*       CONCATENATE  WA-suppliername ' - ' WA-regionname INTO ADD.
+        Add = wa-suppliername.
+        CONCATENATE  WA-streetname WA-cityname WA-postalcode INTO ADD2.
+
+        PURDOC_EXTENSION-yy1_transporteraddress_pdh = ADD.
+        PURDOC_EXTENSION-yy1_transporteraddres2_pdh = ADD2.
+        PURDOC_EXTENSION-yy1_transporteraddres3_pdh = WA-regionname.
+
+* PO Header PAN Number
+
+        SELECT SINGLE FROM I_PurchaseOrderAPI01 AS A
+        INNER JOIN I_SUPPLIER AS B ON B~supplier = A~supplier
+        INNER JOIN I_BusinessPartnerSupplier AS C on b~supplier = c~supplier
+         FIELDS C~businesspartnerpannumber
+        WHERE A~PURCHASEORDER = @purchaseorder
+        INTO @DATA(lv_Pan_num)
+    PRIVILEGED ACCESS.
+        PURDOC_EXTENSION-yy1_panpo_header_xml_pdh = lv_pan_num.
+
+* Purchase Order Type
+        SELECT SINGLE FROM I_PurchaseOrderAPI01 AS A
+          FIELDS A~Purchaseordertype
+          WHERE A~PURCHASEORDER = @purchaseorder
+         into @data(lv_Type) PRIVILEGED ACCESS.
+       PURDOC_EXTENSION-yy1_potype_po_pdh = LV_TYPE.
+
+
+  ENDIF.
