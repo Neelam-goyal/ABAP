@@ -1,0 +1,11 @@
+  IF gr4xy_header-sourceofgr eq 'PURORD'.    "for Purchase Order only
+*        change_header-materialdocumentheadertext = 'Purchase Order Header Text'.
+
+  LOOP AT CHANGE_ITEM INTO DATA(wa).
+    wa-yy1_hdr_compnayname_mmi = 'oashdbashdk'.
+
+    MODIFY change_item FROM wa.
+    clear wa.
+  ENDLOOP.
+
+ENDIF.
