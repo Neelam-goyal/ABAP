@@ -1,0 +1,7 @@
+
+if confirmation-ORDERNUMBER is not initial.
+    if CONFIRMATION-postingdate is initial.
+      ERRORMESSAGETEXT = 'Posting date is mandatory'.
+    endif.
+endif.
+
