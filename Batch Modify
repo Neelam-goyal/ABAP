@@ -1,0 +1,150 @@
+DATA(current_date) = cl_abap_context_info=>get_system_date( ). "20241121
+
+DATA: lv_month_num TYPE c LENGTH 2,
+      lv_curr_date TYPE c LENGTH 2,
+      lv_out       TYPE c LENGTH 1,
+      lv_batch_in  TYPE c LENGTH 10,
+      lv_auart     TYPE c LENGTH 1.
+
+" Extract material type's first character
+
+" Extract month (MM from YYYYMMDD)
+lv_month_num = current_date+4(2).
+lv_curr_date = current_date+6(2).
+
+" Map month to letter using CASE
+CASE lv_month_num.
+  WHEN '01'. lv_out = 'A'.
+  WHEN '02'. lv_out = 'B'.
+  WHEN '03'. lv_out = 'C'.
+  WHEN '04'. lv_out = 'D'.
+  WHEN '05'. lv_out = 'E'.
+  WHEN '06'. lv_out = 'F'.
+  WHEN '07'. lv_out = 'G'.
+  WHEN '08'. lv_out = 'H'.
+  WHEN '09'. lv_out = 'I'.
+  WHEN '10'. lv_out = 'J'.
+  WHEN '11'. lv_out = 'K'.
+  WHEN '12'. lv_out = 'L'.
+ENDCASE.
+
+IF  batch_allocation-plant = 'GM30'.
+
+
+  IF batch_allocation-ordertype = 'ZSFI' .
+    lv_auart = 'S'.
+
+    DATA : lv_pattern TYPE string.
+    lv_pattern = |{ lv_out }{ current_date+2(2) }{ lv_auart }%|.
+
+    SELECT  FROM i_processorderitemtp FIELDS batch, processordertype
+    WHERE processordertype = 'ZSFI' AND batch LIKE @lv_pattern
+    INTO TABLE @DATA(lt_batch_counter) PRIVILEGED ACCESS.
+    SORT lt_batch_counter DESCENDING BY batch.
+    READ TABLE lt_batch_counter INTO DATA(wa_batch_counter) INDEX 1.
+    DATA : lv_batch_num TYPE n LENGTH 6.
+
+    IF wa_batch_counter IS NOT INITIAL.
+      lv_batch_num = wa_batch_counter-batch+4(6) + 1.
+      batch_out = |{ lv_out }{ current_date+2(2) }{ lv_auart }{ lv_batch_num }|.
+    ELSE.
+      lv_batch_num = 1.
+      batch_out = |{ lv_out }{ current_date+2(2) }{ lv_auart }{ lv_batch_num }|.
+    ENDIF.
+
+*      IF lv_curr_date = '01'.
+*        lv_batch_num = 1.
+*        batch_out = |{ lv_out }{ current_date+2(2) }{ lv_auart }{ lv_batch_num }|.
+*      ELSE.
+*        lv_batch_num = lv_batch_num + 1.
+*        batch_out = |{ lv_out }{ current_date+2(2) }{ lv_auart }{ lv_batch_num }|.
+*      ENDIF.
+
+
+  ELSEIF batch_allocation-ordertype = 'ZSFC'.
+    lv_auart = 'F'.
+
+    DATA : lv_pattern2 TYPE string.
+    lv_pattern2 = |{ lv_out }{ current_date+2(2) }{ lv_auart }%|.
+
+    SELECT  FROM i_processorderitemtp FIELDS batch, processordertype
+    WHERE processordertype = 'ZSFC' AND batch LIKE @lv_pattern2
+    INTO TABLE @DATA(lt_batch_counter2) PRIVILEGED ACCESS.
+    SORT lt_batch_counter2 DESCENDING BY batch.
+    READ TABLE lt_batch_counter2 INTO DATA(wa_batch_counter2) INDEX 1.
+    DATA : lv_batch_num2 TYPE n LENGTH 6.
+
+    IF wa_batch_counter2 IS NOT INITIAL.
+      lv_batch_num2 = wa_batch_counter2-batch+4(6) + 1 .
+      batch_out = |{ lv_out }{ current_date+2(2) }{ lv_auart }{ lv_batch_num2 }|.
+    ELSE.
+      lv_batch_num2 = 1.
+      batch_out = |{ lv_out }{ current_date+2(2) }{ lv_auart }{ lv_batch_num2 }|.
+    ENDIF.
+
+*    IF lv_curr_date = '01'.
+*      lv_batch_num2 = 1.
+*      batch_out = |{ lv_out }{ current_date+2(2) }{ lv_auart }{ lv_batch_num2 }|.
+*    ELSE.
+*      lv_batch_num2 = lv_batch_num2 + 1.
+*      batch_out = |{ lv_out }{ current_date+2(2) }{ lv_auart }{ lv_batch_num2 }|.
+*    ENDIF.
+
+    "batch_out = |{ lv_out }{ current_date+2(2) }{ lv_auart }{ batch_in+4(6) }|.
+  ENDIF.
+
+
+  """""mm batch modify
+
+  IF batch_allocation-goodsmovementtype = '101' AND batch_allocation-deliverydocument IS NOT INITIAL
+      AND batch_allocation-deliverydocumentitem IS NOT INITIAL.
+
+
+    IF batch_allocation-materialtype = 'ZRMC' OR batch_allocation-materialtype = 'ZRAW'.
+      lv_auart = 'R'.
+
+      DATA : lv_pattern3 TYPE string.
+      lv_pattern3 = |{ lv_out }{ current_date+2(2) }{ lv_auart }%|.
+
+      SELECT  FROM i_deliverydocumentitem FIELDS batch, materialtypeprimary
+      WHERE ( materialtypeprimary = 'ZRAW' OR materialtypeprimary = 'ZRMC' ) AND batch LIKE @lv_pattern3
+      INTO TABLE @DATA(lt_batch_counter3) PRIVILEGED ACCESS.
+      SORT lt_batch_counter3 DESCENDING BY batch.
+      READ TABLE lt_batch_counter3 INTO DATA(wa_batch_counter3) INDEX 1.
+
+      DATA : lv_batch_num3 TYPE n LENGTH 6.
+      IF wa_batch_counter3 IS NOT INITIAL.
+        lv_batch_num3 = wa_batch_counter3-batch+4(6) + 1.
+        batch_out = |{ lv_out }{ current_date+2(2) }{ lv_auart }{ lv_batch_num3 }|.
+      ELSE.
+        lv_batch_num3 = 1.
+        batch_out = |{ lv_out }{ current_date+2(2) }{ lv_auart }{ lv_batch_num3 }|.
+      ENDIF.
+
+
+    ELSEIF batch_allocation-materialtype = 'ZPKG'.
+      lv_auart = 'P'.
+
+      DATA : lv_pattern4 TYPE string.
+      lv_pattern4 = |{ lv_out }{ current_date+2(2) }{ lv_auart }%|.
+
+      SELECT  FROM i_deliverydocumentitem FIELDS batch, materialtypeprimary
+      WHERE materialtypeprimary = 'ZPKG' AND batch LIKE @lv_pattern4
+      INTO TABLE @DATA(lt_batch_counter4) PRIVILEGED ACCESS.
+      SORT lt_batch_counter4 DESCENDING BY batch.
+      READ TABLE lt_batch_counter4 INTO DATA(wa_batch_counter4) INDEX 1.
+
+      DATA : lv_batch_num4 TYPE n LENGTH 6.
+      IF wa_batch_counter4 IS NOT INITIAL.
+        lv_batch_num4 = wa_batch_counter4-batch+4(6) + 1.
+        batch_out = |{ lv_out }{ current_date+2(2) }{ lv_auart }{ lv_batch_num4 }|.
+      ELSE.
+        lv_batch_num4 = 1.
+        batch_out = |{ lv_out }{ current_date+2(2) }{ lv_auart }{ lv_batch_num4 }|.
+      ENDIF.
+*      batch_out = |{ lv_out }{ current_date+2(2) }{ lv_auart }{ batch_in+4(6) }|.
+
+    ENDIF.
+  ENDIF.
+
+ENDIF.
