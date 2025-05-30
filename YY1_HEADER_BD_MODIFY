@@ -1,0 +1,107 @@
+billingdoc_extension_out = billingdoc_extension_in.
+billingdocdescr_extension_out = billingdocdescr_extension_in.
+
+if OutputItem_Context_Data-FormLanguage = 'E' and billingdoc-billingdocumenttype = 'G2'.
+     Select Single from i_BillingDocumentItem as a
+     inner join i_plant  as b on a~plant = b~plant
+     inner join i_customer as c on b~PlantCustomer = c~customer
+     FIELDS C~telephonenumber1, A~billingdocument
+     WHERE A~billingdocument = @BILLINGDOC-billingdocument
+     INTO @DATA(WA) PRIVILEGED access.
+
+     Select Single From I_BILLINGDOCUMENT as a
+     inner join i_BillingDocumentItem as b on a~billingdocument = b~billingdocument
+     fields a~assignmentreference
+     where A~billingdocument = @billingdoc-billingdocument
+     into @data(lv_reference) PRIVILEGED access .
+
+     Select Single From I_BILLINGDOCUMENT as a
+     inner join i_BillingDocumentItem as b on a~billingdocument = b~billingdocument and b~billingdocument = a~assignmentreference
+     fields a~assignmentreference , a~billingdocumentdate
+     where A~billingdocument = @billingdoc-billingdocument
+     into @data(lv_billingdate) PRIVILEGED access .
+
+     select Single from i_BillingDocumentPartner
+     fields BILLINGDOCUMENT , PARTNERFUNCTION , customer
+     where BILLINGDOCUMENT = @billingdoc-billingdocument and  PARTNERFUNCTION = 'AP'
+     into @data(lv_ContactPerson) PRIVILEGED access.
+
+     select single from i_BillingDocumentPartner as a
+     inner join I_CUSTOMER as b  on a~referencebusinesspartner = b~customer
+     fields  a~referencebusinesspartner,b~customer,b~telephonenumber1
+     where BILLINGDOCUMENT = @billingdoc-billingdocument
+     into @data(lv_CustPhone) PRIVILEGED access.
+
+     select single from i_BillingDocumentPartner
+     fields customer
+     where BILLINGDOCUMENT = @billingdoc-billingdocument and partnerfunction = 'ZE'
+     into @data(lv_sales_EMP) PRIVILEGED access.
+
+     select single from I_BILLINGDOCUMENT
+     fields PURCHASEORDERBYCUSTOMER ,billingdocumentdate
+     where BILLINGDOCUMENT = @billingdoc-billingdocument
+     into @data(REF_NO_BDH) PRIVILEGED access.
+
+
+      billingdoc_extension_out-yy1_PHONE_NO_BDH         =   WA-telephonenumber1.
+      billingdoc_extension_out-YY1_AGAINST_INV_NO_BDH   =   lv_reference.
+      billingdoc_extension_out-YY1_AGAINST_INV_DT_BDH   =   lv_billingdate-billingdocumentdate.
+      billingdoc_extension_out-YY1_CONTACT_PERSON_BDH   =   lv_ContactPerson-customer.
+      billingdoc_extension_out-YY1_CUSTOMER_PHONE_NO_BDH =   lv_CustPhone-telephonenumber1.
+      billingdoc_extension_out-YY1_SALES_EMPLOYEE_BDH   =   lv_sales_EMP.
+      billingdoc_extension_out-YY1_CUSTOMER_REF_NO_BDH  =   REF_NO_BDH-purchaseorderbycustomer.
+      billingdoc_extension_out-YY1_EMAIL_ID_BDH =   lv_CustPhone-telephonenumber1.
+endif.
+
+if billingdoc-billingdocumenttype = 'F2'.
+     select single from I_BILLINGDOCUMENT as a
+     inner join i_billingdocumentpartnerbasic as b on a~billingdocument = b~billingdocument
+     inner join i_supplier as c on b~supplier = c~supplier
+     fields c~suppliername,c~supplier
+     where a~BILLINGDOCUMENT = @billingdoc-billingdocument and b~partnerfunction = 'SP'
+     into @data(lv_transporter) PRIVILEGED access.
+
+     select single from I_BILLINGDOCUMENT as a
+     inner join i_billingdocumentpartnerbasic as b on a~billingdocument = b~billingdocument
+     inner join i_supplier as c on b~supplier = c~supplier
+     fields c~suppliername,c~supplier
+     where a~BILLINGDOCUMENT = @billingdoc-billingdocument and b~partnerfunction = 'ES'
+     into @data(lv_broker) PRIVILEGED access.
+
+ billingdoc_extension_out-YY1_TRANSPORTER_NAME_BDH =   lv_transporter-suppliername.
+ billingdoc_extension_out-YY1_BROKER_BDH =   lv_broker-suppliername.
+ENDIF.
+
+
+     Select Single from i_BillingDocument as a
+     left join i_customer as b on b~Customer = a~payerparty
+     FIELDS b~telephonenumber1, a~billingdocument
+     WHERE a~billingdocument = @BILLINGDOC-billingdocument
+     INTO @DATA(WA2) PRIVILEGED access.
+
+     select single from I_BILLINGDOCUMENT as a
+     left join i_billingdocumentpartnerbasic as b on a~billingdocument = b~billingdocument
+     inner join i_supplier as c on b~supplier = c~supplier
+     fields c~suppliername,c~supplier
+     where a~BILLINGDOCUMENT = @billingdoc-billingdocument and b~partnerfunction = 'ES'
+     into @data(WA3) PRIVILEGED access.
+
+     Select Single from i_BillingDocumentItem as a
+     left join i_plant  as b on a~plant = b~plant
+     left join i_customer as c on b~PlantCustomer = c~customer
+     left join i_addressemailaddress_2 as d on d~addressid = c~addressid
+     FIELDS d~emailaddress , a~billingdocument
+     WHERE A~billingdocument = @BILLINGDOC-billingdocument
+     INTO @DATA(WA4) PRIVILEGED access.
+
+     Select Single from i_BillingDocumentitem as a
+     left join i_deliverydocument as b on b~deliverydocument = a~referencesddocument
+     left join i_customer as c on c~Customer = b~shiptoparty
+     FIELDS c~telephonenumber1, a~billingdocument
+     WHERE a~billingdocument = @BILLINGDOC-billingdocument
+     INTO @DATA(WA5) PRIVILEGED access.
+
+    billingdoc_extension_out-yy1_phone_number_bdh  =   wa2-telephonenumber1.
+    billingdoc_extension_out-yy1_broker_name_bdh =   wa3-suppliername.
+    billingdoc_extension_out-yy1_emailaddress_bdh =   wa4-emailaddress.
+    billingdoc_extension_out-yy1_shipto_phonenumber_bdh =   wa5-telephonenumber1.
