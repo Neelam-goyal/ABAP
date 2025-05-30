@@ -1,0 +1,75 @@
+ salesdocument_extension_out = salesdocument_extension_in.
+
+ IF salesdocument-salesdocumenttype = 'TA'.
+
+   SELECT SINGLE FROM i_salesquotation AS a
+   FIELDS a~yy1_portofdicharge_sdh , a~yy1_portofloading_sdh , a~yy1_precarriageby_sdh
+   WHERE a~salesquotation = @salesdocument-referencesddocument
+   AND a~salesquotationtype = 'AG'
+   INTO @DATA(work)
+   PRIVILEGED ACCESS.
+   if sy-subrc eq 0.
+   salesdocument_extension_out-yy1_portofdicharge_sdh = work-yy1_portofdicharge_sdh.
+   salesdocument_extension_out-yy1_portofloading_sdh = work-yy1_portofloading_sdh.
+   salesdocument_extension_out-yy1_precarriageby_sdh = work-yy1_precarriageby_sdh.
+   endif.
+ ENDIF.
+
+
+ SELECT SINGLE FROM i_salesdocument AS a
+  INNER JOIN i_customer AS b ON a~soldtoparty = b~customer
+  FIELDS b~taxnumber3 , b~region
+  WHERE a~salesdocument = @salesdocument-salesdocument
+  INTO (@DATA(lv_buyergst), @DATA(lv_buyerstate))
+  PRIVILEGED ACCESS.
+ salesdocument_extension_out-yy1_buyer_gstform_sdh = lv_buyergst.
+ salesdocument_extension_out-yy1_buyer_state_sdh = lv_buyerstate.
+
+
+ SELECT SINGLE FROM i_salesdocumentitem AS a
+ INNER JOIN i_customer AS b
+ ON a~shiptoparty = b~customer
+ FIELDS b~taxnumber3 , b~region
+ WHERE a~salesdocument = @salesdocument-salesdocument
+ INTO (@DATA(lv_shipgst), @DATA(lv_shipstate))
+ PRIVILEGED ACCESS.
+ salesdocument_extension_out-yy1_consignee_gst_sdh = lv_shipgst.
+ salesdocument_extension_out-yy1_consignee_state_sdh = lv_shipstate.
+
+
+ SELECT SINGLE FROM i_salesdocitempricingelement AS a
+*inner join i_productplantbasic as b on a~originallyrequestedmaterial = b~product
+FIELDS a~conditionamount
+WHERE a~salesdocument = @salesdocument-salesdocument
+AND a~conditiontype = 'ZDIF'
+INTO @DATA(lv_round)
+PRIVILEGED ACCESS.
+ salesdocument_extension_out-yy1_roundungoff_sdh = lv_round.
+
+ SELECT SINGLE FROM i_salesdocitempricingelement AS a
+*inner join i_productplantbasic as b on a~originallyrequestedmaterial = b~product
+   FIELDS a~conditionamount
+   WHERE a~salesdocument = @salesdocument-salesdocument
+   AND a~conditiontype = 'JTC1'
+   INTO @DATA(lv_tcs_amt)
+   PRIVILEGED ACCESS.
+ salesdocument_extension_out-yy1_tcsamount_sdh = lv_tcs_amt.
+
+ SELECT SINGLE FROM i_salesdocitempricingelement AS a
+*inner join i_productplantbasic as b on a~originallyrequestedmaterial = b~product
+FIELDS a~conditionbasevalue
+WHERE a~salesdocument = @salesdocument-salesdocument
+AND a~conditiontype = 'ZDIF'
+INTO @DATA(lv_totamt_aftertcs)
+PRIVILEGED ACCESS.
+ salesdocument_extension_out-yy1_totamtaftertcs_sdh = lv_totamt_aftertcs.
+
+
+
+ salesdocument_extension_out-yy1_partypannum_sdh = lv_buyergst+2(10).
+ SELECT SINGLE FROM i_salesdocumentitem AS a
+   FIELDS a~plant
+   WHERE a~salesdocument = @salesdocument-salesdocument
+   INTO  @DATA(lv_plant)
+   PRIVILEGED ACCESS.
+ salesdocument_extension_out-yy1_plant1_sdh = lv_plant.
