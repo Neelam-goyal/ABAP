@@ -1,0 +1,452 @@
+billingdocitem_ext_out = billingdocitem_ext_in.
+    billingdocitemdescr_ext_out = billingdocitemdescr_ext_in.
+
+
+***********************  Billing Document Vendor RM Returns *********************
+
+* LV challan Date form RM Return Print Forms
+    SELECT SINGLE FROM i_materialdocumentheader AS a
+    FIELDS a~documentdate
+    WHERE a~materialdocument = @billingdocitem-referencesddocument
+    INTO @DATA(lv_challan_date)
+        PRIVILEGED ACCESS.
+    billingdocitem_ext_out-yy1_vendorchallandate_bdi = lv_challan_date.
+
+* LV challan Num form RM Return Print Forms
+    SELECT SINGLE FROM i_billingdocumentitem AS a
+    INNER JOIN i_inbounddeliveryitem AS b ON a~batch = b~batch
+    INNER JOIN i_inbounddelivery AS c ON b~inbounddelivery = b~inbounddelivery
+    FIELDS c~deliverydocumentbysupplier
+    WHERE a~billingdocument = @billingdocitem-billingdocument
+    AND a~billingdocumentitem = @billingdocitem-billingdocumentitem
+    INTO @DATA(lv_challan_num)
+        PRIVILEGED ACCESS.
+    billingdocitem_ext_out-yy1_vendorchallannum_bdi = lv_challan_num.
+
+*Qty per Pack  && No of Pack
+    SELECT SINGLE FROM i_materialdocumentheader AS a
+    INNER JOIN i_materialdocumentitem AS b ON a~materialdocument = b~materialdocument
+    INNER JOIN i_purchaseorderapi01 AS c ON b~purchaseorder = c~purchaseorder
+    INNER JOIN i_purchaseorderitemapi01 AS d ON c~purchaseorder = d~purchaseorder
+    FIELDS d~yy1_quantityperpack_pdi , d~yy1_numberofpack_pdi
+        WHERE a~materialdocument = @billingdocitem-referencesddocument
+    INTO @DATA(lv_var)
+        PRIVILEGED ACCESS.
+    billingdocitem_ext_out-yy1_noofpack_bd_bdi = lv_var-yy1_numberofpack_pdi.
+   billingdocitem_ext_out-yy1_quantityperpackbd_bdi = lv_var-yy1_quantityperpack_pdi.
+
+
+
+    SELECT SINGLE FROM i_billingdocumentitemprcgelmnt
+    FIELDS conditionamount,conditionratevalue, conditioncurrency
+    WHERE billingdocument = @billingdocitem-billingdocument AND
+    billingdocumentitem = @billingdocitem-billingdocumentitem AND
+    conditiontype = 'ZFRT'
+    INTO @DATA(wa)
+    PRIVILEGED ACCESS.
+
+    SELECT SINGLE FROM i_billingdocumentitemprcgelmnt
+    FIELDS conditionamount,conditionratevalue, conditioncurrency
+    WHERE billingdocument = @billingdocitem-billingdocument AND
+    billingdocumentitem = @billingdocitem-billingdocumentitem AND
+    conditiontype = 'ZENS'
+    INTO @DATA(wa2)
+    PRIVILEGED ACCESS.
+
+    SELECT SINGLE FROM i_billingdocumentitem AS a
+    INNER JOIN i_salesdocumentitem AS b ON a~salesdocument = b~salesdocument AND a~salesdocumentitem = b~salesdocumentitem
+   FIELDS b~yy1_noofpack_sd_sdi,b~transactioncurrency, b~yy1_sohscode_sdi, b~materialbycustomer
+   WHERE a~billingdocument = @billingdocitem-billingdocument AND
+   a~billingdocumentitem = @billingdocitem-billingdocumentitem
+   INTO @DATA(wa3)
+   PRIVILEGED ACCESS.
+
+* Line Item -> Customer Item Code
+    billingdocitem_ext_out-yy1_customeritemcode_bdi = wa3-materialbycustomer.
+
+    SELECT SINGLE FROM i_billingdocumentitemprcgelmnt
+    FIELDS conditionratevalue, conditioncurrency, conditionamount
+    WHERE billingdocument = @billingdocitem-billingdocument AND
+    billingdocumentitem = @billingdocitem-billingdocumentitem AND
+    conditiontype = 'ZDIS'
+    INTO @DATA(wa4)
+    PRIVILEGED ACCESS.
+
+    SELECT SINGLE FROM i_billingdocumentitemprcgelmnt
+    FIELDS conditioncurrency, conditionamount
+    WHERE billingdocument = @billingdocitem-billingdocument AND
+    billingdocumentitem = @billingdocitem-billingdocumentitem AND
+    conditiontype = 'ZINC'
+    INTO @DATA(wa5)
+    PRIVILEGED ACCESS.
+
+    SELECT SINGLE FROM i_billingdocumentitemprcgelmnt
+   FIELDS conditioncurrency, conditionamount
+   WHERE billingdocument = @billingdocitem-billingdocument AND
+   billingdocumentitem = @billingdocitem-billingdocumentitem AND
+   conditiontype = 'ZDIF'
+   INTO @DATA(wa6_zdif)
+   PRIVILEGED ACCESS.
+
+    SELECT SINGLE FROM i_billingdocumentitemprcgelmnt
+   FIELDS conditioncurrency, conditionamount
+   WHERE billingdocument = @billingdocitem-billingdocument AND
+   billingdocumentitem = @billingdocitem-billingdocumentitem AND
+   conditiontype = 'JTC1'
+   INTO @DATA(wa7_jtc1)
+   PRIVILEGED ACCESS.
+
+* Query for ,ZINP,ZINS Condition type
+    SELECT SINGLE FROM i_billingdocumentitemprcgelmnt
+        FIELDS conditioncurrency, conditionamount
+        WHERE billingdocument = @billingdocitem-billingdocument AND
+        billingdocumentitem = @billingdocitem-billingdocumentitem AND
+        conditiontype = 'ZINP'
+        INTO @DATA(wa8_zinp)
+        PRIVILEGED ACCESS.
+
+    SELECT SINGLE FROM i_billingdocumentitemprcgelmnt
+   FIELDS conditioncurrency, conditionamount
+   WHERE billingdocument = @billingdocitem-billingdocument AND
+   billingdocumentitem = @billingdocitem-billingdocumentitem AND
+   conditiontype = 'ZINS'
+   INTO @DATA(wa9_zins)
+   PRIVILEGED ACCESS.
+
+
+* Query for ,ZCDM,ZSTO Condition type
+    SELECT SINGLE FROM i_billingdocumentitemprcgelmnt
+        FIELDS conditioncurrency, conditionamount
+        WHERE billingdocument = @billingdocitem-billingdocument AND
+        billingdocumentitem = @billingdocitem-billingdocumentitem AND
+        conditiontype = 'ZCDM'
+        INTO @DATA(w1_zcdm)
+        PRIVILEGED ACCESS.
+
+    SELECT SINGLE FROM i_billingdocumentitemprcgelmnt
+   FIELDS conditioncurrency, conditionamount
+   WHERE billingdocument = @billingdocitem-billingdocument AND
+   billingdocumentitem = @billingdocitem-billingdocumentitem AND
+   conditiontype = 'ZSTO'
+   INTO @DATA(w2_zsto)
+   PRIVILEGED ACCESS.
+
+    SELECT SINGLE FROM i_billingdocumentitemprcgelmnt
+ FIELDS conditionamount,conditionratevalue, conditioncurrency
+ WHERE billingdocument = @billingdocitem-billingdocument AND
+ billingdocumentitem = @billingdocitem-billingdocumentitem AND
+ conditiontype = 'ZBSP'
+ INTO @DATA(lv_zbsp)
+ PRIVILEGED ACCESS.
+    billingdocitem_ext_out-yy1_bd_zbsp_line_bdi = lv_zbsp-conditionamount.
+    billingdocitem_ext_out-yy1_bd_zbsp_line_bdic = lv_zbsp-conditioncurrency.
+
+
+* Billing document Condition for avg content per pack and no of packages
+
+    SELECT SINGLE FROM i_salesdocumentitem AS a
+    LEFT JOIN i_billingdocumentitem AS b ON a~salesdocument = b~salesdocument AND a~salesdocumentitem = b~salesdocumentitem
+    FIELDS a~yy1_packsize_sd_sdi , a~yy1_packsize_sd_sdiu , a~yy1_noofpack_sd_sdi
+     WHERE b~billingdocument = @billingdocitem-billingdocument AND
+     b~billingdocumentitem = @billingdocitem-billingdocumentitem
+     INTO @DATA(wa_pack)
+     PRIVILEGED ACCESS.
+
+    billingdocitem_ext_out-yy1_no_of_packages_bd_bdi = wa_pack-yy1_noofpack_sd_sdi.
+    billingdocitem_ext_out-yy1_avg_package_bd_bdi = wa_pack-yy1_packsize_sd_sdi.
+    billingdocitem_ext_out-yy1_avg_package_bd_bdiu = wa_pack-yy1_packsize_sd_sdiu.
+
+    billingdocitem_ext_out-yy1_bd_zrft_amt_bdi = wa-conditionamount.
+    billingdocitem_ext_out-yy1_bd_zrft_amt_bdic = wa-conditioncurrency.
+    billingdocitem_ext_out-yy1_bd_zfrt_rate_bdi = wa-conditionratevalue.
+
+    billingdocitem_ext_out-yy1_bd_zens_amt_bdi = wa2-conditionamount.
+    billingdocitem_ext_out-yy1_bd_zens_amt_bdic = wa2-conditioncurrency.
+    billingdocitem_ext_out-yy1_bd_zens_rate_bdi = wa2-conditionratevalue.
+
+    billingdocitem_ext_out-yy1_bd_no_of_package_bdi = wa3-yy1_noofpack_sd_sdi.
+    billingdocitem_ext_out-yy1_hscodebdline_bdi = wa3-yy1_sohscode_sdi.
+
+    billingdocitem_ext_out-yy1_bd_zdis_dis_per_bdic = wa4-conditioncurrency.
+    billingdocitem_ext_out-yy1_bd_zdis_dis_per_bdi = wa4-conditionratevalue.
+    billingdocitem_ext_out-yy1_bd_zdis_dis_amt_bdi = wa4-conditionamount.
+
+    billingdocitem_ext_out-yy1_bd_zinc_amt_bdic = wa5-conditioncurrency.
+    billingdocitem_ext_out-yy1_bd_zinc_amt_bdi = wa5-conditionamount.
+* ADDINF FOR ZDIF & JTC1
+    billingdocitem_ext_out-yy1_bd_zdif_bdi = wa6_zdif-conditionamount.
+    billingdocitem_ext_out-yy1_bd_zdif_bdic = wa6_zdif-conditioncurrency.
+
+    billingdocitem_ext_out-yy1_bd_jtc1_tcsamount_bdi = wa7_jtc1-conditionamount.
+    billingdocitem_ext_out-yy1_bd_jtc1_tcsamount_bdic = wa7_jtc1-conditioncurrency.
+
+* Assigning ,ZINP,ZINS
+
+    billingdocitem_ext_out-yy1_bd_zinp_amt_bdi = wa8_zinp-conditionamount.
+    billingdocitem_ext_out-yy1_bd_zinp_amt_bdic = wa8_zinp-conditioncurrency.
+
+    billingdocitem_ext_out-yy1_bd_zins_amt_bdi = wa9_zins-conditionamount.
+    billingdocitem_ext_out-yy1_bd_zins_amt_bdi = wa9_zins-conditioncurrency.
+
+
+* Assigning ,ZCDM,ZSTO
+
+    billingdocitem_ext_out-yy1_bd_zcdm_amt_bdi = w1_zcdm-conditionamount.
+    billingdocitem_ext_out-yy1_bd_zcdm_amt_bdic = w1_zcdm-conditioncurrency.
+
+    billingdocitem_ext_out-yy1_bd_zsto_bdi = w2_zsto-conditionamount.
+    billingdocitem_ext_out-yy1_bd_zsto_bdic = w2_zsto-conditioncurrency.
+
+    SELECT SINGLE FROM i_product AS a
+    FIELDS a~basicmaterial
+    WHERE a~product = @billingdocitem-product
+    INTO @DATA(lv_basic_material)
+    PRIVILEGED ACCESS.
+    billingdocitem_ext_out-yy1_basicmaterial_bd_l_bdi = lv_basic_material.
+*Add logic for RM Return HSCode & Packing Mode by Uttam
+
+
+    SELECT SINGLE FROM i_purchaseorderhistoryapi01 AS a
+    INNER JOIN i_purchaseorderitemapi01 AS b ON a~purchaseorder = b~purchaseorder
+    FIELDS b~yy1_packingmode_pdi, b~yy1_hscode_pdi
+    WHERE a~referencedocument = @billingdocitem-referencesddocument
+        INTO @DATA(lv_pack_hscode)
+        PRIVILEGED ACCESS.
+
+    billingdocitem_ext_out-yy1_packingmode_bd_po_bdi = lv_pack_hscode-yy1_packingmode_pdi.
+    billingdocitem_ext_out-yy1_hscode_bd_po_bdi = lv_pack_hscode-yy1_hscode_pdi.
+
+* Add logic of Po Date on RM Return by Uttam 10/01/20205
+
+    SELECT SINGLE FROM i_materialdocumentitem_2 AS a
+    INNER JOIN i_purchaseorderapi01 AS b ON a~purchaseorder = b~purchaseorder
+    FIELDS b~purchaseorderdate
+    WHERE a~materialdocument = @billingdocitem-referencesddocument
+        INTO @DATA(lv_po_date)
+        PRIVILEGED ACCESS.
+    billingdocitem_ext_out-yy1_podate_bd_rm_ret_bdi = lv_po_date.
+
+* Add logic of Rate_PMP0 on RM Return by Uttam 10/01/20205
+
+    SELECT SINGLE FROM i_purchaseorderhistoryapi01 AS a
+    INNER JOIN i_purorditmpricingelementapi01 AS b ON a~purchaseorder = b~purchaseorder
+    FIELDS b~conditionratevalue , b~conditioncurrency
+    WHERE a~referencedocument = @billingdocitem-referencesddocument AND b~conditiontype = 'PMP0' OR b~conditiontype = 'PPR0'
+        INTO @DATA(lv_rate_pmp0)
+        PRIVILEGED ACCESS.
+    billingdocitem_ext_out-yy1_ratepmp0_bd_rm_ret_bdi = lv_rate_pmp0-conditionratevalue.
+    billingdocitem_ext_out-yy1_ratepmp0_bd_rm_ret_bdic = lv_rate_pmp0-conditioncurrency.
+
+
+
+
+
+
+* Add logic of TaxCodeName in RM Return Print Form
+
+
+    SELECT SINGLE FROM i_materialdocumentitem_2 AS a
+    INNER JOIN i_purorditmpricingelementapi01 AS b ON a~purchaseorder = b~purchaseorder AND
+                                                      a~purchaseorderitem = b~purchaseorderitem AND b~conditiontype = 'ZJEX'
+    INNER JOIN i_taxcodetext AS c ON b~taxcode = c~taxcode
+    FIELDS c~taxcodename
+    WHERE a~materialdocument = @billingdocitem-referencesddocument
+        INTO @DATA(lv_taxcodename)
+        PRIVILEGED ACCESS.
+    billingdocitem_ext_out-yy1_taxcodename_bd_rm_bdi = lv_taxcodename.
+
+
+
+* Add Logic of TradeName in SD TaxInvoices Print Form
+
+    DATA: prod TYPE zi_dd_mat-mat.
+
+    prod = billingdocitem-product.
+
+    " Remove leading zeros
+    SHIFT prod LEFT DELETING LEADING '0'.
+
+    SELECT SINGLE tradename
+      FROM zi_dd_mat AS a
+      WHERE a~mat = @prod
+      INTO @DATA(lv_tradename)
+      PRIVILEGED ACCESS.
+
+    billingdocitem_ext_out-yy1_tradename_bd_l_bdi = lv_tradename.
+
+
+
+*QUANTITY IN KG FOR LITRE FOR EXPORT TAX INVOICE
+    SELECT SINGLE a~quantitydenominator, a~quantitynumerator, b~billingquantity
+      FROM i_productunitsofmeasure AS a
+      INNER JOIN i_billingdocumentitem AS b ON a~product = b~product
+      WHERE
+      a~alternativeunit = 'KG' AND
+      a~product = @billingdocitem-product
+      INTO @DATA(lv_qunt)
+      PRIVILEGED ACCESS.
+
+    DATA quant_in_l TYPE i_billingdocumentitem-billingquantity.
+    quant_in_l = ( lv_qunt-quantitydenominator / lv_qunt-quantitynumerator ) * lv_qunt-billingquantity.
+    billingdocitem_ext_out-yy1_quant_inkg_of_ltr_bdi = quant_in_l.
+
+    SELECT
+    a~handlingunitreferencedocument,
+    a~material,
+    a~handlingunitexternalid,
+    b~packagingmaterial,
+    c~productdescription
+    FROM i_handlingunititem AS a
+    LEFT JOIN i_handlingunitheader AS b ON a~handlingunitexternalid = b~handlingunitexternalid
+    LEFT JOIN i_productdescription AS c ON c~product = b~packagingmaterial
+    WHERE a~handlingunitreferencedocument = @billingdocitem-referencesddocument AND
+    a~material = @billingdocitem-product
+    INTO TABLE @DATA(lt_handle)
+    PRIVILEGED ACCESS.
+
+    SORT lt_handle BY handlingunitexternalid ASCENDING.
+    DELETE ADJACENT DUPLICATES FROM lt_handle COMPARING handlingunitexternalid.
+
+
+    DATA(var1_wa_fg) =   |{ billingdocitem-product ALPHA = OUT }|.
+
+    SELECT SINGLE
+    b~tradename
+    FROM yy1_zmaterial_pkg AS b
+    WHERE b~mat = @var1_wa_fg
+    INTO @DATA(wa_fg) PRIVILEGED ACCESS.
+
+    IF wa_fg IS NOT INITIAL.
+      billingdocitem_ext_out-yy1_fg_material_name_bdi = wa_fg.
+    ELSE.
+      SELECT SINGLE
+      a~productname
+      FROM i_producttext AS a
+      WHERE a~product = @billingdocitem-product
+      INTO @DATA(wa_fg2) PRIVILEGED ACCESS.
+      billingdocitem_ext_out-yy1_fg_material_name_bdi = wa_fg2.
+    ENDIF.
+
+    SORT lt_handle BY handlingunitexternalid ASCENDING.
+    DATA: lv_count TYPE string.
+    lv_count = lines( lt_handle ).
+    READ TABLE lt_handle INTO DATA(lv_handle1) INDEX 1.
+    READ TABLE lt_handle INTO DATA(lv_handle2) INDEX lv_count.
+
+    DATA: lv_string TYPE string.
+    DATA: lv_string1 TYPE string.
+    DATA: lv_string2 TYPE string.
+    lv_string1 = lv_handle1-handlingunitexternalid.
+    lv_string2 = lv_handle2-handlingunitexternalid.
+    SHIFT lv_count LEFT DELETING LEADING '0'.
+    SHIFT lv_string1 LEFT DELETING LEADING '0'.
+    SHIFT lv_string2 LEFT DELETING LEADING '0'.
+    CONCATENATE lv_string lv_string1 ' ' '-' ' ' lv_string2 INTO lv_string.
+
+    billingdocitem_ext_out-yy1_handlingunitextern_bdi = lv_string.
+
+    billingdocitem_ext_out-yy1_no_pkgs_bdi = lv_count.
+
+    DATA(lv_handle1_var1) = |{ lv_handle1-packagingmaterial ALPHA = OUT }|.
+
+    SELECT SINGLE
+    d~tradename
+    FROM yy1_zmaterial_pkg AS d
+    WHERE d~mat = @lv_handle1_var1
+    INTO @DATA(lv_handle_tradename)
+    PRIVILEGED ACCESS.
+
+    IF lv_handle_tradename IS NOT INITIAL.
+      billingdocitem_ext_out-yy1_pack_kind_bdi = lv_handle_tradename.
+    ELSE.
+      billingdocitem_ext_out-yy1_pack_kind_bdi = lv_handle1-productdescription.
+    ENDIF.
+
+    SELECT
+    SUM( b~handlingunittareweight ) FROM
+    i_handlingunitheader AS b
+    WHERE b~handlingunitpackingobjectkey = @billingdocitem-referencesddocument
+    INTO @DATA(lv_tare)
+    PRIVILEGED ACCESS.
+
+    billingdocitem_ext_out-yy1_tare_weight_bdi = lv_tare.
+
+    SELECT
+    c~quantitydenominator,
+    c~quantitynumerator
+    FROM
+    i_productunitsofmeasure AS c
+    WHERE c~product = @billingdocitem-product AND c~alternativeunit = 'KG'
+    INTO TABLE @DATA(lt_netweight)
+    PRIVILEGED ACCESS.
+
+    READ TABLE lt_netweight INTO DATA(wa_netweight) INDEX 1.
+    DATA: net_weight TYPE p DECIMALS 3.
+    net_weight = wa_netweight-quantitydenominator / wa_netweight-quantitynumerator.
+    billingdocitem_ext_out-yy1_net_weight_bd_bdi = net_weight.
+
+    IF billingdocitem-salesdocumentitemcategory = 'TAN'.
+      SELECT SINGLE FROM i_billingdocumentitem
+      FIELDS billingquantity,billingdocument
+      WHERE billingdocument = @billingdocitem-billingdocument
+      AND billingdocumentitem = @billingdocitem-billingdocumentitem
+      AND salesdocumentitemcategory = @billingdocitem-salesdocumentitemcategory
+      INTO @DATA(lv_exp)
+      PRIVILEGED ACCESS.
+
+      billingdocitem_ext_out-yy1_exptax_quantity_bdi = lv_exp-billingquantity.
+    ENDIF.
+
+    select single from
+    i_billingdocumentitem as a
+    left join i_salesdocument as b on a~salesdocument = b~salesdocument
+    fields
+    b~purchaseorderbycustomer,
+    b~customerpurchaseorderdate
+    where a~billingdocument = @billingdocitem-billingdocument
+    into @data(lv_buyer)
+    PRIVILEGED ACCESS.
+
+    billingdocitem_ext_out-yy1_buyerorderno_bdi = lv_buyer-purchaseorderbycustomer.
+    billingdocitem_ext_out-yy1_buyersdate_bdi = lv_buyer-customerpurchaseorderdate.
+
+    select single from i_billingdocument as a
+    inner join i_billingdocumentitem as b on a~billingdocument = b~billingdocument
+    inner join i_salesdocument as c on b~salesdocument = c~salesdocument
+    inner join i_salesquotation as d on c~referencesddocument = d~salesquotation
+    fields
+    d~yy1_termsofpayment_soh_sdh
+    WHERE
+    b~billingdocument = @BILLINGDOC-billingdocument
+    INTO @DATA(lv_print)
+    PRIVILEGED ACCESS.
+
+    billingdocitem_ext_out-yy1_termsofpayment_bdi = lv_print.
+
+    select single from i_billingdocumentitem as a
+    left join i_salesdocument as b on a~salesdocument = b~salesdocument
+    left join i_salesdocumentitem as c on b~referencesddocument = c~salesdocument
+    FIELDS
+    c~yy1_desofgood_sdi
+    where a~billingdocument = @BILLINGDOC-billingdocument and c~material =  @billingdocitem-product
+    into @data(lv_desofgoods) PRIVILEGED ACCESS.
+
+    billingdocitem_ext_out-yy1_descriptionofgoods_bdi = lv_desofgoods.
+
+      select
+b~BusinessPartner,
+b~BPIdentificationType,
+b~BPIdentificationNumber
+from
+I_billingdocument as a
+inner join I_BuPaIdentification as b on a~SOLDTOPARTY = b~BusinessPartner
+where a~billingdocument = @BILLINGDOC-BILLINGDOCUMENT and
+a~soldtoparty is not initial
+into table @data(lt_identification) PRIVILEGED ACCESS.
+read table lt_identification into data(wa_identification) WITH KEY BPIdentificationType = 'VAT'.
+billingdocitem_ext_out-yy1_import_vat_bdi = wa_identification-BPIdentificationNumber.
+
+
+
+
+
