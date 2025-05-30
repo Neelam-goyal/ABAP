@@ -1,1 +1,25 @@
+CHECK manufacturingorder-manufacturingordercategory = if_mfgorder_check_before_save=>con_productionorder.
+
+IF manufacturingorder-product IS NOT INITIAL AND manufacturingorder-planningplant IS NOT INITIAL.
+
+  DATA(lv_date) = cl_abap_context_info=>get_system_date(  ).
+  DATA(lv_year) = lv_date+0(4).
+  DATA(lv_month) = lv_date+4(2).
+
+  SELECT FROM i_productvaluation
+   FIELDS standardprice, product
+   WHERE product = @manufacturingorder-product
+   AND valuationarea = @manufacturingorder-planningplant
+   AND fiscalyearcurrentperiod = @lv_year
+   "and fiscalmonthcurrentperiod = @lv_month
+   INTO TABLE @DATA(lt_stdpr) PRIVILEGED ACCESS.
+
+  SORT lt_stdpr BY standardprice DESCENDING.
+  READ TABLE lt_stdpr INTO DATA(wa_stdpr) INDEX 1.
+
+  IF wa_stdpr IS NOT INITIAL AND wa_stdpr-standardprice = 0.
+    APPEND VALUE #( messagetype = 'E' messagetext = 'Cost not released.' ) TO messages.
+  ENDIF.
+
+ENDIF.
 
