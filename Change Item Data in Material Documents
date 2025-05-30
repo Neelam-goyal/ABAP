@@ -1,0 +1,128 @@
+
+*     This method can be used to update field values of change_item.
+*     Use the structures HEADER, ITEM and table SERIALNUMBER to read legacy fields(e.g inventorytransactiontype)of the respective process
+*     and then update the structure CHANGE_ITEM based on your own logic.
+
+*     The movement type can be replaced by the customer movement type in the structure CHANGE_ITEM only when the customer movement type is copied from the SAP
+*     standard movement type (e.g Z01 can replace 101 when Z01 is copied from 101).
+
+
+   IF invtrymgmtcallingappl EQ me->if_mmim_item_provide_data~gc_calling_application_migo."'MIGO'.    "for MIGO as calling appliction
+     IF item-goodsmovementtype = '101'.
+
+*   CompanyName
+       SELECT SINGLE FROM i_materialdocumentitem_2 AS a
+       INNER JOIN i_companycode AS b ON a~companycode = b~companycode
+       FIELDS b~companycodename
+        WHERE a~materialdocument = '5000000290'
+*     WHERE a~materialdocument = @item-materialdocument and a~materialdocumentitem = @item-materialdocumentitem
+       INTO ( @change_item-yy1_hdr_compnayname_mmi )
+       PRIVILEGED ACCESS.
+
+
+*   Gst
+       SELECT SINGLE FROM i_in_businessplacetaxdetail
+       FIELDS in_gstidentificationnumber
+       WHERE businessplace = @item-plant
+       INTO ( @change_item-yy1_hdr_gst_mmi )
+       PRIVILEGED ACCESS.
+
+*   poDate
+       SELECT SINGLE FROM i_purchaseorderapi01
+       FIELDS purchaseorderdate
+       WHERE purchaseorder = @item-purchaseorder
+       INTO ( @change_item-yy1_po_date_mmi )
+       PRIVILEGED ACCESS.
+
+*   vendor address and state and state code
+       DATA venderaddress TYPE string.
+       SELECT SINGLE FROM i_purchaseorderapi01 AS a
+       INNER JOIN i_supplier AS b ON a~supplier = b~supplier
+       INNER JOIN i_regiontext AS c ON b~region = c~region
+       FIELDS a~supplier , b~streetname , b~region, b~postalcode , c~regionname
+       WHERE purchaseorder = @item-purchaseorder
+       INTO @DATA(wa2) PRIVILEGED ACCESS.
+       CONCATENATE wa2-streetname wa2-postalcode INTO venderaddress.
+       change_item-yy1_vendoraddress_mmi = venderaddress.
+
+
+*  VendorGst
+       SELECT SINGLE FROM i_purchaseorderapi01 AS a
+       INNER JOIN i_businesspartnertaxnumber AS b ON a~supplier = b~businesspartner AND b~bptaxtype = 'IN3'
+       FIELDS b~bptaxnumber
+       WHERE purchaseorder = @item-purchaseorder
+       INTO ( @change_item-yy1_vendorgst_mmi )
+       PRIVILEGED ACCESS.
+
+*  VendorState
+       SELECT SINGLE FROM i_purchaseorderapi01 AS a
+       INNER JOIN i_supplier AS b ON a~supplier = b~supplier
+       INNER JOIN i_regiontext AS c ON b~region = c~region
+       FIELDS c~regionname
+       WHERE purchaseorder = @item-purchaseorder
+       INTO (@change_item-yy1_vendorstate_mmi) PRIVILEGED ACCESS.
+
+
+
+* POQty & Tolerance
+       SELECT SINGLE FROM i_purchaseorderitemapi01 AS a
+       FIELDS a~orderquantity, a~purchaseorderquantityunit
+       WHERE a~purchaseorder = @item-purchaseorder AND a~purchaseorderitem = @item-purchaseorderitem
+       INTO ( @change_item-yy1_poqty_mmi , @change_item-yy1_poqty_mmiu )
+       PRIVILEGED ACCESS.
+
+* Tolerance
+    SELECT SINGLE FROM i_purchaseorderitemapi01 AS a
+       FIELDS A~overdelivtolrtdlmtratioinpct
+       WHERE a~purchaseorder = @item-purchaseorder AND a~purchaseorderitem = @item-purchaseorderitem
+       INTO ( @change_item-yy1_tolerance_mmi )
+       PRIVILEGED ACCESS.
+
+* CompanyAddress
+*data CompanyAddress type string.
+*    SELECT SINGLE FROM I_MATERIALDOCUMENTITEM_2 as a
+*     inner join I_CompanyCode as b on a~companycode = b~companycode
+*     inner join C_SustCompanyCodeAddressDEX  as c on b~companycode = c~companycode
+*     FIELDS c~streetname , c~cityname , c~postalcode , c~region
+*     WHERE materialdocument = @item-materialdocument
+*     INTO @DATA(WA3) PRIVILEGED access.
+*     concatenate wa3-streetname wa3-cityname wa3-postalcode wa3-region into CompanyAddress.
+*     change_item-yy1_companyaddress_mmi = companyaddress.
+*
+
+* Material Type
+       SELECT SINGLE FROM i_product as a
+*         inner join I_MATERIALDOCUMENTITEM_2 as b on a~product = b~material
+          FIELDS a~productgroup
+          WHERE a~product = @item-material
+* and b~purchaseorderitem = @item-purchaseorderitem
+          INTO ( @change_item-yy1_materialtype_mmi )
+          PRIVILEGED ACCESS.
+
+
+* HSN CODE
+       SELECT SINGLE FROM i_productplantbasic as a
+           FIELDS a~consumptiontaxctrlcode
+           WHERE a~product = @item-material
+           INTO ( @change_item-yy1_hsn_mmi )
+           PRIVILEGED ACCESS.
+
+
+* Transporter Name
+      SELECT SINGLE FROM yy1_zr_gateentryheader AS a
+        INNER join YY1_ZR_GateEntryLines as b on a~plant = b~plant and a~gateentryno = b~gateentryno
+           FIELDS a~transportername, a~vehicleno, a~lrno, a~lrdate
+           where a~plant = @item-plant and b~documentno = @item-purchaseorder
+           into ( @change_item-yy1_transporter_nm_mmi, @change_item-yy1_vehicle_no_mmi, @change_item-yy1_lr_no_mmi, @change_item-yy1_lr_date_mmi )
+        PRIVILEGED ACCESS.
+
+* Billing Quantity
+      SELECT SINGLE FROM YY1_ZR_GateEntryLines AS a
+           FIELDS a~gatevalue
+           where a~documentno = @item-purchaseorder and a~documentitem = @item-purchaseorderitem
+           into ( @change_item-yy1_billing_qty_mmi )
+        PRIVILEGED ACCESS.
+
+
+     ENDIF.
+  ENDIF.
