@@ -1,0 +1,63 @@
+LOOP AT itemswithporeference INTO DATA(wa).
+
+  IF wa-purchaseorder IS NOT INITIAL AND wa-purchaseorderitem IS NOT INITIAL.
+
+    SELECT SINGLE FROM i_inspectionlottp_2
+    FIELDS inspectionlotactualquantity, insplotqtytofree, insplotqtytoreserves,
+    insplotqtytosample, insplotqtyreturnedtosupplier, insplotqtytoblocked
+    WHERE purchasingdocument = @wa-purchaseorder AND purchasingdocumentitem = @wa-purchaseorderitem
+    INTO @DATA(wa_insplot) PRIVILEGED ACCESS.
+
+    IF wa_insplot IS NOT INITIAL.
+
+      IF wa_insplot-inspectionlotactualquantity -
+      ( wa_insplot-insplotqtytofree + wa_insplot-insplotqtytoreserves +
+      wa_insplot-insplotqtytosample + wa_insplot-insplotqtyreturnedtosupplier + wa_insplot-insplotqtytoblocked ) NE 0.
+        APPEND VALUE #( messagetype = if_ex_mrm_check_invoice_cloud=>c_messagetype_error
+                            messageid = 'MRM_BADI_CLOUD'
+                            messagenumber = '001'
+                            messagevariable1 = 'Quality'
+                            "messagevariable2 = lines( glaccountitems )
+                            messagevariable3 = 'Check'
+                            messagevariable4 = 'Pending'
+                            ) TO messages.
+      ENDIF.
+      CLEAR wa_insplot.
+    ENDIF.
+  ENDIF.
+
+  CLEAR wa.
+ENDLOOP.
+
+IF headerdata-supplierinvoiceidbyinvcgparty IS NOT INITIAL.
+  SELECT SINGLE FROM i_journalentry FIELDS *
+  WHERE companycode = @headerdata-companycode
+  AND   fiscalyear = @headerdata-fiscalyear
+  AND   documentreferenceid = @headerdata-supplierinvoiceidbyinvcgparty
+  AND   transactioncode = 'MIRO'
+  AND   reversalreason <> ''
+  INTO @DATA(lv_miro) PRIVILEGED ACCESS.
+  CONCATENATE 'This Ref.No.Already Posted on' lv_miro-companycode lv_miro-accountingdocument lv_miro-fiscalyear INTO DATA(lc_msg) SEPARATED BY space.
+  IF lv_miro-documentreferenceid = headerdata-supplierinvoiceidbyinvcgparty.
+    APPEND VALUE #( messagetype = if_ex_mrm_check_invoice_cloud=>c_messagetype_error
+                                messageid = 'MRM_BADI_CLOUD'
+                                messagenumber = '001'
+                                messagevariable1 = ''
+                                "messagevariable2 = lines( glaccountitems )
+                                messagevariable3 = lc_msg
+                                messagevariable4 = ''
+                                ) TO messages.
+
+  ENDIF.
+ENDIF.
+
+IF headerdata-businessplace IS INITIAL.
+  APPEND VALUE #( messagetype = if_ex_mrm_check_invoice_cloud=>c_messagetype_error
+                            messageid = 'MRM_BADI_CLOUD'
+                            messagenumber = '001'
+                            messagevariable1 = ''
+                            "messagevariable2 = lines( glaccountitems )
+                            messagevariable3 = 'Business Place is required.'
+                            messagevariable4 = ''
+                            ) TO messages.
+ENDIF.
