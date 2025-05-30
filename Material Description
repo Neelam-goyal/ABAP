@@ -1,0 +1,22 @@
+LOOP AT purdocitem_extension ASSIGNING FIELD-SYMBOL(<purdocitem_extension>).
+  SELECT SINGLE FROM i_purchaseorderitemapi01 AS a
+  INNER JOIN i_producttext AS b ON a~material = b~product AND
+  b~language = 'E'
+  FIELDS b~productname
+  WHERE
+  a~purchaseorder = @<purdocitem_extension>-ebeln
+  AND a~purchaseorderitem = @<purdocitem_extension>-ebelp
+  INTO @<purdocitem_extension>-yy1_materialdesc_pdi
+  PRIVILEGED ACCESS.
+
+* Remarks ( Line Item )
+*  select single from I_PURCHASEORDERITEMNOTETP_2 as a
+*    fields a~plainlongtext
+*        WHERE a~purchaseorder = @<purdocitem_extension>-ebeln
+*         AND a~purchaseorderitem = @<purdocitem_extension>-ebelp
+*  into @<purdocitem_extension>-yy1_remarks_po_pdi
+*  Privileged Access.
+
+
+
+ENDLOOP.
