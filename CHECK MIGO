@@ -1,0 +1,24 @@
+IF item_matdoc-manufacturingorder IS NOT INITIAL AND (  item_matdoc-plant = 'GM30' OR item_matdoc-plant = 'GM01' )
+AND  item_matdoc-material IS NOT INITIAL.
+
+
+  SELECT SINGLE FROM i_processordertp
+  FIELDS processordertype, processorder, batch, masterrecipeproduct
+  WHERE processorder = @item_matdoc-manufacturingorder
+  INTO @DATA(wa_processorder) PRIVILEGED ACCESS.
+
+  IF wa_processorder-processordertype = 'ZFGC' OR wa_processorder-processordertype = 'ZFGA'.
+
+    SELECT SINGLE FROM i_product
+    FIELDS producttype
+    WHERE product = @item_matdoc-material
+    INTO @DATA(lv_mtart) PRIVILEGED ACCESS.
+
+    IF lv_mtart = 'ZSFC' AND item_matdoc-goodsmovementtype = '261'.
+      IF item_matdoc-batch NE wa_processorder-batch.
+        APPEND VALUE #( messagetype = 'E' messagetext = 'Batch should be same for material type FG and SFG.' ) TO messages.
+      ENDIF.
+    ENDIF.
+  ENDIF.
+
+ENDIF.
