@@ -1,0 +1,11 @@
+field_properties_out = field_properties_in.
+loop at field_properties_out assigning field-symbol(<fs_field_properties>).
+ if <fs_field_properties>-field_name = 'YY1_FIELD_1'.
+    <fs_field_properties>-read_only = 'X'.
+  endif.
+endloop.
+
+
+
+
+
