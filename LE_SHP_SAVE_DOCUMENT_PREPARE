@@ -1,0 +1,76 @@
+MOVE-CORRESPONDING delivery_document_in TO delivery_document_out.
+delivery_document_items_out = delivery_document_items_in.
+
+DATA breadbilling TYPE int1.
+DATA firsttime TYPE int1.
+DATA orderdate TYPE d.
+DATA returndate Type d.
+DATA breadbilling1 TYPE int1.
+
+firsttime = 0.
+breadbilling = 0.
+
+LOOP AT delivery_document_items_out INTO DATA(wa).
+
+  SELECT SINGLE FROM i_deliverydocumentitem AS a
+  left JOIN i_salesdocumentitem as b on a~referencesddocument = b~salesdocument
+            and a~referencesddocumentitem = b~salesdocumentitem
+  FIELDS
+     a~referencesddocument, a~referencesddocumentitem,
+     b~yy1_schemecode_sdi ,b~yy1_schemegroupcode_sdi
+     WHERE a~referencesddocument = @wa-referencesddocument
+     AND a~referencesddocumentitem = @wa-referencesddocumentitem
+*     AND a~salesdocumentitemcategory = 'TAN'
+  INTO  @DATA(lv_line) PRIVILEGED ACCESS.
+
+*  READ TABLE lv_line INTO DATA(wa_line) WITH KEY deliverydocument = wa-deliverydocument.
+
+  wa-yy1_scheme_code_del_dli = lv_line-yy1_schemecode_sdi.
+  wa-yy1_schemegroupcode_dl_dli = lv_line-yy1_schemegroupcode_sdi.
+
+   MODIFY delivery_document_items_out FROM wa.
+
+   IF firsttime = 0.
+     SELECT SINGLE b~salesorderdate, b~distributionchannel, b~organizationdivision
+     FROM i_salesorder as b
+      WHERE b~salesorder = @wa-referencesddocument
+      INTO  @DATA(lv_sales) PRIVILEGED ACCESS.
+
+     IF lv_sales-distributionchannel = 'GT' AND lv_sales-organizationdivision = 'B1'.
+       breadbilling = 1.
+       orderdate = lv_sales-salesorderdate.
+     ENDIF.
+     firsttime = 1.
+   ENDIF.
+endloop.
+
+IF breadbilling = 1.
+  delivery_document_out-documentdate = orderdate.
+  delivery_document_out-plannedgoodsissuedate = orderdate.
+  delivery_document_out-pickingdate = orderdate.
+  delivery_document_out-transportationplanningdate = orderdate.
+  delivery_document_out-loadingdate = orderdate.
+  delivery_document_out-actualgoodsmovementdate = orderdate.
+ENDIF.
+
+**************************Return Delivery Code*******************************
+LOOP AT delivery_document_items_out INTO DATA(wa1).
+SELECT SINGLE FROM I_customerreturn as c
+fields c~customerreturndate, c~distributionchannel, c~organizationdivision,c~customerreturntype
+WHERE c~customerreturn = @wa1-referencesddocument
+INTO  @DATA(lv_sales_return) PRIVILEGED ACCESS.
+
+IF lv_sales_return-distributionchannel = 'GT' AND lv_sales_return-organizationdivision = 'B1' AND lv_sales_return-customerreturntype = 'CBRE'.
+breadbilling1 = 1.
+returndate = lv_sales_return-customerreturndate.
+ENDIF.
+Endloop.
+
+IF breadbilling1 = 1.
+delivery_document_out-documentdate = returndate.
+delivery_document_out-plannedgoodsissuedate = returndate.
+delivery_document_out-pickingdate = returndate.
+delivery_document_out-transportationplanningdate = returndate.
+delivery_document_out-loadingdate = returndate.
+delivery_document_out-actualgoodsmovementdate = returndate.
+ENDIF.
