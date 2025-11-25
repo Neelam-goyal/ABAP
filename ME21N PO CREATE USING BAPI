@@ -1,0 +1,386 @@
+STEP1:  CREATE REPORT IN SE38
+STEP2:  L2012F23 IMPLEMENT LINE NO 736.
+
+STEP1: CREATE REPORT
+*&---------------------------------------------------------------------*
+*& Report ZDEMO
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+REPORT zdemo.
+
+TABLES: ekko, ekpo.
+
+TYPES: BEGIN OF ty_upload,
+         count                     TYPE char3,
+         vendor                    TYPE lifnr,
+         purch_org                 TYPE ekko-ekorg,
+         purch_grp                 TYPE ekko-ekgrp,
+         company                   TYPE bukrs,
+         doc_type                  TYPE bsart,
+         item_no                   TYPE ekpo-ebelp,
+         material                  TYPE matnr,
+         materialgroup             TYPE matkl,
+         pur_requisition           TYPE banfn,
+         pur_requisitionitem       TYPE bnfpo,
+         plant                     TYPE ekpo-werks,
+         quantity                  TYPE ekpo-menge,
+         validitystart             TYPE char10,
+         validityend               TYPE char10,
+         dpcategory                TYPE dptyp,
+         incoterms                 TYPE inco1,
+         insuranceterm             TYPE inco2_l,
+         net_price                 TYPE ekpo-netpr,
+         taxcode                   TYPE ekpo-mwskz,
+         ret_tem                   TYPE char1,
+         f01                       TYPE string,
+         f02                       TYPE string,
+         customer                  TYPE zzkunnr, " Custom Customer Field
+         accountassignmentcategory TYPE char1,
+         suppliername              TYPE string,
+       END OF ty_upload.
+
+DATA: gt_upload TYPE STANDARD TABLE OF ty_upload,
+      gs_upload TYPE ty_upload.
+
+DATA: gv_file TYPE rlgrap-filename.
+DATA: it_raw TYPE truxs_t_text_data.
+
+* BAPI structures
+DATA: ls_header      TYPE bapimepoheader,
+      ls_headerx     TYPE bapimepoheaderx,
+      lt_items       TYPE STANDARD TABLE OF bapimepoitem,
+      ls_item        TYPE bapimepoitem,
+      lt_itemsx      TYPE STANDARD TABLE OF bapimepoitemx,
+      ls_itemx       TYPE bapimepoitemx,
+      lt_potextitem  TYPE STANDARD TABLE OF bapimepotext,
+      ls_potextitem  TYPE bapimepotext,
+      lt_potextitemx TYPE STANDARD TABLE OF bapimepotextx,
+      ls_potextitemx TYPE  bapimepotextx,
+
+      lt_return      TYPE STANDARD TABLE OF bapiret2,
+      ls_return      TYPE bapiret2,
+      gv_po          TYPE ebeln.
+
+DATA: wa_ext TYPE bapiparex,
+      it_ext TYPE TABLE OF bapiparex.
+
+* IMPORTANT: Use BAPI_TE_EKKO/EKKOX for header extensions
+DATA: wa_header  TYPE bapi_te_mepoheader, " ASSUMING structure BAPI_TE_EKKO exists and contains ZZKUNNR
+      wa_headerx TYPE bapi_te_mepoheaderx. " ASSUMING structure BAPI_TE_EKKOX exists and contains ZZKUNNR (CHAR1)
+
+
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-001.
+
+  PARAMETERS: p_file TYPE rlgrap-filename OBLIGATORY.
+**
+**  PARAMETERS: r_po   RADIOBUTTON GROUP rb1 DEFAULT 'X' USER-COMMAND rad,
+**              r_cjpo RADIOBUTTON GROUP rb1.
+
+SELECTION-SCREEN END OF BLOCK b1.
+
+TYPES: BEGIN OF ty_message,
+         pono    TYPE ebeln,
+         type    TYPE c,
+         remarks TYPE string,
+       END OF ty_message.
+
+DATA:
+* gt_file  TYPE TABLE OF ty_po,
+* gs_upload  TYPE ty_po,
+  it_final TYPE TABLE OF ty_message,
+  wa_final TYPE ty_message,
+
+  bdcdata  TYPE TABLE OF bdcdata WITH HEADER LINE,
+  messtab  TYPE TABLE OF bdcmsgcoll,
+  wa_msg   TYPE bdcmsgcoll.
+
+DATA :wa_message  TYPE bdcmsgcoll,
+      messtab1    TYPE TABLE OF bdcmsgcoll,
+      wa_message1 TYPE bdcmsgcoll.
+DATA : it_fcat TYPE slis_t_fieldcat_alv.
+DATA : w_fcat LIKE LINE OF it_fcat.
+DATA : is_layout TYPE slis_layout_alv.
+DATA: countx TYPE i.
+DATA: lv_line TYPE i VALUE 0,
+      lv_idx  TYPE char2.
+
+*---------------------------------------------------------------------*
+* Upload file
+*---------------------------------------------------------------------*
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR p_file.
+  CALL FUNCTION 'F4_FILENAME'
+    IMPORTING
+      file_name = p_file.
+
+START-OF-SELECTION.
+  PERFORM upload_file.
+  PERFORM create_po_by_pr.
+
+*---------------------------------------------------------------------*
+* Upload File
+*---------------------------------------------------------------------*
+FORM upload_file.
+  CALL FUNCTION 'TEXT_CONVERT_XLS_TO_SAP'
+    EXPORTING
+      i_line_header        = 'X'
+      i_tab_raw_data       = it_raw
+      i_filename           = p_file
+    TABLES
+      i_tab_converted_data = gt_upload.
+ENDFORM.
+
+*---------------------------------------------------------------------*
+* Create PO per PR
+*---------------------------------------------------------------------*
+
+FORM create_po_by_pr.
+
+*  IF r_po = 'X'.
+
+  DATA: lt_pr_group  TYPE STANDARD TABLE OF ty_upload,
+* WITH UNIQUE KEY pur_requisition,
+        lt_pr_items  TYPE STANDARD TABLE OF ty_upload,
+        lt_pr_header TYPE STANDARD TABLE OF ty_upload.
+
+  " Sort by PR
+  SORT gt_upload BY pur_requisition pur_requisitionitem.
+
+  " Get unique PR list
+  lt_pr_group = gt_upload.
+
+* delete lt_pr_group WHERE item_no ne '00010'.
+  DELETE ADJACENT DUPLICATES FROM lt_pr_group COMPARING count.
+
+  LOOP AT lt_pr_group INTO gs_upload ."WHERE VENDOR = GS_UPLOAD-VENDOR.
+
+    " Filter items for this PR
+
+    IF gs_upload-pur_requisition IS NOT INITIAL.
+      CLEAR lt_pr_items.
+      LOOP AT gt_upload INTO DATA(ls_tmp)
+           WHERE pur_requisition = gs_upload-pur_requisition.
+        APPEND ls_tmp TO lt_pr_items.
+      ENDLOOP.
+
+    ELSE.
+      CLEAR :lt_pr_items, ls_tmp.
+      LOOP AT gt_upload INTO ls_tmp WHERE count = gs_upload-count.
+        ON CHANGE OF ls_tmp-vendor.
+          APPEND ls_tmp TO lt_pr_items.
+        ENDON.
+      ENDLOOP.
+    ENDIF.
+    " Prepare header (from first item of this PR)
+    CLEAR: ls_header, ls_headerx.
+    .
+* READ TABLE lt_pr_items INTO gs_upload INDEX 1.
+
+    CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+      EXPORTING
+        input  = gs_upload-vendor
+      IMPORTING
+        output = gs_upload-vendor.
+
+    ls_header-vendor    = gs_upload-vendor.
+    ls_header-purch_org = gs_upload-purch_org.
+    ls_header-pur_group = gs_upload-purch_grp.
+    ls_header-comp_code = gs_upload-company.
+    ls_header-doc_type  = gs_upload-doc_type.
+    ls_header-vper_start = gs_upload-validitystart.
+    ls_header-vper_end   = gs_upload-validityend.
+    ls_header-downpay_type = gs_upload-dpcategory.
+    ls_header-incoterms1 = gs_upload-incoterms.
+    ls_header-incoterms2 = gs_upload-insuranceterm.
+
+    ls_headerx-vendor     = 'X'.
+    ls_headerx-purch_org  = 'X'.
+    ls_headerx-pur_group  = 'X'.
+    ls_headerx-comp_code  = 'X'.
+    ls_headerx-doc_type   = 'X'.
+    ls_headerx-vper_start = 'X'.
+    ls_headerx-vper_end   = 'X'.
+    ls_headerx-downpay_type = 'X'.
+    ls_headerx-incoterms1  = 'X'.
+    ls_headerx-incoterms2  = 'X'.
+
+    " =======================================================
+    " 1. FIX: Populate the BAPI Extension Data (Data and Control)
+    " =======================================================
+    CLEAR: it_ext[], wa_ext.
+
+    IF gs_upload-customer IS NOT INITIAL.
+
+      " --- A. Data Structure (BAPI_TE_EKKO) ---
+      CLEAR wa_header.
+*        wa_header-po_number = ''.
+      wa_header-zzkunnr = gs_upload-customer.
+      CONDENSE wa_header.
+
+      " Pack the data structure into the BAPIPAREX table
+      wa_ext-structure  = 'BAPI_TE_MEPOHEADER'.
+      MOVE wa_header TO wa_ext-valuepart1. " Move the start of the structure
+      APPEND wa_ext TO it_ext.
+
+      " --- B. Control Structure (BAPI_TE_EKKOX) ---
+      CLEAR wa_headerx.
+*        wa_headerx-po_number = ''. " Flag the custom field for update
+      wa_headerx-zzkunnr = 'X'. " Flag the custom field for update
+      CONDENSE wa_headerx.
+
+      " Pack the control structure into the BAPIPAREX table
+      CLEAR wa_ext.
+      wa_ext-structure  = 'BAPI_TE_MEPOHEADERX'.
+      MOVE wa_headerx TO wa_ext-valuepart1.
+      APPEND wa_ext TO it_ext.
+
+    ENDIF.
+    " =======================================================
+
+    " Prepare items
+    CLEAR: lt_items, lt_itemsx, lt_potextitem.
+    LOOP AT lt_pr_items INTO gs_upload.
+
+      CLEAR: ls_item, ls_itemx.
+      ls_item-po_item   = gs_upload-item_no.
+      ls_item-material  = gs_upload-material.
+      ls_item-matl_group = gs_upload-materialgroup.
+      ls_item-plant     = gs_upload-plant.
+      ls_item-quantity  = gs_upload-quantity.
+      ls_item-preq_no   = gs_upload-pur_requisition.
+      ls_item-preq_item = gs_upload-pur_requisitionitem.
+      ls_item-net_price = gs_upload-net_price.
+      ls_item-tax_code = gs_upload-taxcode.
+      ls_item-ret_item = gs_upload-ret_tem.
+      ls_item-acctasscat = gs_upload-accountassignmentcategory.
+
+      ls_itemx-po_item   = gs_upload-item_no.
+      ls_itemx-material  = 'X'.
+      ls_itemx-matl_group = 'X'.
+      ls_itemx-plant     = 'X'.
+      ls_itemx-quantity  = 'X'.
+      ls_itemx-preq_no   = 'X'.
+      ls_itemx-preq_item = 'X'.
+      ls_itemx-net_price = 'X'.
+      ls_itemx-tax_code = 'X'.
+      ls_itemx-ret_item = 'X'.
+      ls_itemx-acctasscat = 'X'.
+
+      APPEND ls_item TO lt_items.
+      APPEND ls_itemx TO lt_itemsx.
+
+      " === Add item text logic here (remains unchanged) ===
+
+      IF gs_upload-doc_type = 'ZREJ'.
+        IF gs_upload-f01 IS NOT INITIAL.
+          CLEAR ls_potextitem.
+          ls_potextitem-po_item   = gs_upload-item_no.
+          ls_potextitem-text_id   = 'F01'.   " Item text ID
+          ls_potextitem-text_form = '*'.
+          ls_potextitem-text_line = gs_upload-f01.
+          APPEND ls_potextitem TO lt_potextitem.
+        ENDIF.
+
+        IF gs_upload-f02 IS NOT INITIAL.
+          CLEAR ls_potextitem.
+          ls_potextitem-po_item   = gs_upload-item_no.
+          ls_potextitem-text_id   = 'F02'.   " Delivery text ID
+          ls_potextitem-text_form = '*'.
+          ls_potextitem-text_line = gs_upload-f02.
+          APPEND ls_potextitem TO lt_potextitem.
+        ENDIF.
+      ELSE.
+        ls_potextitem-po_item   = gs_upload-item_no..
+        ls_potextitem-text_id   = ''.   " Item text ID
+        ls_potextitem-text_form = ''.
+        ls_potextitem-text_line = ''.
+        APPEND ls_potextitem TO lt_potextitem.
+      ENDIF.
+
+    ENDLOOP.
+
+    " Call BAPI
+    CALL FUNCTION 'BAPI_PO_CREATE1'
+      EXPORTING
+        poheader         = ls_header
+        poheaderx        = ls_headerx
+      IMPORTING
+        exppurchaseorder = gv_po
+      TABLES
+        return           = lt_return
+        poitem           = lt_items
+        poitemx          = lt_itemsx
+        potextitem       = lt_potextitem
+        extensionin      = it_ext. " <-- 2. FIX: Uncommented the extension table
+
+    DATA : sn TYPE i.
+    sn = sn  .
+    sn = sn + 1.
+    DATA : msg(100) .
+    LOOP AT lt_return INTO ls_return WHERE type = 'E' OR type = 'A'.
+      msg = |Order :- { sn }, Message :- { ls_return-message }| .
+      WRITE: / msg .
+      CLEAR : msg .
+    ENDLOOP.
+
+    IF gv_po IS NOT INITIAL.
+      DATA : returnn LIKE  bapiret2 .
+      CLEAR : returnn .
+* WRITE: / 'PO created:', gv_po.
+      CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+        EXPORTING
+          wait   = 'X'
+*** ELSE.
+*** CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+*** ENDIF.
+        IMPORTING
+          return = returnn.
+      WAIT UP TO 1 SECONDS.
+      msg = |Order :- { gs_upload-count }, Message :- { gv_po } Created Successfully| .
+      WRITE: / msg.
+      CLEAR : msg .
+* BREAK-POINT  .
+
+    ENDIF.
+
+    REFRESH : lt_return[] .
+    CLEAR : sn ,gv_po.
+
+  ENDLOOP.
+*  ENDIF.
+ENDFORM.
+
+
+
+-----------------------------------------------------------------------------------------STEP2-----------------------------------------------------------------------------------------------------------------------------
+IF NOT extensionin IS INITIAL.
+    CALL FUNCTION 'AD_PO_DATA_MOVE_EXTENSIONIN'
+      TABLES
+        cht_poitem    = cht_poitem
+        cht_poitemx   = cht_poitemx
+        extensionin   = extensionin
+        cht_return    = cht_return
+      CHANGING
+        exs_poheader  = exs_poheader
+        exs_poheaderx = exs_poheaderx.
+  ENDIF.
+*        ENDIF.
+*      endif. "serial numbers in sto active
+* end of retrofit serial numbers in STO
+
+  "{ End MOVE_EXTENTIONIN_01 ENHO ADSUB_L2012F23 IS-AD-SUC AD_SUB }
+
+ENHANCEMENT-POINT move_extentionin_01 SPOTS es_sapl2012.
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""$"$\SE:(1) Form MOVE_EXTENSIONIN, End                                                                                                                        A
+*$*$-Start: (1)---------------------------------------------------------------------------------$*$*
+ENHANCEMENT 1  ZME21N_CJW.    "inactive version
+
+ DATA: ls_ext TYPE bapiparex.
+
+ READ TABLE extensionin INTO ls_ext index 1.
+ if sy-subrc = 0.
+   exs_poheader-zzkunnr = ls_ext-valuepart1.
+   exs_poheaderx-zzkunnr = 'X'.
+ endif.
+
+ENDENHANCEMENT.
