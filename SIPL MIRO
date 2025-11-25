@@ -1,0 +1,290 @@
+MRM_CHECK_INVOICE_CLOUD
+
+
+
+" Error: if_ex_mrm_check_invoice_cloud=>c_MessageType_Error
+  " Information: if_ex_mrm_check_invoice_cloud=>c_MessageType_Info
+  " Warning: if_ex_mrm_check_invoice_cloud=>c_MessageType_Warning
+  " Success: if_ex_mrm_check_invoice_cloud=>c_MessageType_Success
+
+  " Post: if_ex_mrm_check_invoice_cloud=>c_Action_Post
+  " Park: if_ex_mrm_check_invoice_cloud=>c_Action_Park
+  " Hold: if_ex_mrm_check_invoice_cloud=>c_Action_Hold
+  " Save as Completed: if_ex_mrm_check_invoice_cloud=>c_Action_Save_As_Completed
+  " Check: if_ex_mrm_check_invoice_cloud=> c_Action_Check
+  " Delete: if_ex_mrm_check_invoice_cloud=>c_Action_Delete
+  " Simulate: if_ex_mrm_check_invoice_cloud=>c_Action_Simulate
+
+  DATA : lv_vendor    TYPE lifnr.
+  DATA : vfyear       TYPE i_materialdocumentheader_2-materialdocumentyear.
+  DATA : lv_mm TYPE string,
+         lv_yy TYPE string.
+
+  DATA currenttime TYPE timestamp.
+  GET TIME STAMP FIELD currenttime.
+  DATA(time_factory) = cl_abap_timestamp_util=>get_instance( ).
+  DATA(timezone) = time_factory->get_user_time_zone_string( ).
+  CONVERT TIME STAMP currenttime TIME ZONE timezone INTO DATE DATA(currentdate).
+
+  IF ( ( action = if_ex_mrm_check_invoice_cloud=>c_action_check ) OR
+       ( action = if_ex_mrm_check_invoice_cloud=>c_action_post )  OR
+       ( action = if_ex_mrm_check_invoice_cloud=>c_action_simulate ) ).
+      " added by neelam / khusboo
+    LOOP AT itemswithporeference INTO DATA(wa_item_qty).
+      IF wa_item_qty-purchaseorder IS NOT INITIAL.
+
+        " Select released CDS view for Goods Movement (check I_GoodsMovementCube is released)
+        SELECT SINGLE totalgdsmvtqtyinbaseunit
+          FROM i_goodsmovementcube
+          WHERE purchaseorder     = @wa_item_qty-purchaseorder
+            AND purchaseorderitem = @wa_item_qty-purchaseorderitem
+            AND materialdocument  = @wa_item_qty-referencedocument
+          INTO @DATA(lv_migoqty)  PRIVILEGED ACCESS.
+
+        IF sy-subrc = 0 AND wa_item_qty-qtyinpurchaseorderpriceunit <> lv_migoqty.
+          APPEND VALUE #(
+            messagetype     = if_ex_mrm_check_invoice_cloud=>c_messagetype_error
+            messageid       = 'MRM_BADI_CLOUD'
+            messagenumber   = '001'
+            messagevariable1 = |Invoice Receipt Qty <> GR Qty (PO { wa_item_qty-purchaseorder }/{ wa_item_qty-purchaseorderitem })|
+          ) TO messages.
+          RETURN.
+        ENDIF.
+
+      ENDIF.
+    ENDLOOP.
+
+"added by neelam/ khusbhu
+
+* LOOP AT itemswithporeference INTO DATA(wa_item_qty) .
+*  IF wa_item_qty-purchaseorder IS NOT INITIAL.
+*        SELECT SINGLE totalgdsmvtqtyinbaseunit FROM i_goodsmovementcube
+*        WHERE purchaseorder = @wa_item_qty-purchaseorder
+*        AND purchaseorderitem = @wa_item_qty-purchaseorderitem
+*        AND materialdocument = @wa_item_qty-referencedocument
+*         INTO @DATA(lv_migoqty)
+*        PRIVILEGED ACCESS..
+*
+*        if wa_item_qty-qtyinpurchaseorderpriceunit <> lv_migoqty.
+*       APPEND VALUE #( messagetype = if_ex_mrm_check_invoice_cloud=>c_messagetype_error
+*                    messageid = 'MRM_BADI_CLOUD'
+*                    messagenumber = '001'
+*                    messagevariable1 = 'Z: Invoice Recipt Qty is not equal to GR QTY.'  ) TO messages.
+*      RETURN.
+*        endif.
+*      ENDIF.
+* endloop.
+
+    READ TABLE itemswithporeference INTO DATA(wa_item) INDEX 1.
+    IF sy-subrc EQ 0.
+      IF headerdata-businessplace NE wa_item-plant.
+        APPEND VALUE #( messagetype = if_ex_mrm_check_invoice_cloud=>c_messagetype_error
+                      messageid = 'MRM_BADI_CLOUD'
+                      messagenumber = '001'
+                      messagevariable1 = 'Z: Plant Business Place Mis-match'  ) TO messages.
+        RETURN.
+      ENDIF.
+
+      SELECT SINGLE matldoclatestpostgdate FROM i_materialledgercube_lit
+      WHERE purchasingdocument = @wa_item-purchaseorder
+
+
+      AND   fiscalyear = @wa_item-referencedocumentfiscalyear
+      AND  companycode = @headerdata-companycode
+      AND ledger = '0L'
+      INTO @DATA(lv_mirodate)
+      PRIVILEGED ACCESS.
+*      =====
+      IF headerdata-postingdate < lv_mirodate.   "comment by vishal tyagi on 23092025
+        APPEND VALUE #( messagetype = if_ex_mrm_check_invoice_cloud=>c_messagetype_error
+                     messageid = 'MRM_BADI_CLOUD'
+                     messagenumber = '001'
+                     messagevariable1 = 'MIRO Posting Date not less than MIGO Posting date' ) TO messages.
+        RETURN.
+      ENDIF.
+*     =====
+    ENDIF.
+
+
+*    IF headerdata-documentheadertext IS INITIAL.
+*       APPEND VALUE #( messagetype = if_ex_mrm_check_invoice_cloud=>c_messagetype_error
+*                     messageid = 'MRM_BADI_CLOUD'
+*                     messagenumber = '001'
+*                     messagevariable1 = 'Z: Header Text Blank.'  ) TO messages.
+*       RETURN.
+*    ENDIF.
+
+    IF headerdata-businessplace IS INITIAL.
+      APPEND VALUE #( messagetype = if_ex_mrm_check_invoice_cloud=>c_messagetype_error
+                    messageid = 'MRM_BADI_CLOUD'
+                    messagenumber = '001'
+                    messagevariable1 = 'Z: Business Place Blank'  ) TO messages.
+      RETURN.
+    ENDIF.
+
+    IF headerdata-documentdate GT headerdata-postingdate.
+      APPEND VALUE #( messagetype = if_ex_mrm_check_invoice_cloud=>c_messagetype_error
+                     messageid = 'MRM_BADI_CLOUD'
+                     messagenumber = '001'
+                     messagevariable1 = 'Z: Document Date Greater Than Posting Date'  ) TO messages.
+    ENDIF.
+
+    IF headerdata-supplierinvoiceidbyinvcgparty IS INITIAL.
+      APPEND VALUE #( messagetype = if_ex_mrm_check_invoice_cloud=>c_messagetype_error
+                     messageid = 'MRM_BADI_CLOUD'
+                     messagenumber = '001'
+                     messagevariable1 = 'Z: Vendor Invoice Blank'  ) TO messages.
+      RETURN.
+    ENDIF.
+
+*    IF  headerdata-postingdate GT currentdate.   "comment by vishaltyagi in 23sep2025
+*      APPEND VALUE #( messagetype = if_ex_mrm_check_invoice_cloud=>c_messagetype_error
+*                    messageid = 'MRM_BADI_CLOUD'
+*                    messagenumber = '001'
+*                    messagevariable1 = 'Z: Posting Date Greater Than Current Date'  ) TO messages.
+*      RETURN.
+*    ENDIF.  "end of comment
+
+
+
+*""""********Start:Tax Validation:#SD* comment by sb*/yash***********
+    SELECT SINGLE
+    supplier,
+    taxnumber3
+    FROM i_supplier
+    WHERE supplier = @headerdata-invoicingparty
+    INTO @DATA(ls_lfa1)
+    PRIVILEGED ACCESS.
+
+    SELECT SINGLE
+    companycode,
+    businessplace,
+    in_gstidentificationnumber
+    FROM i_in_businessplacetaxdetail
+    WHERE businessplace = @wa_item-plant
+    INTO @DATA(ls_plant)
+    PRIVILEGED ACCESS.
+
+  LOOP AT itemswithporeference INTO DATA(wa_item_new) WHERE itemisselectedforprocessing = 'X'.
+
+   if wa_item_new-taxcode ne 'V0'. "Add By Vishal Tyagi on 19092025
+     IF wa_item_new-taxcode = 'A1' OR   "add By Vishal Tyagi on 25092925
+          wa_item_new-taxcode = 'A2' OR
+          wa_item_new-taxcode = 'A3' OR
+          wa_item_new-taxcode = 'A4' OR
+         wa_item_new-taxcode = 'A5' OR
+          wa_item_new-taxcode = 'A6' OR
+          wa_item_new-taxcode = 'A7' OR
+          wa_item_new-taxcode = 'A8'.
+
+        IF ls_lfa1-taxnumber3+0(2) = ls_plant-in_gstidentificationnumber+0(2).
+
+          IF wa_item_new-taxcode = 'A1' OR
+             wa_item_new-taxcode = 'A2' OR
+             wa_item_new-taxcode = 'A3' OR
+             wa_item_new-taxcode = 'A4'.
+
+          ELSE.
+
+            APPEND VALUE #( messagetype = if_ex_mrm_check_invoice_cloud=>c_messagetype_error
+                          messageid = 'MRM_BADI_CLOUD'
+                          messagenumber = '001'
+                          messagevariable1 = 'Z: Invalid Tax code'  ) TO messages.
+            EXIT.
+
+          ENDIF.
+
+        ELSE.
+
+          IF wa_item_new-taxcode = 'A5' OR
+             wa_item_new-taxcode = 'A6' OR
+             wa_item_new-taxcode = 'A7' OR
+             wa_item_new-taxcode = 'A8'.
+
+          ELSE.
+
+            APPEND VALUE #( messagetype = if_ex_mrm_check_invoice_cloud=>c_messagetype_error
+                          messageid = 'MRM_BADI_CLOUD'
+                          messagenumber = '001'
+                          messagevariable1 = 'Z: Invalid Tax code'  ) TO messages.
+            EXIT.
+
+          ENDIF.
+
+        ENDIF.
+
+        CLEAR: wa_item_new.
+      ENDIF.
+    ENDIF.
+    ENDLOOP.
+
+
+
+    """"********End:Tax Validation:#SD**********************
+
+
+
+    """"***Duplicate invoice validation: Start
+IF headerdata-reversedocument is INITIAL.
+
+    select * from I_OperationalAcctgDocCube with PRIVILEGED ACCESS
+                where Supplier   = @headerdata-INVOICINGPARTY and
+                      IsReversal = '' and
+                      IsReversed = '' and
+                      financialaccounttype = 'K' and
+                      documentreferenceid =  @headerdata-supplierinvoiceidbyinvcgparty and
+                      (  accountingdocumenttype = 'RE' or accountingdocumenttype = 'KR' )
+                      into table @data(it_bkpf).
+
+      loop at  it_bkpf into data(wa_bkpf).
+            lv_mm = wa_bkpf-DocumentDate+4(2).
+            lv_yy = wa_bkpf-DocumentDate(4).
+            if lv_mm ge '01' and lv_mm lt '04'.
+                lv_yy = lv_yy - 1.
+            endif.
+            wa_bkpf-invoicereferencefiscalyear = lv_yy.
+            modify it_bkpf from wa_bkpf transporting invoicereferencefiscalyear.
+     endloop.
+
+     lv_mm = headerdata-documentdate+4(2).
+     lv_yy = headerdata-documentdate(4).
+     if lv_mm ge '01' and lv_mm lt '04'.
+        lv_yy = lv_yy - 1.
+     endif.
+
+     loop at it_bkpf into data(wa_bkpf1).
+        if wa_bkpf-invoicereferencefiscalyear = lv_yy.
+           APPEND VALUE #( messagetype = if_ex_mrm_check_invoice_cloud=>c_messagetype_error
+                messageid = 'MRM_BADI_CLOUD'
+                messagenumber = '001'
+                messagevariable1 = 'Z: Duplicate Vendor Invoice Found'  ) TO messages.
+           RETURN.
+        endif.
+     endloop.
+
+endif.
+
+    """"***Duplicate invoice validation: End
+ENDIF.
+*  "Added by neelam
+*IF headerdata-supplierinvoiceidbyinvcgparty IS NOT INITIAL.
+*  SELECT SINGLE FROM i_journalentry FIELDS *
+*  WHERE companycode = @headerdata-companycode
+*  AND   fiscalyear = @headerdata-fiscalyear
+*  AND   documentreferenceid = @headerdata-supplierinvoiceidbyinvcgparty
+*  AND   transactioncode = 'MIRO'
+*  AND   reversalreason <> ''
+*  INTO @DATA(lv_miro) PRIVILEGED ACCESS.
+*  CONCATENATE 'This Ref.No.Already Posted on' lv_miro-companycode lv_miro-accountingdocument lv_miro-fiscalyear INTO DATA(lc_msg) SEPARATED BY space.
+*  IF lv_miro-documentreferenceid = headerdata-supplierinvoiceidbyinvcgparty.
+*    APPEND VALUE #( messagetype = if_ex_mrm_check_invoice_cloud=>c_messagetype_error
+*                                messageid = 'MRM_BADI_CLOUD'
+*                                messagenumber = '001'
+*                                messagevariable1 = ''
+*                                "messagevariable2 = lines( glaccountitems )
+*                                messagevariable3 = lc_msg
+*                                messagevariable4 = ''
+*                                ) TO messages.
+*  ENDIF.
+*ENDIF.
+*"Added by neelam
