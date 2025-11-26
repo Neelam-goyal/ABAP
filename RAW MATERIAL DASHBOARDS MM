@@ -1,0 +1,336 @@
+
+*&---------------------------------------------------------------------*
+*& Report ZMMR_RAW_MATERERIAL
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+REPORT zmmr_raw_matererial.
+
+**********************************************************************
+*
+**********************************************************************
+START-OF-SELECTION.
+
+  CALL SCREEN 9000.
+
+PROCESS BEFORE OUTPUT.
+  MODULE status_9000.
+
+PROCESS AFTER INPUT.
+  MODULE user_command_9000.
+
+*&---------------------------------------------------------------------*
+*& Module STATUS_9000 OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+MODULE status_9000 OUTPUT.
+
+  SET PF-STATUS 'ZMENU'.
+  SET TITLEBAR 'TITLE'.
+
+  PERFORM logo_img.
+
+ENDMODULE.
+
+
+*&---------------------------------------------------------------------*
+*&      Module  USER_COMMAND_9000  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE user_command_9000 INPUT.
+
+
+  CASE  sy-ucomm.
+    WHEN 'BACK'.
+      CLEAR sy-ucomm.
+      LEAVE PROGRAM.
+    WHEN 'CANL' OR 'EXIT'.
+      LEAVE PROGRAM.
+
+*****Area_Master_Data
+    WHEN 'AR_MD'.
+
+      CALL FUNCTION 'AUTHORITY_CHECK_TCODE'
+        EXPORTING
+          tcode  = 'ZMMT_AREA'
+        EXCEPTIONS
+          ok     = 1
+          not_ok = 2
+          OTHERS = 3.
+
+      IF sy-subrc EQ 1.
+        CALL TRANSACTION 'ZMMT_AREA'.
+      ELSE.
+        MESSAGE e063(vo). " No authorization for transaction &1
+      ENDIF.
+
+****Noting_Sheet_Master_Data
+    WHEN 'NT_MD'.
+      CALL FUNCTION 'AUTHORITY_CHECK_TCODE'
+        EXPORTING
+          tcode  = 'ZMM_NS_MASTER'
+        EXCEPTIONS
+          ok     = 1
+          not_ok = 2
+          OTHERS = 3.
+
+      IF sy-subrc GT 1.
+        MESSAGE e063(vo). " No authorization for transaction &1
+      ENDIF.
+      CALL TRANSACTION 'ZMM_NS_MASTER'. "As Maktx + area desc needed in read mode only
+*      CALL TRANSACTION 'ZMMT_NOTESHEET'.
+
+****Noting_Sheet
+    WHEN 'NT_ST'.
+      CALL FUNCTION 'AUTHORITY_CHECK_TCODE'
+        EXPORTING
+          tcode  = 'ZMM_RM_NS'
+        EXCEPTIONS
+          ok     = 1
+          not_ok = 2
+          OTHERS = 3.
+
+      IF sy-subrc GT 1.
+        MESSAGE e063(vo). " No authorization for transaction &1
+      ENDIF.
+      CALL TRANSACTION 'ZMM_RM_NS'.
+
+****Purchase_Order
+    WHEN 'PURC'.
+      CALL FUNCTION 'AUTHORITY_CHECK_TCODE'
+        EXPORTING
+          tcode  = 'ZMM_PO_ALL'
+        EXCEPTIONS
+          ok     = 1
+          not_ok = 2
+          OTHERS = 3.
+
+      IF sy-subrc GT 1.
+        MESSAGE e063(vo). " No authorization for transaction &1
+      ENDIF.
+*      CALL TRANSACTION 'ME21N'.
+      CALL TRANSACTION 'ZMM_PO_ALL'.
+*      CALL TRANSACTION 'ZMM_RM_NS_PO'.
+
+***Gate_Entry
+    WHEN 'GENT'.
+      CALL FUNCTION 'AUTHORITY_CHECK_TCODE'
+        EXPORTING
+          tcode  = 'ZMM_GE'
+        EXCEPTIONS
+          ok     = 1
+          not_ok = 2
+          OTHERS = 3.
+
+      IF sy-subrc GT 1.
+        MESSAGE e063(vo). " No authorization for transaction &1
+      ENDIF.
+*      CALL TRANSACTION 'ZMM_RM_GE'.
+      CALL TRANSACTION 'ZMM_GE'.
+
+***Goods_Receipt
+    WHEN 'GD_RCP'.
+      CALL FUNCTION 'AUTHORITY_CHECK_TCODE'
+        EXPORTING
+          tcode  = 'ZMM_GE_GRN'
+        EXCEPTIONS
+          ok     = 1
+          not_ok = 2
+          OTHERS = 3.
+
+      IF sy-subrc GT 1.
+        MESSAGE e063(vo). " No authorization for transaction &1
+      ENDIF.
+*      CALL TRANSACTION 'MIGO'.
+      CALL TRANSACTION 'ZMM_GRN_AUTO'."'ZMM_GE_GRN'.
+
+***Quality_Check
+    WHEN 'QT_CK'.
+      CALL FUNCTION 'AUTHORITY_CHECK_TCODE'
+        EXPORTING
+          tcode  = 'ZQA32'
+        EXCEPTIONS
+          ok     = 1
+          not_ok = 2
+          OTHERS = 3.
+
+      IF sy-subrc GT 1.
+        MESSAGE e063(vo). " No authorization for transaction &1
+      ENDIF.
+      CALL TRANSACTION 'ZQA32'."'QA11'.QA32
+
+****Goods_Issue
+    WHEN 'GD_ISS'.
+      CALL FUNCTION 'AUTHORITY_CHECK_TCODE'
+        EXPORTING
+          tcode  = 'ZGRN_RPT'
+        EXCEPTIONS
+          ok     = 1
+          not_ok = 2
+          OTHERS = 3.
+
+      IF sy-subrc GT 1.
+        MESSAGE e063(vo). " No authorization for transaction &1
+      ENDIF.
+      CALL TRANSACTION 'ZGRN_RPT'.
+
+****Stock_Report
+    WHEN 'STOCK'.
+      CALL FUNCTION 'AUTHORITY_CHECK_TCODE'
+        EXPORTING
+          tcode  = 'ZMM_STOCK'
+        EXCEPTIONS
+          ok     = 1
+          not_ok = 2
+          OTHERS = 3.
+
+      IF sy-subrc GT 1.
+        MESSAGE e063(vo). " No authorization for transaction &1
+      ENDIF.
+      CALL TRANSACTION 'ZMM_STOCK'.
+
+   WHEN 'BAL' .
+CALL FUNCTION 'AUTHORITY_CHECK_TCODE'
+  EXPORTING
+    tcode         = 'ZBAL_REP'
+ EXCEPTIONS
+   OK            = 1
+   NOT_OK        = 2
+   OTHERS        = 3
+          .
+IF sy-subrc <> 0.
+* Implement suitable error handling here
+ENDIF.
+ IF sy-subrc GT 1.
+        MESSAGE e063(vo). " No authorization for transaction &1
+      ENDIF.
+      CALL TRANSACTION 'ZBAL_REP'.
+
+
+******Invoice_Verification
+    WHEN 'INVV'.
+      CALL FUNCTION 'AUTHORITY_CHECK_TCODE'
+        EXPORTING
+          tcode  = 'ZMM_RM_INV_VER'
+        EXCEPTIONS
+          ok     = 1
+          not_ok = 2
+          OTHERS = 3.
+
+      IF sy-subrc GT 1.
+        MESSAGE e063(vo). " No authorization for transaction &1
+      ENDIF.
+      CALL TRANSACTION 'ZMM_RM_INV_VER'.
+
+******Service Entry Sheet
+    WHEN 'SERVICE'.
+      CALL FUNCTION 'AUTHORITY_CHECK_TCODE'
+        EXPORTING
+          tcode  = 'ML81N'
+        EXCEPTIONS
+          ok     = 1
+          not_ok = 2
+          OTHERS = 3.
+
+      IF sy-subrc GT 1.
+        MESSAGE e063(vo). " No authorization for transaction &1
+      ENDIF.
+      CALL TRANSACTION 'ZMM_QM_REF'."'ML81N'.
+*>>Area MAster
+    WHEN 'AREA'.
+      CALL FUNCTION 'AUTHORITY_CHECK_TCODE'
+        EXPORTING
+          tcode  = 'ZMMT_AREA_MASTER'
+        EXCEPTIONS
+          ok     = 1
+          not_ok = 2
+          OTHERS = 3.
+
+      IF sy-subrc GT 1.
+        MESSAGE e063(vo). " No authorization for transaction &1
+      ENDIF.
+      CALL TRANSACTION 'ZMMT_AREA_MASTER'.
+
+  ENDCASE.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*& Form LOGO_IMG
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM logo_img .
+
+  DATA: w_lines TYPE i.
+  TYPES pict_line(256) TYPE c.
+  DATA : container TYPE REF TO cl_gui_custom_container,
+         picture   TYPE REF TO cl_gui_picture,
+         pict_tab  TYPE TABLE OF pict_line,
+         url(255)  TYPE c.
+  DATA: graphic_url(255).
+  DATA: BEGIN OF graphic_table OCCURS 0,
+          line(255) TYPE x,
+        END OF graphic_table.
+  DATA: l_graphic_conv TYPE i.
+  DATA: l_graphic_offs TYPE i.
+  DATA: graphic_size TYPE i.
+  DATA: l_graphic_xstr TYPE xstring.
+
+  CALL METHOD cl_gui_cfw=>flush
+    EXCEPTIONS
+      cntl_system_error = 1
+      cntl_error        = 2
+      OTHERS            = 3.
+*
+  CREATE OBJECT: container EXPORTING container_name = 'CON',
+  picture EXPORTING parent = container.
+*
+  CALL METHOD cl_ssf_xsf_utilities=>get_bds_graphic_as_bmp
+    EXPORTING
+      p_object       = 'GRAPHICS'
+*     p_name         = 'KPL_RM'
+      p_name         = 'KPL_RM_NEW'
+      p_id           = 'BMAP'
+      p_btype        = 'BCOL'
+    RECEIVING
+      p_bmp          = l_graphic_xstr
+    EXCEPTIONS
+      not_found      = 1
+      internal_error = 2
+      OTHERS         = 3.
+*
+  graphic_size = xstrlen( l_graphic_xstr ).
+  l_graphic_conv = graphic_size.
+  l_graphic_offs = 0.
+  WHILE l_graphic_conv > 255.
+    graphic_table-line = l_graphic_xstr+l_graphic_offs(255).
+    APPEND graphic_table.
+    l_graphic_offs = l_graphic_offs + 255.
+    l_graphic_conv = l_graphic_conv - 255.
+  ENDWHILE.
+
+  graphic_table-line = l_graphic_xstr+l_graphic_offs(l_graphic_conv).
+  APPEND graphic_table.
+  CALL FUNCTION 'DP_CREATE_URL'
+    EXPORTING
+      type     = 'IMAGE'
+      subtype  = 'X-UNKNOWN'
+      size     = graphic_size
+      lifetime = 'T'
+    TABLES
+      data     = graphic_table
+    CHANGING
+      url      = url.
+  CALL METHOD picture->load_picture_from_url
+    EXPORTING
+      url = url.
+  CALL METHOD picture->set_display_mode
+    EXPORTING
+      display_mode = picture->display_mode_fit_center.
+
+ENDFORM.
+
