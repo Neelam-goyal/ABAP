@@ -1,0 +1,3782 @@
+***INCLUDE MV45AFZZ .
+
+************************************************************************
+*                                                                      *
+* This include is reserved for user modifications                      *
+*                                                                      *
+* Forms for sales document processing                                  *
+*                                                                      *
+* The name of modification modules should begin with 'ZZ'.             *
+*                                                                      *
+************************************************************************
+
+*---------------------------------------------------------------------*
+*       FORM ZZEXAMPLE                                                *
+*---------------------------------------------------------------------*
+*       text......................................                    *
+*---------------------------------------------------------------------*
+*FORM ZZEXAMPLE.
+
+*  ...
+
+*ENDFORM.
+
+*eject
+*---------------------------------------------------------------------*
+*       FORM USEREXIT_DELETE_DOCUMENT                                 *
+*---------------------------------------------------------------------*
+*       This userexit can be used to delete data in additional tables *
+*       when a sales document is deleted.                             *
+*                                                                     *
+*      This form is called in dialog at the end of form BELEG_LOESCHEN*
+*      just before form BELEG_SICHERN is performed to delete the      *
+*      datas on the database.                                         *
+*                                                                     *
+*---------------------------------------------------------------------*
+FORM USEREXIT_DELETE_DOCUMENT.
+
+ENDFORM.
+*eject
+
+*---------------------------------------------------------------------*
+*       FORM USEREXIT_FIELD_MODIFICATION                              *
+*---------------------------------------------------------------------*
+*       This userexit can be used to modify the attributes of         *
+*       screen fields.                                                *
+*       This form is processed for each field in the screen.          *
+*                                                                     *
+*       The use of the fields screen-group1 to screen-group4 is:      *
+*                                                                     *
+*       Screen-group1: Automatic modification contolles by transaction*
+*                      MFAW.                                          *
+*       Screen-group2: Contents 'LOO' for steploop-fields.            *
+*       Screen-group3: Used for modififaction, which are dependent on *
+*                      control tables or other fix information.       *
+*       Screen-group4: Unused                                         *
+*                                                                     *
+*       For field mofifications, which are dependent on the document  *
+*       status, you can use the status field in the workareas         *
+*       XVBAP for item status and XVBUK for header status.            *
+*                                                                     *
+*       This form is called from module FELDAUSWAHL.                  *
+*                                                                     *
+*---------------------------------------------------------------------*
+FORM USEREXIT_FIELD_MODIFICATION.
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""$"$\SE:(1) Form USEREXIT_FIELD_MODIFICATION, Start                                                                                                           A
+*$*$-Start: (1)---------------------------------------------------------------------------------$*$*
+ENHANCEMENT 1  ZDEL_PLANT_REQ.    "active version
+
+if sy-tcode = 'VA01' or sy-tcode = 'VA21'.
+
+ data:l_auart type auart.
+select single  auart  from ZSD_TMG_VA01 into l_auart where auart = vbak-auart.
+  if sy-subrc = 0.
+    if   rv45a-dwerk = ' ' and screen-name = 'RV45A-DWERK' .
+         screen-required = '1'.
+        endif.
+   endif.
+     endif.
+
+
+ENDENHANCEMENT.
+ENHANCEMENT 5  ZPP_PACKING.    "active version
+*
+*      TABLES:ZPP_PACK.
+*  DATA:T_PACK TYPE TABLE OF ZPP_PACK,
+*        w_pack TYPE ZPP_PACK,Q TYPE STRING.
+*  if TAXI_FCODE = 'ENT1'  AND ( SY-TCODE = 'VA01' OR SY-TCODE = 'VA02' ) AND ( VBAK-AUART = 'YGJO' OR VBAK-AUART = 'YGRO' OR
+*                       VBAK-AUART = 'YGTR' OR VBAK-AUART = 'YGCF' OR VBAK-AUART = 'YGCI' OR VBAK-AUART = 'YGCP' OR
+*                       VBAK-AUART = 'YGFD' OR VBAK-AUART = 'YGPO' ).
+*    if xvbap-matnr IS NOT INITIAL.
+*  SELECT * FROM ZPP_PACK inTO TABLE T_PACK  WHERE matnr = xvbap-matnr AND
+*          werks = vbak-vkorg AND cost = '' AND
+*          KUNNR = VBAK-KUNNR AND DEL = ''.
+**  LOOP AT xvbap .
+*READ TABLE T_PACK INTO W_PACK WITH KEY matnr = xvbap-matnr.
+*IF Sy-SUBRC <> 0.
+*
+*  CONCATENATE 'Material' xvbap-matnr 'Customer' vbak-KUNNR
+*              'combination Packing BOM not Maintained DELETE THE ITEM'
+*              INTO q SEPARATED BY SPACE.
+**    CLEAR VBAP.
+*  MESSAGE q TYPE 'W' DISPLAY LIKE 'E'.
+**  delete XVBAP WHERE POSNR = XVBAP-POSNR.
+**  IF XVBAP[] IS INITIAL.
+**refresh: sVBAP .
+**else.
+**  READ TABLE ivbap with KEY POSNR = XVBAP-POSNR.
+**  IF sy-SUBRC = 0.
+**delete ivbap WHERE POSNR = XVBAP-POSNR.
+**delete SVBAP WHERE tabix = ivbap-TABIX.
+**  ENDIF.
+**  ENDIF.
+*endif.
+**ENDLOOP.
+*ENDIF.
+*endif.
+
+
+
+ENDENHANCEMENT.
+ENHANCEMENT 1  ZSD_VA02.    "active version
+*Gray out for Feild "Reason For rejection" AND restricting the user when clicks on
+*  Rejection document button in VA02
+*
+
+IF  SY-TCODE = 'VA02'  . "AND SY-UNAME = 'SDUSER'.
+
+   DATA : T_ZSD_USER TYPE STANDARD TABLE OF ZSD_USER,
+          W_ZSD_USER TYPE ZSD_USER.
+
+   CLEAR : W_ZSD_USER.
+   REFRESH : T_ZSD_USER.
+
+    SELECT MANDT
+           VKORG
+           USER1
+           FROM ZSD_USER
+           INTO TABLE T_ZSD_USER
+           WHERE VKORG = VBAK-VKORG AND
+                 USER1 =  SY-UNAME.
+    READ TABLE T_ZSD_USER INTO W_ZSD_USER WITH KEY VKORG = VBAK-VKORG
+                                                   USER1 = SY-UNAME.
+
+     IF SY-SUBRC = 0.
+
+*       IF VBAP-ABGRU IS INITIAL.
+*     VBAP-ABGRU = 'Z3'.        "authorization block
+*     ENDIF.
+
+       IF SY-UCOMM = 'BABS'.
+          MESSAGE 'Your not Authorized' TYPE 'A'.
+       ENDIF.
+
+  IF VBAP-ABGRU IS NOT INITIAL.
+        IF SCREEN-NAME = 'VBAP-ABGRU'.
+         SCREEN-INPUT = 0.
+         MODIFY SCREEN.
+       ENDIF.
+    ENDIF.
+  ENDIF.
+ENDIF.
+
+ENDENHANCEMENT.
+*$*$-End:   (1)---------------------------------------------------------------------------------$*$*
+
+* CASE SCREEN-GROUP3.
+*   WHEN '900'.
+*     IF VBAK-VBTYP NE 'A'.
+*       SCREEN-ACTIVE = 0.
+*     ENDIF.
+* ENDCASE.
+
+* CASE SCREEN-NAME.
+*   WHEN 'VBAK-VBELN'.
+*     SCREEN-ACTIVE = 0.
+* ENDCASE.
+
+ENDFORM.
+*eject
+
+*---------------------------------------------------------------------*
+*       FORM USEREXIT_MOVE_FIELD_TO_VBAK                              *
+*---------------------------------------------------------------------*
+*       This userexit can be used to move some fields into the sales  *
+*       dokument header workaerea VBAK.                               *
+*                                                                     *
+*       SVBAK-TABIX = 0:  Create header                               *
+*       SVBAK-TABIX > 0:  Change header                               *
+*                                                                     *
+*       This form is called at the end of form VBAK_FUELLEN.          *
+*                                                                     *
+*---------------------------------------------------------------------*
+FORM USEREXIT_MOVE_FIELD_TO_VBAK.
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""$"$\SE:(2) Form USEREXIT_MOVE_FIELD_TO_VBAK, Start                                                                                                           A
+*$*$-Start: (2)---------------------------------------------------------------------------------$*$*
+ENHANCEMENT 2  ZSD_VA01.    "active version
+*
+***To set defaults in sales additional fields in Customer data tab
+ IF SY-TCODE = 'VA01' OR SY-TCODE = 'VA02'.
+
+   DATA : T_ZCUST_MASTER TYPE STANDARD TABLE OF ZCUST_MASTER,
+           W_ZCUST_MASTER TYPE ZCUST_MASTER.
+
+
+     IF VBAK-ZZTRANSP IS INITIAL.
+       REFRESH : T_ZCUST_MASTER.
+
+    SELECT  *
+           FROM ZCUST_MASTER
+           INTO CORRESPONDING FIELDS OF TABLE T_ZCUST_MASTER
+*           WHERE KUNNR   = VBAK-KUNNR.   " Commented on 17.09.2013
+            WHERE KUNNR = KUWEV-KUNNR
+            AND BUKRS = VBAK-BUKRS_VF.
+
+       CLEAR : W_ZCUST_MASTER.
+  READ TABLE T_ZCUST_MASTER INTO W_ZCUST_MASTER INDEX 1 .
+     IF SY-SUBRC = 0.
+
+       IF VBAK-AUART = 'YGSO'.
+            IF W_ZCUST_MASTER-ZTRANSP = '6'.
+               VBAK-ZZTRANSP      =   W_ZCUST_MASTER-ZTRANSP.
+               VBAK-ZZPDCHRG      =   W_ZCUST_MASTER-ZPDCHRG.
+               VBAK-ZZPLOAD       =   W_ZCUST_MASTER-ZPLOAD.
+               VBAK-ZZDESTN       =   W_ZCUST_MASTER-ZDESTN.
+               VBAK-ZZAIRPORT     =   W_ZCUST_MASTER-ZAIRPORT.
+             ELSEIF W_ZCUST_MASTER-ZTRANSP2 = '6'.
+               VBAK-ZZTRANSP      =   W_ZCUST_MASTER-ZTRANSP2.
+               VBAK-ZZPDCHRG     =   W_ZCUST_MASTER-ZPDCHRG2.
+               VBAK-ZZPLOAD      =   W_ZCUST_MASTER-ZPLOAD2.
+               VBAK-ZZDESTN      =   W_ZCUST_MASTER-ZDESTN2.
+               VBAK-ZZAIRPORT    =   W_ZCUST_MASTER-ZAIRPORT2.
+             ELSEIF W_ZCUST_MASTER-ZTRANSP3 = '6'.
+              VBAK-ZZTRANSP      =   W_ZCUST_MASTER-ZTRANSP3.
+              VBAK-ZZPDCHRG     =   W_ZCUST_MASTER-ZPDCHRG3.
+               VBAK-ZZPLOAD      =   W_ZCUST_MASTER-ZPLOAD3.
+               VBAK-ZZDESTN      =   W_ZCUST_MASTER-ZDESTN3.
+               VBAK-ZZAIRPORT    =   W_ZCUST_MASTER-ZAIRPORT3.
+             ELSEIF W_ZCUST_MASTER-ZTRANSP4 = '6'.
+               VBAK-ZZTRANSP      =  W_ZCUST_MASTER-ZTRANSP4.
+               VBAK-ZZPDCHRG     =   W_ZCUST_MASTER-ZPDCHRG4.
+               VBAK-ZZPLOAD      =   W_ZCUST_MASTER-ZPLOAD4.
+               VBAK-ZZDESTN      =   W_ZCUST_MASTER-ZDESTN4.
+               VBAK-ZZAIRPORT    =   W_ZCUST_MASTER-ZAIRPORT4.
+           ENDIF.
+
+
+               VBAK-ZZLDSTYL      =   W_ZCUST_MASTER-ZLDSTYL.
+               VBAK-ZZMAXSHIP     =   W_ZCUST_MASTER-ZMAXSHIP.
+               VBAK-ZZMINSHIP     =   W_ZCUST_MASTER-ZMINSHIP.
+               VBAK-ZZPALLET      =   W_ZCUST_MASTER-ZPALLET.
+               VBAK-ZZDATE1       =   W_ZCUST_MASTER-ZDATE1.
+               VBAK-ZZDAYS        =   W_ZCUST_MASTER-ZDAYS .
+               VBAK-ZZBLTYPE      =   W_ZCUST_MASTER-ZBLTYPE.
+               VBAK-ZZINCO1       =   W_ZCUST_MASTER-ZINCO1.
+               VBAK-ZZINCO2       =   W_ZCUST_MASTER-ZINCO2.
+         ENDIF.
+
+
+*       ELSE.
+
+
+         IF W_ZCUST_MASTER-ZTRANSP = '3' OR  W_ZCUST_MASTER-ZTRANSP2 = '3' OR  W_ZCUST_MASTER-ZTRANSP3 = '3'
+           OR  W_ZCUST_MASTER-ZTRANSP4 = '3'.
+*
+              IF W_ZCUST_MASTER-ZTRANSP = '3'.
+               VBAK-ZZTRANSP      =   W_ZCUST_MASTER-ZTRANSP.
+               VBAK-ZZPDCHRG      =   W_ZCUST_MASTER-ZPDCHRG.
+               VBAK-ZZPLOAD       =   W_ZCUST_MASTER-ZPLOAD.
+               VBAK-ZZDESTN       =   W_ZCUST_MASTER-ZDESTN.
+               VBAK-ZZAIRPORT     =   W_ZCUST_MASTER-ZAIRPORT.
+             ELSEIF W_ZCUST_MASTER-ZTRANSP2 = '3'.
+               VBAK-ZZTRANSP      =  W_ZCUST_MASTER-ZTRANSP2.
+               VBAK-ZZPDCHRG     =   W_ZCUST_MASTER-ZPDCHRG2.
+               VBAK-ZZPLOAD      =   W_ZCUST_MASTER-ZPLOAD2.
+               VBAK-ZZDESTN      =   W_ZCUST_MASTER-ZDESTN2.
+               VBAK-ZZAIRPORT    =   W_ZCUST_MASTER-ZAIRPORT2.
+             ELSEIF W_ZCUST_MASTER-ZTRANSP3 = '3'.
+               VBAK-ZZTRANSP      =  W_ZCUST_MASTER-ZTRANSP3.
+               VBAK-ZZPDCHRG     =   W_ZCUST_MASTER-ZPDCHRG3.
+               VBAK-ZZPLOAD      =   W_ZCUST_MASTER-ZPLOAD3.
+               VBAK-ZZDESTN      =   W_ZCUST_MASTER-ZDESTN3.
+               VBAK-ZZAIRPORT    =   W_ZCUST_MASTER-ZAIRPORT3.
+             ELSEIF W_ZCUST_MASTER-ZTRANSP4 = '3'.
+               VBAK-ZZTRANSP      =  W_ZCUST_MASTER-ZTRANSP4.
+               VBAK-ZZPDCHRG     =   W_ZCUST_MASTER-ZPDCHRG4.
+               VBAK-ZZPLOAD      =   W_ZCUST_MASTER-ZPLOAD4.
+               VBAK-ZZDESTN      =   W_ZCUST_MASTER-ZDESTN4.
+               VBAK-ZZAIRPORT    =   W_ZCUST_MASTER-ZAIRPORT4.
+           ENDIF.
+*
+
+               VBAK-ZZLDSTYL      =   W_ZCUST_MASTER-ZLDSTYL.
+               VBAK-ZZMAXSHIP     =   W_ZCUST_MASTER-ZMAXSHIP.
+               VBAK-ZZMINSHIP     =   W_ZCUST_MASTER-ZMINSHIP.
+               VBAK-ZZPALLET      =   W_ZCUST_MASTER-ZPALLET.
+               VBAK-ZZDATE1       =   W_ZCUST_MASTER-ZDATE1.
+               VBAK-ZZDAYS        =   W_ZCUST_MASTER-ZDAYS .
+               VBAK-ZZBLTYPE      =   W_ZCUST_MASTER-ZBLTYPE.
+               VBAK-ZZINCO1       =   W_ZCUST_MASTER-ZINCO1.
+               VBAK-ZZINCO2       =   W_ZCUST_MASTER-ZINCO2.
+
+          ENDIF.
+*     ENDIF.
+
+   ENDIF.
+       ENDIF.
+    ENDIF.
+
+
+
+
+
+
+ENDENHANCEMENT.
+*$*$-End:   (2)---------------------------------------------------------------------------------$*$*
+
+*  vbak-zzfield = xxxx-zzfield2.
+
+ENDFORM.
+*eject
+
+*---------------------------------------------------------------------*
+*       FORM USEREXIT_MOVE_FIELD_TO_VBAP                              *
+*---------------------------------------------------------------------*
+*       This userexit can be used to move some fields into the sales  *
+*       dokument item workaerea VBAP                                  *
+*                                                                     *
+*       SVBAP-TABIX = 0:  Create item                                 *
+*       SVBAP-TABIX > 0:  Change item                                 *
+*                                                                     *
+*       This form is called at the end of form VBAP_FUELLEN.          *
+*                                                                     *
+*---------------------------------------------------------------------*
+FORM USEREXIT_MOVE_FIELD_TO_VBAP.
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""$"$\SE:(3) Form USEREXIT_MOVE_FIELD_TO_VBAP, Start                                                                                                           A
+*$*$-Start: (3)---------------------------------------------------------------------------------$*$*
+ENHANCEMENT 1  ZPP_BOM_MATERIAL_CHECK.    "active version
+
+*
+**
+*IF SY-TCODE = 'VA01'OR SY-TCODE = 'VA02'.
+**Sturcture declaration for bill of materials
+*  TYPES : BEGIN OF TY_MAST,
+*           MATNR TYPE MATNR,
+*           WERKS TYPE WERKS_D,
+*           STLAN TYPE STLAN,
+*           STLNR TYPE STNUM,
+*           STLAL TYPE STALT,
+*          END OF TY_MAST.
+*     TYPES : BEGIN OF TY_mara,
+*           MATNR TYPE MATNR,
+*           mtart type mtart,
+*          END OF TY_MAra.
+*
+*DATA : IT_MAST TYPE STANDARD TABLE OF TY_MAST,
+*       WA_MAST TYPE TY_MAST.
+*DATA : IT_MAra TYPE STANDARD TABLE OF TY_MAra,
+*       WA_MAra TYPE TY_MAra,
+*       wa_bomplant TYPE zbom_plant.
+*
+*DATA : STR TYPE STRING.
+*REFRESH : IT_MAST.
+*CLEAR :  WA_MAST,
+*         STR.
+*select single * into wa_bomplant from zbom_plant where werks = vbap-werks.
+*if wa_bomplant is INITIAL.
+*SELECT MATNR
+*       WERKS
+*       STLAN
+*       STLNR
+*       STLAL
+*       FROM MAST INTO TABLE IT_MAST WHERE MATNR = VBAP-MATNR AND
+*                                          WERKS = VBAP-WERKS.
+*SELECT SINGLE matnr mtart FROM mara INTO wa_mara WHERE matnr =  VBAP-MATNR.
+*
+*if ( wa_mara-mtart ne'ZSCR' and wa_mara-mtart ne 'NLAG' ) and ( VBAP-werks ne '3000' ).
+*  if VBAP-werks ne '4000'.                                                                   "Plant 4000 condition added Ashish 30/08/2022
+*READ TABLE IT_MAST INTO WA_MAST WITH KEY MATNR = VBAP-MATNR.
+*  IF SY-SUBRC <> 0.
+*   CONCATENATE 'Material' VBAP-MATNR 'is not in BOM' INTO STR.
+*   MESSAGE STR TYPE 'E'.
+*
+*  ENDIF.
+*  ENDIF.
+*
+*endif.
+*endif.
+*
+*ENDIF.
+**EnDIF.
+
+ENDENHANCEMENT.
+ENHANCEMENT 6  ZPP_PACKING.    "active version
+*
+
+*      TABLES:ZPP_PACK.
+  DATA:T_PACK TYPE TABLE OF ZPP_PACK,
+        W_PACK TYPE ZPP_PACK,Q TYPE STRING.
+  IF ( SY-TCODE = 'VA01' OR SY-TCODE = 'VA02' ) AND ( VBAK-AUART = 'YGJO' OR VBAK-AUART = 'YTRD' OR VBAK-AUART = 'YGRO' OR
+              VBAK-AUART = 'YGTR' OR VBAK-AUART = 'YGCF' OR VBAK-AUART = 'YGCI' OR VBAK-AUART = 'YGCP' OR
+                  VBAK-AUART = 'YGFD' OR VBAK-AUART = 'YGPO' OR VBAK-AUART ='YGSF' OR VBAK-AUART = 'YGOT' OR VBAK-AUART = 'YGST' or VBAK-AUART = 'YTRD') AND VBAk-vkorg <> '2000'.
+    IF VBAP-MATNR IS NOT INITIAL.
+  SELECT * FROM ZPP_PACK INTO TABLE T_PACK  WHERE MATNR = VBAP-MATNR AND
+          WERKS = VBAp-WERKS AND COST = '' AND
+          KUNNR = VBAK-KUNNR AND DEL = '' .
+*  LOOP AT xvbap .
+READ TABLE T_PACK INTO W_PACK WITH KEY MATNR = VBAP-MATNR.
+IF SY-SUBRC <> 0.
+
+  CONCATENATE 'Material' VBAP-MATNR 'Customer' VBAK-KUNNR
+              'combination Packing BOM not Maintained DELETE THE ITEM'
+              INTO Q SEPARATED BY SPACE.
+  MESSAGE Q TYPE 'E' DISPLAY LIKE 'I'.
+*    CLEAR VBAP.
+*  MESSAGE Q TYPE 'I' DISPLAY LIKE 'E'.
+*  delete XVBAP WHERE POSNR = XVBAP-POSNR.
+*  IF XVBAP[] IS INITIAL.
+*refresh: sVBAP .
+*else.
+*  READ TABLE ivbap with KEY POSNR = XVBAP-POSNR.
+*  IF sy-SUBRC = 0.
+*delete ivbap WHERE POSNR = XVBAP-POSNR.
+*delete SVBAP WHERE tabix = ivbap-TABIX.
+*  ENDIF.
+*  ENDIF.
+ENDIF.
+*ENDLOOP.
+ENDIF.
+ENDIF.
+
+ENDENHANCEMENT.
+ENHANCEMENT 1  ZSD_VA01.    "active version
+*Setting Default value for "Reason For Rejection" Feild in VA01
+
+* IF SY-TCODE = 'VA01' OR SY-TCODE = 'VA02' .
+*     IF SY-UCOMM = 'BABS'.
+*       MESSAGE 'Your not Authorized' TYPE 'A'.
+*       ENDIF.
+*
+*  IF VBAP-ABGRU IS NOT INITIAL.
+*    LOOP AT SCREEN.
+*        IF SCREEN-NAME = 'VBAP-ABGRU'.
+*         SCREEN-INPUT = 0.
+*         MODIFY SCREEN.
+*       ENDIF.
+*     ENDLOOP.
+*    ENDIF.
+*ENDIF.
+
+
+ IF SY-TCODE = 'VA01' OR SY-TCODE = 'VA02' .            "AND SY-UNAME = 'ABAPCONS'.
+**
+   TYPES : BEGIN OF TY_MARD,
+            MATNR TYPE MATNR,
+            WERKS TYPE WERKS_D,
+            LGORT TYPE LGORT_D,
+           END OF TY_MARD.
+**
+   DATA :
+*         T_ZSD_USER TYPE STANDARD TABLE OF ZSD_USER,
+          T_MARD TYPE STANDARD TABLE OF TY_MARD,
+          W_MARD TYPE TY_MARD,
+*          W_ZSD_USER TYPE ZSD_USER,
+          L1 TYPE I.
+   CLEAR : W_MARD .",W_ZSD_USER.
+   REFRESH : T_MARD.",T_ZSD_USER.
+   SELECT MATNR
+          WERKS
+          LGORT
+          FROM MARD
+          INTO TABLE T_MARD
+          WHERE MATNR = VBAP-MATNR AND
+                WERKS = VBAP-WERKS.
+     CLEAR L1.
+     DESCRIBE TABLE T_MARD LINES L1.
+**
+     IF L1 = '1'.
+      CLEAR W_MARD .
+      READ TABLE T_MARD INTO W_MARD INDEX 1 .
+        IF SY-SUBRC = 0.
+          VBAP-LGORT = W_MARD-LGORT.                    "Storage Location
+          ENDIF.
+       ENDIF.
+**
+*    SELECT MANDT
+*           VKORG
+*           USER1
+*           FROM ZSD_USER
+*           INTO TABLE T_ZSD_USER
+*           WHERE VKORG = VBAK-VKORG AND
+*                 USER1 = VBAK-ERNAM.
+*    CLEAR : W_ZSD_USER.
+*    READ TABLE T_ZSD_USER INTO W_ZSD_USER WITH KEY VKORG = VBAK-VKORG
+*                                                   USER1 = SY-UNAME.
+*
+* IF SY-SUBRC = 0.
+*
+**   if  VBAP-LGORT is NOT INITIAL ."and sy-ucomm = 'SICH'.
+*    VBAP-ABGRU = 'Z3'.        "authorization block
+**    endif.
+*  ENDIF.
+*BREAK-POINT.
+*  IF VBAP-ABGRU IS NOT INITIAL.
+*    LOOP AT SCREEN.
+*        IF SCREEN-NAME = 'VBAP-LGORT'.
+*         SCREEN-INPUT = 0.
+*         MODIFY SCREEN.
+*       ENDIF.
+*     ENDLOOP.
+*    ENDIF.
+
+
+
+    ENDIF.
+*
+
+ENDENHANCEMENT.
+ENHANCEMENT 1  ZSD_VA02_AUDAT.    "active version
+*
+  IF SVBAP-TABIX = 0 AND SY-TCODE = 'VA02'.
+    VBAP-AUDAT = SY-DATUM.
+    ENDIF.
+ENDENHANCEMENT.
+*$*$-End:   (3)---------------------------------------------------------------------------------$*$*
+
+*  VBAP-zzfield = xxxx-zzfield2.
+
+ENDFORM.
+*eject
+
+*---------------------------------------------------------------------*
+*       FORM USEREXIT_MOVE_FIELD_TO_VBEP                              *
+*---------------------------------------------------------------------*
+*       This userexit can be used to move some fields into the sales  *
+*       dokument schedule line workaerea VBEP                         *
+*                                                                     *
+*       SVBEP-TABIX = 0:  Create schedule line                        *
+*       SVBEP-TABIX > 0:  Change schedule line                        *
+*                                                                     *
+*       This form is called at the end of form VBEP_FUELLEN.          *
+*                                                                     *
+*---------------------------------------------------------------------*
+FORM USEREXIT_MOVE_FIELD_TO_VBEP.
+
+*  VBEP-zzfield = xxxx-zzfield2.
+
+ENDFORM.
+*eject
+
+*---------------------------------------------------------------------*
+*       FORM USEREXIT_MOVE_FIELD_TO_VBKD                              *
+*---------------------------------------------------------------------*
+*       This userexit can be used to move some fields into the sales  *
+*       dokument business data workaerea VBKD                         *
+*                                                                     *
+*       SVBKD-TABIX = 0:  Create data                                 *
+*       SVBKD-TABIX > 0:  Change data                                 *
+*                                                                     *
+*       This form is called at the end of form VBKD_FUELLEN.          *
+*                                                                     *
+*---------------------------------------------------------------------*
+FORM USEREXIT_MOVE_FIELD_TO_VBKD.
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""$"$\SE:(4) Form USEREXIT_MOVE_FIELD_TO_VBKD, Start                                                                                                           A
+*$*$-Start: (4)---------------------------------------------------------------------------------$*$*
+ENHANCEMENT 1  ZSD_INCOTERMS.    "active version
+*
+***Inco Terms Copy
+if sy-tcode = 'VA01' and xvbkd[] IS INITIAL.
+VBKD-inco1 = KUWEV-INCO1.
+vbkd-inco2 = KUWEV-INCO2.
+ENDIF.
+*****Customer Schedule Date*******
+*VBKD-FBUDA
+*BREAK-POINT.
+*BREAK-POINT.
+if sy-tcode = 'VA01'  AND VBAP-MATNR IS NOT INITIAL."AND VBKD-FBUDA IS INITIAL
+data: l_ZDAYS TYPE zcust_master-zdays,
+      zdays like T5A4A-DLYDY,
+     calcdt type P0001-BEGDA.
+SELECT SINGLE ZDAYS FROM ZSD_CMIR INTO l_zdays WHERE KUNNR = vbak-KUNNR AND MATNR = VBAP-MATNR.
+  IF l_zdays is INITIAL .
+*SELECT SINGLE ZDAYS FROM zcust_master INTO l_zdays WHERE KUNNR = vbak-KUNNR.
+    L_ZDAYS = VBAK-ZZDAYS.
+  IF  l_zdays IS NOT INITIAL."SY-SUBRC = 0 AND
+zdays = l_zdays - 1.
+if calcdt IS INITIAL  .
+  CALL FUNCTION 'RP_CALC_DATE_IN_INTERVAL'
+    EXPORTING
+      DATE            = vbak-AUDAT
+      DAYS            = zDAYS
+      MONTHS          = '0'
+      SIGNUM          = '+'
+      YEARS           = '0'
+   IMPORTING
+     CALC_DATE       = CALCDt
+            .
+  vbkd-BSTDK_E = CALCDt.
+  endif.
+*PERFORM cnfd_date USING calcdt l_zdays .
+  ENDIF.
+  ELSEif l_zdays IS NOT INITIAL.
+zdays = l_zdays - 1.
+if calcdt IS INITIAL.
+  CALL FUNCTION 'RP_CALC_DATE_IN_INTERVAL'
+    EXPORTING
+      DATE            = vbak-AUDAT
+      DAYS            = zDAYS
+      MONTHS          = '0'
+      SIGNUM          = '+'
+      YEARS           = '0'
+   IMPORTING
+     CALC_DATE       = CALCDt
+            .
+  vbkd-BSTDK_E = CALCDt.
+  endif.
+*PERFORM cnfd_date USING calcdt l_zdays .
+ENDIF.
+ENDIF.
+
+************added by tg for ticked 615 dated 23/10***********
+IF sy-tcode = 'VA01' or sy-tcode = 'VA02'.
+IF vbak-AUART = 'ZARO'.
+VBKD-KTGRD = '04'.
+ENDIF.
+ENDIF.
+**********************************************************
+
+ENDENHANCEMENT.
+*$*$-End:   (4)---------------------------------------------------------------------------------$*$*
+
+*  VBKD-zzfield = xxxx-zzfield2.
+
+ENDFORM.
+*eject
+
+*---------------------------------------------------------------------*
+*       FORM USEREXIT_NUMBER_RANGE                                    *
+*---------------------------------------------------------------------*
+*       This userexit can be used to determine the numberranges for   *
+*       the internal document number.                                 *
+*                                                                     *
+*       US_RANGE_INTERN - internal number range                       *
+*                                                                     *
+*       This form is called from form BELEG_SICHERN                   *
+*                                                                     *
+*---------------------------------------------------------------------*
+FORM USEREXIT_NUMBER_RANGE USING US_RANGE_INTERN.
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""$"$\SE:(5) Form USEREXIT_NUMBER_RANGE, Start                                                                                                                 A
+*$*$-Start: (5)---------------------------------------------------------------------------------$*$*
+ENHANCEMENT 1  ZSD_SALES_NUMBER_RANGES.    "active version
+IF ( SY-TCODE EQ 'VA01' OR SY-TCODE EQ 'VA11' OR SY-TCODE EQ 'VA21' OR SY-TCODE EQ 'VA41' ) AND VBAK-VKORG <> '3000'.
+***Workarea Declaration
+data: wa_zsd_nr like ZSD_SALES_NR,
+      wa_vbap1    like vbap,
+
+***Variable Declaration
+      flag1       type char1,
+      cnt1        type char30,
+      gv_werks12   like vbap-werks,
+      gv_werks11   like vbap-werks,
+      gt_plant1   like vbap-werks.
+
+    Loop at xvbap .
+      AT FIRST .
+        flag1 = 'X'.
+      ENDAT.
+
+    IF FLAG1 = 'X'.
+        GV_WERKS12 = xvbap-WERKS.
+        CLEAR FLAG1.
+    ELSEIF GV_WERKS12 NE xvbap-WERKS .
+      message I000(A) with 'Different Plants Maintained'.
+    ENDIF.
+       CLEAR xvbap.
+    ENDLOOP.
+
+    read table xvbap index 1.
+    if sy-subrc eq 0.
+      gv_werks11 = xvbap-werks.
+    endif.
+*if xvbap-werks = '1000'.
+***Query for selecting number range from Ytable
+
+SELECT SINGLE *
+FROM ZSD_SALES_NR
+INTO wa_zsd_nr
+  WHERE AUART eq vbak-AUART
+  AND VKORG eq vbak-VKORG
+  AND VTWEG eq vbak-VTWEG
+  AND WERKS eq gv_werks11.
+
+IF sy-subrc EQ 0.
+***Passing number range.
+US_RANGE_INTERN = wa_zsd_nr-numki.
+else.
+  message 'Number Range Object missing in Transaction ZOR' type 'E'.
+ENDIF.
+*endif.
+ENDIF.
+*
+ENDENHANCEMENT.
+*$*$-End:   (5)---------------------------------------------------------------------------------$*$*
+
+* Example: Numer range from TVAK like in standard
+* US_RANGE_INTERN = TVAK-NUMKI.
+
+ENDFORM.
+*eject
+
+*---------------------------------------------------------------------*
+*       FORM USEREXIT_PRICING_PREPARE_TKOMK                           *
+*---------------------------------------------------------------------*
+*       This userexit can be used to move additional fields into the  *
+*       communication table which is used for pricing:                *
+*                                                                     *
+*       TKOMK for header fields                                       *
+*                                                                     *
+*       This form is called from form PREISFINDUNG_VORBEREITEN.       *
+*                                                                     *
+*---------------------------------------------------------------------*
+FORM USEREXIT_PRICING_PREPARE_TKOMK.
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""$"$\SE:(6) Form USEREXIT_PRICING_PREPARE_TKOMK, Start                                                                                                        A
+*$*$-Start: (6)---------------------------------------------------------------------------------$*$*
+ENHANCEMENT 2  ZSD_VENDOR.    "active version
+
+If   Sy-TCODE = 'VA01' or SY-TCODE = 'VA02' or sy-tcode = 'VA03'.
+
+Data: WA_VBPA type VBPA.
+
+  Read Table XVBPA[] into WA_VBPA WITH  KEY PARVW = 'ZC'.
+If sy-subrc = 0.
+
+ TKOMK-ZZCOM1 = WA_VBPA-LIFNR.
+endif.
+
+Read Table XVBPA[] into WA_VBPA WITH  KEY PARVW = 'ZO'.
+if sy-subrc = 0.
+ TKOMK-ZZCOM2 = WA_VBPA-LIFNR.
+endif.
+
+Read Table XVBPA[] into WA_VBPA WITH  KEY PARVW = 'ZV'.
+if sy-subrc = 0.
+ TKOMK-ZZCOM3 = WA_VBPA-LIFNR.
+endif.
+
+
+Read Table XVBPA[] into WA_VBPA WITH  KEY PARVW = 'R1'.
+if sy-subrc = 0.
+ TKOMK-ZZROY1 = WA_VBPA-LIFNR.
+endif.
+
+Read Table XVBPA[] into WA_VBPA WITH  KEY PARVW = 'R2'.
+if sy-subrc = 0.
+ TKOMK-ZZROY2 = WA_VBPA-LIFNR.
+endif.
+
+endif.
+
+
+
+*  IF SY-tcode = 'VA01'.
+*DATA:T_A699 TYPE TABLE OF A699,
+*     W_A699 TYPE A699 .
+**  BREAK-POINT.
+**SELECT SINGLE LIFNR FROM A699 INTO TKOMK-LIFNR WHERE MATNR = VBAP-MATNR AND KSCHL = 'ZCM1' AND KAPPL = 'V' AND
+**                                     DATAB LE VBKD-PRSDT AND DATBI GE VBKD-PRSDT.
+*SELECT * FROM A699 INTO TABLE T_A699 WHERE MATNR = VBAP-MATNR AND KSCHL = 'ZCM1' AND KAPPL = 'V' AND
+*                                     DATAB LE VBKD-PRSDT AND DATBI GE VBKD-PRSDT.
+**  LOOP AT T_A699 INTO W_A699.
+**READ TABLE TKOMK WITH KEY LIFNR = W_A699-LIFNR.
+**IF SY-SUBRC <> 0.
+**TKOMK-LIFNR = W_A699-LIFNR.
+**APPEND TKOMK.
+**ENDIF.
+**  ENDLOOP.
+*ENDIF.
+ENDENHANCEMENT.
+*$*$-End:   (6)---------------------------------------------------------------------------------$*$*
+
+*  TKOMK-zzfield = xxxx-zzfield2.
+
+ENDFORM.
+*eject
+
+*---------------------------------------------------------------------*
+*       FORM USEREXIT_PRICING_PREPARE_TKOMP                           *
+*---------------------------------------------------------------------*
+*       This userexit can be used to move additional fields into the  *
+*       communication table which is used for pricing:                *
+*                                                                     *
+*       TKOMP for item fields                                         *
+*                                                                     *
+*       This form is called from form PREISFINDUNG_VORBEREITEN.       *
+*                                                                     *
+*---------------------------------------------------------------------*
+FORM USEREXIT_PRICING_PREPARE_TKOMP.
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""$"$\SE:(7) Form USEREXIT_PRICING_PREPARE_TKOMP, Start                                                                                                        A
+*$*$-Start: (7)---------------------------------------------------------------------------------$*$*
+ENHANCEMENT 1  ZROUNDUP.    "active version
+*
+  IF vbak-auart = 'YASC'.
+    DATA : T1 TYPE netwr,
+          t2 type KAWRT.
+
+LOOP AT XKOMV.
+  IF XKOMV-KSCHL = 'ZTCS'.
+    t2 = XKOMV-KAWRT.
+    T1 = ( t2 / 100 ).
+DATA K2 TYPE KAWRT.
+call function 'Z_VAO1_ROUNDOFF'
+  exporting
+    k1            = T1
+ IMPORTING
+   K2            = K2
+          .
+*      XKOMV-KWERT = K2.
+*      modify XKOMV INDEX sy-tabix TRANSPORTING kwert.
+    ENDIF.
+  ENDLOOP.
+
+  ENDIF.
+
+
+ENDENHANCEMENT.
+ENHANCEMENT 3  ZSD_VENDOR.    "active version
+*
+
+***  IF SY-tcode = 'VA01' or sy-TCODE = 'VA02'." AND SY-UCOMM <> 'V69A_KOLO'.
+***DATA:"T_A902 TYPE TABLE OF A902,
+***     W_A902 TYPE A902,
+***     w_a363 TYPE a363,
+***     W_A810 TYPE A810,
+***     W_A964 TYPE A964,
+***     W_A699 TYPE A699,
+***      W_A902_R TYPE A902,
+***     w_a363_R TYPE a363,
+***     W_A810_R TYPE A810,
+***     W_A964_R TYPE A964,
+***     W_A699_R TYPE A699,
+***ZKOMV LIKE TABLE OF xkomv WITH HEADER LINE.
+***STATICS :T_A902 TYPE TABLE OF A902,
+***         t_a363 TYPE TABLE OF a363,
+***         T_a810 TYPE TABLE OF A810,
+***         T_A964 TYPE TABLE OF A964,
+***         T_A699  TYPE TABLE OF A699,
+***         ctr TYPE i.
+***STATICS :T_A902_R TYPE TABLE OF A902,
+***         t_a363_R TYPE TABLE OF a363,
+***         T_a810_R TYPE TABLE OF A810,
+***         T_A964_R TYPE TABLE OF A964,
+***         T_A699_R  TYPE TABLE OF A699.
+***  IF sy-UCOMM = 'SICH'.
+***REFRESH:T_A902,t_a363.
+***CLEAR ctr.
+***  ENDIF.
+****  BREAK-POINT.
+***  IF SY-UCOMM = 'V69A_KOLO'.
+****    ctr = ctr + 1.
+****delete T_A902 WHERE MATNR = vbap-MATNR AND lifnr = XKOMV-LIFNR.
+****    if ctr <> '1'.
+***    LOOP AT T_A902 INTO W_A902 WHERE MATNR = vbap-MATNR.
+***      ctr = sy-TABIX.
+***READ TABLE XKOMV with KEY LIFNR = W_A902-LIFNR KPOSN = VBAP-POSNR.
+***IF sy-SUBRC <> 0.
+***W_A902-KFRST = 'X'.
+***modify T_A902 FROM W_A902 INDEX ctr TRANSPORTING kfrst.
+***ENDIF.
+***    ENDLOOP.
+***
+****    READ TABLE T_A902 INTO W_A902 with KEY MATNR = vbap-MATNR  lifnr = XKOMV-LIFNR kunnr = vbak-kunnr.
+****    IF sy-SUBRC = 0.
+****W_A902-KFRST = 'X'.
+****modify T_A902 FROM W_A902 INDEX sy-TABIX TRANSPORTING kfrst.
+****    ENDIF.
+****    endif.
+***  ENDIF.
+***
+***  READ TABLE T_A902 INTO W_A902 with KEY MATNR = VBAP-MATNR.
+***  if sy-SUBRC <> 0.
+***if SY-UCOMM <> 'V69A_KOLO'.
+***  SELECT * FROM A363 INTO TABLE T_A363 FOR ALL ENTRIES IN XVBPA[] WHERE LIFNR = XVBPA-LIFNR
+***                                                                  AND MATNR = VBAP-MATNR
+***                                                                   AND WERKS = VBAP-WERKS
+***                                                                   AND KAPPL = 'V'
+***                                                                  AND ( KSCHL = 'ZCM1' or KSCHL = 'ZCM2' )
+***                                                                  AND DATAB LE VBKD-PRSDT AND DATBI GE VBKD-PRSDT.
+***  IF SY-SUBRC <> 0.
+***    SELECT * FROM A810 APPENDING TABLE T_A810 WHERE MATNR = VBAP-MATNR
+***                                              AND ( KSCHL = 'ZCM1' or KSCHL = 'ZCM2' )   "or kschl = 'ZROY' )
+***                                              AND WERKS = VBAP-WERKS
+***                                              AND KAPPL = 'V' AND
+***                                              DATAB LE VBKD-PRSDT AND DATBI GE VBKD-PRSDT AND kunnr = vbak-kunnr .
+***
+***   IF SY-SUBRC <> 0.
+***     SELECT * FROM A964 INTO TABLE T_A964 FOR ALL ENTRIES IN XVBPA[] WHERE LIFNR = XVBPA-LIFNR
+***                                                                     AND MATNR = VBAP-MATNR
+***                                                                   AND KAPPL = 'V'
+***                                                                  AND ( KSCHL = 'ZCM1' or KSCHL = 'ZCM2' )
+***                                                                  AND DATAB LE VBKD-PRSDT AND DATBI GE VBKD-PRSDT.
+***       IF SY-SUBRC <> 0.
+***
+***      SELECT * FROM A902 APPENDING TABLE T_A902 WHERE MATNR = VBAP-MATNR AND ( KSCHL = 'ZCM1' or KSCHL = 'ZCM2' )   "or kschl = 'ZROY' )
+***                                     AND KAPPL = 'V' AND
+***                                     DATAB LE VBKD-PRSDT AND DATBI GE VBKD-PRSDT AND kunnr = vbak-kunnr .
+***        IF sy-subrc <> 0.
+***               SELECT * FROM A699 INTO TABLE T_A699 FOR ALL ENTRIES IN XVBPA[] WHERE LIFNR = XVBPA-LIFNR
+***                                                                   AND KAPPL = 'V'
+***                                                                  AND ( KSCHL = 'ZCM1' or KSCHL = 'ZCM2' )
+***                                                                  AND DATAB LE VBKD-PRSDT AND DATBI GE VBKD-PRSDT.
+***        ENDIF.
+***       ENDIF.
+***   ENDIF.
+***  ENDIF.
+***  endif.
+***  endif.
+***  if sy-ucomm <> 'V69A_KOLO'.
+***    IF T_A363[] IS NOT INITIAL.
+***  LOOP AT T_A363 INTO W_A363 WHERE kfrst <> 'X' AND MATNR = VBAP-MATNR.
+***LOOP AT xvbpa WHERE LIFNR = W_A363-LIFNR.
+***READ TABLE xkomv WITH KEY LIFNR = W_A363-LIFNR kposn = vbap-posnr.
+***IF SY-SUBRC <> 0.
+***
+***TKOMK-LIFNR = W_A363-LIFNR.
+***
+***    call function 'PRICING'
+***         exporting
+***              comm_head_i      = tkomk
+***              comm_item_i      = tkomp
+***              calculation_type = 'C'
+***         importing
+***              comm_head_e      = tkomk
+***              comm_item_e      = tkomp
+***         tables
+***              tkomv            = Zkomv
+***              svbap            = uvbap.
+***READ TABLE ZKOMV WITH KEY KSCHL =  'ZCM1'  .
+***
+***IF SY-SUBRC = 0.
+***  ZKOMV-LIFNR = TKOMK-LIFNR.
+***  APPEND ZKOMV TO xkomv.
+***  ENDIF.
+***
+***READ TABLE ZKOMV WITH KEY KSCHL =  'ZCM2'  .
+***
+***IF SY-SUBRC = 0.
+***  ZKOMV-LIFNR = TKOMK-LIFNR.
+***  APPEND ZKOMV TO xkomv.
+***  ENDIF.
+***CLEAR TKOMK-LIFNR.
+***ENDIF.
+***ENDLOOP.
+***  ENDLOOP.
+***
+***ELSEIF T_A810[] IS NOT INITIAL.
+***  LOOP AT T_A810 INTO W_A810 WHERE kfrst <> 'X' AND MATNR = VBAP-MATNR.
+***LOOP AT xvbpa WHERE LIFNR = W_A810-LIFNR.
+***READ TABLE xkomv WITH KEY LIFNR = W_A810-LIFNR kposn = vbap-posnr.
+***IF SY-SUBRC <> 0.
+***
+***TKOMK-LIFNR = W_A810-LIFNR.
+***
+***    call function 'PRICING'
+***         exporting
+***              comm_head_i      = tkomk
+***              comm_item_i      = tkomp
+***              calculation_type = 'C'
+***         importing
+***              comm_head_e      = tkomk
+***              comm_item_e      = tkomp
+***         tables
+***              tkomv            = Zkomv
+***              svbap            = uvbap.
+***READ TABLE ZKOMV WITH KEY KSCHL =  'ZCM1'  .
+***
+***IF SY-SUBRC = 0.
+***  ZKOMV-LIFNR = TKOMK-LIFNR.
+***  APPEND ZKOMV TO xkomv.
+***  ENDIF.
+***
+***READ TABLE ZKOMV WITH KEY KSCHL =  'ZCM2'  .
+***
+***IF SY-SUBRC = 0.
+***  ZKOMV-LIFNR = TKOMK-LIFNR.
+***  APPEND ZKOMV TO xkomv.
+***  ENDIF.
+***CLEAR TKOMK-LIFNR.
+***ENDIF.
+***ENDLOOP.
+***  ENDLOOP.
+*** ELSEIF T_A964[] IS NOT INITIAL.
+***  LOOP AT T_A964 INTO W_A964 WHERE kfrst <> 'X' AND MATNR = VBAP-MATNR.
+***LOOP AT xvbpa WHERE LIFNR = W_A964-LIFNR.
+***READ TABLE xkomv WITH KEY LIFNR = W_A964-LIFNR kposn = vbap-posnr.
+***IF SY-SUBRC <> 0.
+***
+***TKOMK-LIFNR = W_A964-LIFNR.
+***
+***    call function 'PRICING'
+***         exporting
+***              comm_head_i      = tkomk
+***              comm_item_i      = tkomp
+***              calculation_type = 'C'
+***         importing
+***              comm_head_e      = tkomk
+***              comm_item_e      = tkomp
+***         tables
+***              tkomv            = Zkomv
+***              svbap            = uvbap.
+***READ TABLE ZKOMV WITH KEY KSCHL =  'ZCM1'  .
+***
+***IF SY-SUBRC = 0.
+***  ZKOMV-LIFNR = TKOMK-LIFNR.
+***  APPEND ZKOMV TO xkomv.
+***  ENDIF.
+***
+***READ TABLE ZKOMV WITH KEY KSCHL =  'ZCM2'  .
+***
+***IF SY-SUBRC = 0.
+***  ZKOMV-LIFNR = TKOMK-LIFNR.
+***  APPEND ZKOMV TO xkomv.
+***  ENDIF.
+***CLEAR TKOMK-LIFNR.
+***ENDIF.
+***ENDLOOP.
+***  ENDLOOP.
+***
+*** ELSEIF T_A699[] IS NOT INITIAL.
+***  LOOP AT T_A699 INTO W_A699 WHERE kfrst <> 'X' AND MATNR = VBAP-MATNR.
+***LOOP AT xvbpa WHERE LIFNR = W_A699-LIFNR.
+***READ TABLE xkomv WITH KEY LIFNR = W_A699-LIFNR kposn = vbap-posnr.
+***IF SY-SUBRC <> 0.
+***
+***TKOMK-LIFNR = W_A699-LIFNR.
+***
+***    call function 'PRICING'
+***         exporting
+***              comm_head_i      = tkomk
+***              comm_item_i      = tkomp
+***              calculation_type = 'C'
+***         importing
+***              comm_head_e      = tkomk
+***              comm_item_e      = tkomp
+***         tables
+***              tkomv            = Zkomv
+***              svbap            = uvbap.
+***READ TABLE ZKOMV WITH KEY KSCHL =  'ZCM1'  .
+***
+***IF SY-SUBRC = 0.
+***  ZKOMV-LIFNR = TKOMK-LIFNR.
+***  APPEND ZKOMV TO xkomv.
+***  ENDIF.
+***
+***READ TABLE ZKOMV WITH KEY KSCHL =  'ZCM2'  .
+***
+***IF SY-SUBRC = 0.
+***  ZKOMV-LIFNR = TKOMK-LIFNR.
+***  APPEND ZKOMV TO xkomv.
+***  ENDIF.
+***CLEAR TKOMK-LIFNR.
+***ENDIF.
+***ENDLOOP.
+***  ENDLOOP.
+***ELSEIF T_A902[] IS NOT INITIAL.
+***  LOOP AT T_A902 INTO W_A902 WHERE kfrst <> 'X' AND MATNR = VBAP-MATNR.
+***LOOP AT xvbpa WHERE LIFNR = W_A902-LIFNR.
+***READ TABLE xkomv WITH KEY LIFNR = W_A902-LIFNR kposn = vbap-posnr.
+***IF SY-SUBRC <> 0.
+***
+***TKOMK-LIFNR = W_A902-LIFNR.
+***
+***    call function 'PRICING'
+***         exporting
+***              comm_head_i      = tkomk
+***              comm_item_i      = tkomp
+***              calculation_type = 'C'
+***         importing
+***              comm_head_e      = tkomk
+***              comm_item_e      = tkomp
+***         tables
+***              tkomv            = Zkomv
+***              svbap            = uvbap.
+***READ TABLE ZKOMV WITH KEY KSCHL =  'ZCM1'  .
+***
+***IF SY-SUBRC = 0.
+***  ZKOMV-LIFNR = TKOMK-LIFNR.
+***  APPEND ZKOMV TO xkomv.
+***  ENDIF.
+***
+***READ TABLE ZKOMV WITH KEY KSCHL =  'ZCM2'  .
+***
+***IF SY-SUBRC = 0.
+***  ZKOMV-LIFNR = TKOMK-LIFNR.
+***  APPEND ZKOMV TO xkomv.
+***  ENDIF.
+***CLEAR TKOMK-LIFNR.
+***ENDIF.
+***ENDLOOP.
+***  ENDLOOP.
+***endif.
+***  endif.
+***
+***
+***
+*********zroy
+****  DATA:"t_a699 TYPE TABLE OF a699,
+****       w_a699 TYPE a699,
+****       w_a810 TYPE a810.
+****ZKOMV LIKE TABLE OF xkomv WITH HEADER LINE.
+****STATICS :T_A810 TYPE TABLE OF A810,
+****         T_A699 TYPE TABLE OF A699.
+****ctr TYPE i.
+****  BREAK-POINT.
+***
+***  IF sy-UCOMM = 'SICH'.
+***REFRESH:t_a699,t_a810.
+***CLEAR ctr.
+***  ENDIF.
+***  IF SY-UCOMM = 'V69A_KOLO'.
+****    ctr = ctr + 1.
+****delete t_a699 WHERE MATNR = vbap-MATNR AND lifnr = XKOMV-LIFNR.
+****    if ctr <> '1'.
+***
+***
+************    LOOP AT t_a699 INTO w_a699 WHERE MATNR = vbap-MATNR.
+************      ctr = sy-TABIX.
+************READ TABLE XKOMV with KEY LIFNR = w_a699-LIFNR KPOSN = VBAP-POSNR.
+************IF sy-SUBRC <> 0.
+************w_a699-KFRST = 'X'.
+************modify t_a699 FROM w_a699 INDEX ctr TRANSPORTING kfrst.
+************ENDIF.
+************    ENDLOOP.
+***
+***     LOOP AT t_a810 INTO w_a810 WHERE MATNR = vbap-MATNR.
+***      ctr = sy-TABIX.
+***READ TABLE XKOMV with KEY LIFNR = w_a810-LIFNR KPOSN = VBAP-POSNR.
+***IF sy-SUBRC <> 0.
+***w_a810-KFRST = 'X'.
+***modify t_a810 FROM w_a810 INDEX ctr TRANSPORTING kfrst.
+***ENDIF.
+***    ENDLOOP.
+***
+***
+****    READ TABLE t_a699 INTO w_a699 with KEY MATNR = vbap-MATNR  lifnr = XKOMV-LIFNR kunnr = vbak-kunnr.
+****    IF sy-SUBRC = 0.
+****w_a699-KFRST = 'X'.
+****modify t_a699 FROM w_a699 INDEX sy-TABIX TRANSPORTING kfrst.
+****    ENDIF.
+****    endif.
+***  ENDIF.
+***
+***
+************  READ TABLE t_a699 INTO w_a699 with KEY MATNR = VBAP-MATNR.
+************  if sy-SUBRC <> 0.
+************if SY-UCOMM <> 'V69A_KOLO'.
+************SELECT * FROM a699 APPENDING TABLE t_a699 WHERE MATNR = VBAP-MATNR AND ( kschl = 'ZROY' )
+************                                     AND KAPPL = 'V' AND
+************                                     DATAB LE VBKD-PRSDT AND DATBI GE VBKD-PRSDT." AND kunnr = vbak-kunnr .
+************  endif.
+************  endif.
+***
+***  READ TABLE t_a810 INTO w_a810 with KEY MATNR = VBAP-MATNR.
+***  if sy-SUBRC <> 0.
+***if SY-UCOMM <> 'V69A_KOLO'.
+***
+***SELECT * FROM A363 INTO TABLE T_A363_R FOR ALL ENTRIES IN XVBPA[] WHERE LIFNR = XVBPA-LIFNR
+***                                                                  AND MATNR = VBAP-MATNR
+***                                                                   AND WERKS = VBAP-WERKS
+***                                                                   AND KAPPL = 'V'
+***                                                                  AND ( KSCHL = 'ZROY' or KSCHL = 'ZROP' )
+***                                                                  AND DATAB LE VBKD-PRSDT AND DATBI GE VBKD-PRSDT.
+***  IF SY-SUBRC <> 0.
+***    SELECT * FROM A810 APPENDING TABLE T_A810_R WHERE MATNR = VBAP-MATNR
+***                                              AND ( KSCHL = 'ZROY' or KSCHL = 'ZROP' )   "or kschl = 'ZROY' )
+***                                              AND WERKS = VBAP-WERKS
+***                                              AND KAPPL = 'V' AND
+***                                              DATAB LE VBKD-PRSDT AND DATBI GE VBKD-PRSDT AND kunnr = vbak-kunnr .
+***
+***   IF SY-SUBRC <> 0.
+***     SELECT * FROM A964 INTO TABLE T_A964_R FOR ALL ENTRIES IN XVBPA[] WHERE LIFNR = XVBPA-LIFNR
+***                                                                     AND MATNR = VBAP-MATNR
+***                                                                   AND KAPPL = 'V'
+***                                                                  AND ( KSCHL = 'ZROY' or KSCHL = 'ZROP' )
+***                                                                  AND DATAB LE VBKD-PRSDT AND DATBI GE VBKD-PRSDT.
+***       IF SY-SUBRC <> 0.
+***
+***      SELECT * FROM A902 APPENDING TABLE T_A902_R WHERE MATNR = VBAP-MATNR AND ( KSCHL = 'ZROY' or KSCHL = 'ZROP' )   "or kschl = 'ZROY' )
+***                                     AND KAPPL = 'V' AND
+***                                     DATAB LE VBKD-PRSDT AND DATBI GE VBKD-PRSDT AND kunnr = vbak-kunnr .
+***        IF sy-subrc <> 0.
+***               SELECT * FROM A699 INTO TABLE T_A699_R FOR ALL ENTRIES IN XVBPA[] WHERE LIFNR = XVBPA-LIFNR
+***                                                                   AND KAPPL = 'V'
+***                                                                  AND ( KSCHL = 'ZROY' or KSCHL = 'ZROP' )
+***                                                                  AND DATAB LE VBKD-PRSDT AND DATBI GE VBKD-PRSDT.
+***        ENDIF.
+***       ENDIF.
+***   ENDIF.
+***  ENDIF.
+***  endif.
+***  endif.
+***
+***  if sy-ucomm <> 'V69A_KOLO'.
+*************  LOOP AT t_a699 INTO w_a699 WHERE kfrst <> 'X' AND MATNR = VBAP-MATNR.
+**************      READ TABLE xvbpa WITH KEY LIFNR = w_a699-LIFNR.
+**************  IF SY-SUBRC <> 0.
+**************  DELETE xkomv WHERE LIFNR = w_a699-LIFNR.
+**************  ENDIF.
+**************READ TABLE TKOMK WITH KEY LIFNR = w_a699-LIFNR.
+*************LOOP AT xvbpa WHERE LIFNR = w_a699-LIFNR.
+*************READ TABLE xkomv WITH KEY LIFNR = w_a699-LIFNR kposn = vbap-posnr.
+*************IF SY-SUBRC <> 0.
+*************
+*************TKOMK-LIFNR = w_a699-LIFNR.
+**************APPEND TKOMK.
+*************    call function 'PRICING'
+*************         exporting
+*************              comm_head_i      = tkomk
+*************              comm_item_i      = tkomp
+*************              calculation_type = 'C'
+*************         importing
+*************              comm_head_e      = tkomk
+*************              comm_item_e      = tkomp
+*************         tables
+*************              tkomv            = Zkomv
+*************              svbap            = uvbap.
+**************READ TABLE ZKOMV WITH KEY KSCHL = 'ZCM1'.
+**************IF SY-SUBRC = 0.
+**************  ZKOMV-LIFNR = TKOMK-LIFNR.
+**************  APPEND ZKOMV TO xkomv.
+**************  ENDIF.
+*************READ TABLE ZKOMV WITH KEY KSCHL = 'ZROY'.
+*************IF SY-SUBRC = 0.
+*************  ZKOMV-LIFNR = TKOMK-LIFNR.
+*************  APPEND ZKOMV TO xkomv.
+*************  ENDIF.
+*************        CLEAR TKOMK-LIFNR.
+*************ELSE.
+*************
+*************ENDIF.
+*************ENDLOOP.
+*************  ENDLOOP.
+***
+*** IF T_A363_R[] IS NOT INITIAL.
+***  LOOP AT T_A363_R INTO W_A363_R WHERE kfrst <> 'X' AND MATNR = VBAP-MATNR.
+***LOOP AT xvbpa WHERE LIFNR = W_A363_R-LIFNR.
+***READ TABLE xkomv WITH KEY LIFNR = W_A363_R-LIFNR kposn = vbap-posnr
+***                          KSCHL = 'ZROY'.
+***IF SY-SUBRC <> 0.
+***
+***TKOMK-LIFNR = W_A363_R-LIFNR.
+***
+***    call function 'PRICING'
+***         exporting
+***              comm_head_i      = tkomk
+***              comm_item_i      = tkomp
+***              calculation_type = 'C'
+***         importing
+***              comm_head_e      = tkomk
+***              comm_item_e      = tkomp
+***         tables
+***              tkomv            = Zkomv
+***              svbap            = uvbap.
+***
+***READ TABLE ZKOMV WITH KEY KSCHL =  'ZROY'  .
+***
+***IF SY-SUBRC = 0.
+***  ZKOMV-LIFNR = TKOMK-LIFNR.
+***  APPEND ZKOMV TO xkomv.
+***  ENDIF.
+***
+***READ TABLE ZKOMV WITH KEY KSCHL =  'ZROP'  .
+***
+***IF SY-SUBRC = 0.
+***  ZKOMV-LIFNR = TKOMK-LIFNR.
+***  APPEND ZKOMV TO xkomv.
+***  ENDIF.
+***CLEAR TKOMK-LIFNR.
+***ENDIF.
+***ENDLOOP.
+***  ENDLOOP.
+***
+***ELSEIF T_A810_R[] IS NOT INITIAL.
+***  LOOP AT T_A810_R INTO W_A810_R WHERE kfrst <> 'X' AND MATNR = VBAP-MATNR.
+***LOOP AT xvbpa WHERE LIFNR = W_A810_R-LIFNR.
+***READ TABLE xkomv WITH KEY LIFNR = W_A810_R-LIFNR kposn = vbap-posnr.
+***IF SY-SUBRC <> 0.
+***
+***TKOMK-LIFNR = W_A810_R-LIFNR.
+***
+***    call function 'PRICING'
+***         exporting
+***              comm_head_i      = tkomk
+***              comm_item_i      = tkomp
+***              calculation_type = 'C'
+***         importing
+***              comm_head_e      = tkomk
+***              comm_item_e      = tkomp
+***         tables
+***              tkomv            = Zkomv
+***              svbap            = uvbap.
+***READ TABLE ZKOMV WITH KEY KSCHL =  'ZROY'  .
+***
+***IF SY-SUBRC = 0.
+***  ZKOMV-LIFNR = TKOMK-LIFNR.
+***  APPEND ZKOMV TO xkomv.
+***  ENDIF.
+***
+***READ TABLE ZKOMV WITH KEY KSCHL =  'ZROP'  .
+***
+***IF SY-SUBRC = 0.
+***  ZKOMV-LIFNR = TKOMK-LIFNR.
+***  APPEND ZKOMV TO xkomv.
+***  ENDIF.
+***CLEAR TKOMK-LIFNR.
+***ENDIF.
+***ENDLOOP.
+***  ENDLOOP.
+*** ELSEIF T_A964_R[] IS NOT INITIAL.
+***  LOOP AT T_A964_R INTO W_A964_R WHERE kfrst <> 'X' AND MATNR = VBAP-MATNR.
+***LOOP AT xvbpa WHERE LIFNR = W_A964_R-LIFNR.
+***READ TABLE xkomv WITH KEY LIFNR = W_A964_R-LIFNR kposn = vbap-posnr.
+***IF SY-SUBRC <> 0.
+***
+***TKOMK-LIFNR = W_A964_R-LIFNR.
+***
+***    call function 'PRICING'
+***         exporting
+***              comm_head_i      = tkomk
+***              comm_item_i      = tkomp
+***              calculation_type = 'C'
+***         importing
+***              comm_head_e      = tkomk
+***              comm_item_e      = tkomp
+***         tables
+***              tkomv            = Zkomv
+***              svbap            = uvbap.
+***READ TABLE ZKOMV WITH KEY KSCHL =  'ZROY'  .
+***
+***IF SY-SUBRC = 0.
+***  ZKOMV-LIFNR = TKOMK-LIFNR.
+***  APPEND ZKOMV TO xkomv.
+***  ENDIF.
+***
+***READ TABLE ZKOMV WITH KEY KSCHL =  'ZROP'  .
+***
+***IF SY-SUBRC = 0.
+***  ZKOMV-LIFNR = TKOMK-LIFNR.
+***  APPEND ZKOMV TO xkomv.
+***  ENDIF.
+***CLEAR TKOMK-LIFNR.
+***ENDIF.
+***ENDLOOP.
+***  ENDLOOP.
+***
+*** ELSEIF T_A699_R[] IS NOT INITIAL.
+***  LOOP AT T_A699_R INTO W_A699_R WHERE kfrst <> 'X' AND MATNR = VBAP-MATNR.
+***LOOP AT xvbpa WHERE LIFNR = W_A699_R-LIFNR.
+***READ TABLE xkomv WITH KEY LIFNR = W_A699_R-LIFNR kposn = vbap-posnr.
+***IF SY-SUBRC <> 0.
+***
+***TKOMK-LIFNR = W_A699_R-LIFNR.
+***
+***    call function 'PRICING'
+***         exporting
+***              comm_head_i      = tkomk
+***              comm_item_i      = tkomp
+***              calculation_type = 'C'
+***         importing
+***              comm_head_e      = tkomk
+***              comm_item_e      = tkomp
+***         tables
+***              tkomv            = Zkomv
+***              svbap            = uvbap.
+***
+***READ TABLE ZKOMV WITH KEY KSCHL =  'ZROY'  .
+***
+***IF SY-SUBRC = 0.
+***  ZKOMV-LIFNR = TKOMK-LIFNR.
+***  APPEND ZKOMV TO xkomv.
+***  ENDIF.
+***
+***READ TABLE ZKOMV WITH KEY KSCHL =  'ZROP'  .
+***
+***IF SY-SUBRC = 0.
+***  ZKOMV-LIFNR = TKOMK-LIFNR.
+***  APPEND ZKOMV TO xkomv.
+***  ENDIF.
+***CLEAR TKOMK-LIFNR.
+***ENDIF.
+***ENDLOOP.
+***  ENDLOOP.
+***ELSEIF T_A902_R[] IS NOT INITIAL.
+***  LOOP AT T_A902_R INTO W_A902_R WHERE kfrst <> 'X' AND MATNR = VBAP-MATNR.
+***LOOP AT xvbpa WHERE LIFNR = W_A902_R-LIFNR.
+***READ TABLE xkomv WITH KEY LIFNR = W_A902_R-LIFNR kposn = vbap-posnr.
+***IF SY-SUBRC <> 0.
+***
+***TKOMK-LIFNR = W_A902_R-LIFNR.
+***
+***    call function 'PRICING'
+***         exporting
+***              comm_head_i      = tkomk
+***              comm_item_i      = tkomp
+***              calculation_type = 'C'
+***         importing
+***              comm_head_e      = tkomk
+***              comm_item_e      = tkomp
+***         tables
+***              tkomv            = Zkomv
+***              svbap            = uvbap.
+***
+***READ TABLE ZKOMV WITH KEY KSCHL =  'ZROY'  .
+***
+***IF SY-SUBRC = 0.
+***  ZKOMV-LIFNR = TKOMK-LIFNR.
+***  APPEND ZKOMV TO xkomv.
+***  ENDIF.
+***
+***READ TABLE ZKOMV WITH KEY KSCHL =  'ZROP'  .
+***
+***IF SY-SUBRC = 0.
+***  ZKOMV-LIFNR = TKOMK-LIFNR.
+***  APPEND ZKOMV TO xkomv.
+***  ENDIF.
+***CLEAR TKOMK-LIFNR.
+***ENDIF.
+***ENDLOOP.
+***  ENDLOOP.
+***endif.
+***
+***  endif.
+***
+***
+***  sort XKOMV by kposn kschl.
+***  delete ADJACENT DUPLICATES FROM XKOMV comparing kposn kschl.
+***ENDIF.
+
+If   Sy-TCODE = 'VA01' or SY-TCODE = 'VA02' or sy-tcode = 'VA03'.
+
+Data: WA_VBPA type VBPA.
+
+  Read Table XVBPA[] into WA_VBPA WITH  KEY PARVW = 'ZC'.
+If sy-subrc = 0.
+
+ TKOMK-ZZCOM1 = WA_VBPA-LIFNR.
+endif.
+
+Read Table XVBPA[] into WA_VBPA WITH  KEY PARVW = 'ZO'.
+if sy-subrc = 0.
+ TKOMK-ZZCOM2 = WA_VBPA-LIFNR.
+endif.
+
+Read Table XVBPA[] into WA_VBPA WITH  KEY PARVW = 'ZV'.
+if sy-subrc = 0.
+ TKOMK-ZZCOM3 = WA_VBPA-LIFNR.
+endif.
+
+
+Read Table XVBPA[] into WA_VBPA WITH  KEY PARVW = 'R1'.
+if sy-subrc = 0.
+ TKOMK-ZZROY1 = WA_VBPA-LIFNR.
+endif.
+
+Read Table XVBPA[] into WA_VBPA WITH  KEY PARVW = 'R2'.
+if sy-subrc = 0.
+ TKOMK-ZZROY2 = WA_VBPA-LIFNR.
+endif.
+
+endif.
+
+
+ENDENHANCEMENT.
+*$*$-End:   (7)---------------------------------------------------------------------------------$*$*
+
+*  TKOMP-zzfield = xxxx-zzfield2.
+
+ENDFORM.
+*eject
+
+*---------------------------------------------------------------------*
+*       FORM USEREXIT_READ_DOCUMENT                                   *
+*---------------------------------------------------------------------*
+*       This userexit can be used to read data in additional tables   *
+*       when the program reads a sales document.                      *
+*                                                                     *
+*       This form is called at the end of form BELEG_LESEN.           *
+*                                                                     *
+*---------------------------------------------------------------------*
+FORM USEREXIT_READ_DOCUMENT.
+
+ENDFORM.
+*eject
+
+*---------------------------------------------------------------------*
+*       FORM USEREXIT_SAVE_DOCUMENT                                   *
+*---------------------------------------------------------------------*
+*       This userexit can be used to save data in additional tables   *
+*       when a document is saved.                                     *
+*                                                                     *
+*       If field T180-TRTYP contents 'H', the document will be        *
+*       created, else it will be changed.                             *
+*                                                                     *
+*       This form is called at from form BELEG_SICHERN, before COMMIT *
+*                                                                     *
+*---------------------------------------------------------------------*
+FORM USEREXIT_SAVE_DOCUMENT.
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""$"$\SE:(8) Form USEREXIT_SAVE_DOCUMENT, Start                                                                                                                A
+*$*$-Start: (8)---------------------------------------------------------------------------------$*$*
+ENHANCEMENT 1  ZSD_VA01_FILL_DEFAULTS.    "active version
+****************************************************************************************************
+  IF SY-TCODE = 'VA02'.
+      DATA: OBTYP  TYPE JSTO-OBTYP,
+            STATUS TYPE STANDARD TABLE OF  JSTAT ,
+            W_STATUS TYPE  JSTAT ,
+            OBJNR TYPE VBAK-OBJNR,
+            STSMA  TYPE JSTO-STSMA,
+            STONR  TYPE TJ30-STONR.
+
+      DATA : lv_jest TYPE jest .
+      DATA : IT_ZSTATUS_USER TYPE STANDARD TABLE OF ZSTATUS_USER ,
+             W_ZSTATUS_USER  TYPE ZSTATUS_USER.
+
+      CLEAR : OBTYP , OBJNR , STSMA , STONR . FREE:STATUS[].
+      IF VBAK-OBJNR IS NOT INITIAL.
+        OBJNR = VBAK-OBJNR.
+      ELSE.
+        OBJNR = XVBAK-OBJNR.
+      ENDIF.
+
+      SELECT SINGLE * FROM jest INTO lv_jest WHERE objnr = OBJNR   AND INACT = '' AND stat LIKE 'E%' .
+*        BREAK-POINT .
+      SELECT * FROM ZSTATUS_USER INTO TABLE IT_ZSTATUS_USER WHERE USERNAME = SY-UNAME .
+      CALL FUNCTION 'STATUS_READ'
+      EXPORTING
+        OBJNR                  = OBJNR
+        ONLY_ACTIVE            = 'X'
+      IMPORTING
+        OBTYP                  = OBTYP
+        STSMA                  = STSMA
+        STONR                  = STONR
+      TABLES
+        STATUS                 = STATUS
+      EXCEPTIONS
+        OBJECT_NOT_FOUND       = 1
+        OTHERS                 = 2.
+      IF STATUS IS NOT INITIAL .
+        DELETE STATUS WHERE STAT+(1) = 'I' .
+      ENDIF .
+*      IF lv_jest-STAT = 'E0002' OR lv_jest-STAT = 'E0001'  .
+
+      BREAK-POINT .
+      READ TABLE STATUS INTO W_STATUS WITH KEY  INACT = '' . "" STAT = 'E0005'
+  If SY-SUBRC = 0 AND W_STATUS-STAT = 'E0002' AND LV_JEST-STAT NE 'E0002'.
+     IF LV_JEST-STAT NE 'E0001' .
+        MESSAGE 'You are not allowed to change status' TYPE 'E' .
+     ENDIF .
+  ELSEIF SY-SUBRC = 0 AND W_STATUS-STAT = 'E0001' AND LV_JEST-STAT NE 'E0001' .
+     IF LV_JEST-STAT NE 'E0002' .
+        MESSAGE 'You are not allowed to change status' TYPE 'E' .
+     ENDIF .
+**   ELSEIF SY-SUBRC = 0 AND  W_STATUS-STAT EQ 'E0002' AND  LV_JEST-STAT EQ 'E0002' .
+**     IF LV_JEST-STAT EQ 'E0002' .
+**        MESSAGE 'You are not allowed to change status' TYPE 'E' .
+**     ENDIF .
+     ENDIF .
+
+***      IF SY-SUBRC = 0 AND W_STATUS-STAT = 'E0001'.
+***        READ TABLE IT_ZSTATUS_USER INTO W_ZSTATUS_USER WITH KEY USERNAME = SY-UNAME  ALLOWED_STATUS = W_STATUS-STAT .
+***        IF SY-SUBRC NE 0 .
+***          MESSAGE 'You are not allowed to changes status' TYPE 'E' .
+***        ENDIF .
+      IF SY-SUBRC = 0 AND  W_STATUS-STAT EQ 'E0002' AND  LV_JEST-STAT EQ 'E0001' .
+        READ TABLE    IT_ZSTATUS_USER INTO W_ZSTATUS_USER WITH KEY USERNAME = SY-UNAME  ALLOWED_STATUS = W_STATUS-STAT .
+        IF SY-SUBRC NE 0 .
+        MESSAGE 'You are not allowed to changes status' TYPE 'E' .
+        ENDIF .
+        ELSEIF SY-SUBRC = 0 AND  W_STATUS-STAT EQ 'E0002' AND  LV_JEST-STAT EQ 'E0002' .
+        READ TABLE    IT_ZSTATUS_USER INTO W_ZSTATUS_USER WITH KEY USERNAME = SY-UNAME  ALLOWED_STATUS = W_STATUS-STAT .
+        IF SY-SUBRC NE 0 .
+        MESSAGE 'You are not allowed to changes status, Sale order already approved' TYPE 'E' .
+        ENDIF .
+      ENDIF .
+
+      CLEAR : W_STATUS .
+
+    ENDIF.
+*******************************************************************************************************************************************
+
+
+
+
+
+
+
+
+
+*  BREAK-POINT.
+*if sy-tcode = 'VA01'.
+* DATA :
+*          T_ZSD_USER TYPE STANDARD TABLE OF ZSD_USER,
+**          T_MARD TYPE STANDARD TABLE OF TY_MARD,
+**          W_MARD TYPE TY_MARD,
+*          W_ZSD_USER TYPE ZSD_USER.
+**          L1 TYPE I.
+**   CLEAR : W_ZSD_USER,W_MARD.
+*   REFRESH : T_ZSD_USER.",T_MARD.
+**   SELECT MATNR
+**          WERKS
+**          LGORT
+**          FROM MARD
+**          INTO TABLE T_MARD
+**          WHERE MATNR = VBAP-MATNR AND
+**                WERKS = VBAP-WERKS.
+**     CLEAR L1.
+**     DESCRIBE TABLE T_MARD LINES L1.
+**
+**     IF L1 = '1'.
+**      CLEAR W_MARD .
+**      READ TABLE T_MARD INTO W_MARD INDEX 1 .
+**        IF SY-SUBRC = 0.
+**          VBAP-LGORT = W_MARD-LGORT.                    "Storage Location
+**          ENDIF.
+**       ENDIF.
+*
+*    SELECT MANDT
+*           VKORG
+*           USER1
+*           FROM ZSD_USER
+*           INTO TABLE T_ZSD_USER
+*           WHERE VKORG = VBAK-VKORG AND
+*                 USER1 = VBAK-ERNAM.
+*    CLEAR : W_ZSD_USER.
+*    READ TABLE T_ZSD_USER INTO W_ZSD_USER WITH KEY VKORG = VBAK-VKORG
+*                                                   USER1 = SY-UNAME.
+*
+* IF SY-SUBRC = 0.
+*    VBAP-ABGRU = 'Z3'.        "authorization block
+*  ENDIF.
+*endif.
+***  BREAK ABAPCONS.
+***
+*** IF SY-TCODE = 'VA01'.
+***
+***   DATA : T_ZCUST_MASTER TYPE STANDARD TABLE OF ZCUST_MASTER,
+***           W_ZCUST_MASTER TYPE ZCUST_MASTER.
+***
+***
+***     IF VBAK-ZZTRANSP IS INITIAL.
+***       REFRESH : T_ZCUST_MASTER.
+***
+***    SELECT  *
+***           FROM ZCUST_MASTER
+***           INTO CORRESPONDING FIELDS OF TABLE T_ZCUST_MASTER
+***           WHERE KUNNR   = VBAK-KUNNR.
+***
+***       CLEAR : W_ZCUST_MASTER.
+***      READ TABLE T_ZCUST_MASTER INTO W_ZCUST_MASTER INDEX 1 .
+***         IF SY-SUBRC = 0.
+***
+***       IF VBAK-AUART = 'YGSO'.
+***
+***            IF W_ZCUST_MASTER-ZTRANSP = '6'.
+***               VBAK-ZZTRANSP      =   W_ZCUST_MASTER-ZTRANSP.
+***               VBAK-ZZPDCHRG      =   W_ZCUST_MASTER-ZPDCHRG.
+***               VBAK-ZZPLOAD       =   W_ZCUST_MASTER-ZPLOAD.
+***               VBAK-ZZDESTN       =   W_ZCUST_MASTER-ZDESTN.
+***               VBAK-ZZAIRPORT     =   W_ZCUST_MASTER-ZAIRPORT.
+***             ELSEIF W_ZCUST_MASTER-ZTRANSP2 = '6'.
+***               VBAK-ZZTRANSP      =   W_ZCUST_MASTER-ZTRANSP2.
+***               VBAK-ZZPDCHRG     =   W_ZCUST_MASTER-ZPDCHRG2.
+***               VBAK-ZZPLOAD      =   W_ZCUST_MASTER-ZPLOAD2.
+***               VBAK-ZZDESTN      =   W_ZCUST_MASTER-ZDESTN2.
+***               VBAK-ZZAIRPORT    =   W_ZCUST_MASTER-ZAIRPORT2.
+***             ELSEIF W_ZCUST_MASTER-ZTRANSP3 = '6'.
+***              VBAK-ZZTRANSP      =   W_ZCUST_MASTER-ZTRANSP3.
+***              VBAK-ZZPDCHRG     =   W_ZCUST_MASTER-ZPDCHRG3.
+***               VBAK-ZZPLOAD      =   W_ZCUST_MASTER-ZPLOAD3.
+***               VBAK-ZZDESTN      =   W_ZCUST_MASTER-ZDESTN3.
+***               VBAK-ZZAIRPORT    =   W_ZCUST_MASTER-ZAIRPORT3.
+***             ELSEIF W_ZCUST_MASTER-ZTRANSP4 = '6'.
+***               VBAK-ZZTRANSP      =  W_ZCUST_MASTER-ZTRANSP4.
+***               VBAK-ZZPDCHRG     =   W_ZCUST_MASTER-ZPDCHRG4.
+***               VBAK-ZZPLOAD      =   W_ZCUST_MASTER-ZPLOAD4.
+***               VBAK-ZZDESTN      =   W_ZCUST_MASTER-ZDESTN4.
+***               VBAK-ZZAIRPORT    =   W_ZCUST_MASTER-ZAIRPORT4.
+***           ENDIF.
+***
+***
+***               VBAK-ZZLDSTYL      =   W_ZCUST_MASTER-ZLDSTYL.
+***               VBAK-ZZMAXSHIP     =   W_ZCUST_MASTER-ZMAXSHIP.
+***               VBAK-ZZMINSHIP     =   W_ZCUST_MASTER-ZMINSHIP.
+***               VBAK-ZZPALLET      =   W_ZCUST_MASTER-ZPALLET.
+***               VBAK-ZZDATE1       =   W_ZCUST_MASTER-ZDATE1.
+***               VBAK-ZZDAYS        =   W_ZCUST_MASTER-ZDAYS .
+***               VBAK-ZZBLTYPE      =   W_ZCUST_MASTER-ZBLTYPE.
+***               VBAK-ZZINCO1       =   W_ZCUST_MASTER-ZINCO1.
+***               VBAK-ZZINCO2       =   W_ZCUST_MASTER-ZINCO2.
+***
+***         ENDIF.
+***
+***
+****       ELSE.
+***
+***
+***         IF W_ZCUST_MASTER-ZTRANSP = '3' OR  W_ZCUST_MASTER-ZTRANSP2 = '3' OR  W_ZCUST_MASTER-ZTRANSP3 = '3'
+***           OR  W_ZCUST_MASTER-ZTRANSP4 = '3'.
+****
+***              IF W_ZCUST_MASTER-ZTRANSP = '3'.
+***               VBAK-ZZTRANSP      =   W_ZCUST_MASTER-ZTRANSP.
+***               VBAK-ZZPDCHRG      =   W_ZCUST_MASTER-ZPDCHRG.
+***               VBAK-ZZPLOAD       =   W_ZCUST_MASTER-ZPLOAD.
+***               VBAK-ZZDESTN       =   W_ZCUST_MASTER-ZDESTN.
+***               VBAK-ZZAIRPORT     =   W_ZCUST_MASTER-ZAIRPORT.
+***             ELSEIF W_ZCUST_MASTER-ZTRANSP2 = '3'.
+***               VBAK-ZZTRANSP      =  W_ZCUST_MASTER-ZTRANSP2.
+***               VBAK-ZZPDCHRG     =   W_ZCUST_MASTER-ZPDCHRG2.
+***               VBAK-ZZPLOAD      =   W_ZCUST_MASTER-ZPLOAD2.
+***               VBAK-ZZDESTN      =   W_ZCUST_MASTER-ZDESTN2.
+***               VBAK-ZZAIRPORT    =   W_ZCUST_MASTER-ZAIRPORT2.
+***             ELSEIF W_ZCUST_MASTER-ZTRANSP3 = '3'.
+***               VBAK-ZZTRANSP      =  W_ZCUST_MASTER-ZTRANSP3.
+***               VBAK-ZZPDCHRG     =   W_ZCUST_MASTER-ZPDCHRG3.
+***               VBAK-ZZPLOAD      =   W_ZCUST_MASTER-ZPLOAD3.
+***               VBAK-ZZDESTN      =   W_ZCUST_MASTER-ZDESTN3.
+***               VBAK-ZZAIRPORT    =   W_ZCUST_MASTER-ZAIRPORT3.
+***             ELSEIF W_ZCUST_MASTER-ZTRANSP4 = '3'.
+***               VBAK-ZZTRANSP      =  W_ZCUST_MASTER-ZTRANSP4.
+***               VBAK-ZZPDCHRG     =   W_ZCUST_MASTER-ZPDCHRG4.
+***               VBAK-ZZPLOAD      =   W_ZCUST_MASTER-ZPLOAD4.
+***               VBAK-ZZDESTN      =   W_ZCUST_MASTER-ZDESTN4.
+***               VBAK-ZZAIRPORT    =   W_ZCUST_MASTER-ZAIRPORT4.
+***           ENDIF.
+****
+***
+***               VBAK-ZZLDSTYL      =   W_ZCUST_MASTER-ZLDSTYL.
+***               VBAK-ZZMAXSHIP     =   W_ZCUST_MASTER-ZMAXSHIP.
+***               VBAK-ZZMINSHIP     =   W_ZCUST_MASTER-ZMINSHIP.
+***               VBAK-ZZPALLET      =   W_ZCUST_MASTER-ZPALLET.
+***               VBAK-ZZDATE1       =   W_ZCUST_MASTER-ZDATE1.
+***               VBAK-ZZDAYS        =   W_ZCUST_MASTER-ZDAYS .
+***               VBAK-ZZBLTYPE      =   W_ZCUST_MASTER-ZBLTYPE.
+***               VBAK-ZZINCO1       =   W_ZCUST_MASTER-ZINCO1.
+***               VBAK-ZZINCO2       =   W_ZCUST_MASTER-ZINCO2.
+***
+***          ENDIF.
+****     ENDIF.
+***
+***   ENDIF.
+***       ENDIF.
+***    ENDIF.
+
+
+
+ENDENHANCEMENT.
+ENHANCEMENT 2  ZSD_VA01_REFERENCESTAT_VAL.    "active version
+**IF sy-tcode = 'VA01'.
+**BREAK-POINT.
+**ENDIF.
+ENDENHANCEMENT.
+*$*$-End:   (8)---------------------------------------------------------------------------------$*$*
+
+* Example:
+* CALL FUNCTION 'ZZ_EXAMPLE'
+*      IN UPDATE TASK
+*      EXPORTING
+*           ZZTAB = ZZTAB.
+
+ENDFORM.
+*eject
+*---------------------------------------------------------------------*
+*       FORM USEREXIT_SAVE_DOCUMENT_PREPARE                           *
+*---------------------------------------------------------------------*
+*       This userexit can be used for changes or checks, before a     *
+*       document is saved.                                            *
+*                                                                     *
+*       If field T180-TRTYP contents 'H', the document will be        *
+*       created, else it will be changed.                             *
+*                                                                     *
+*       This form is called at the beginning of form BELEG_SICHERN    *
+*                                                                     *
+*---------------------------------------------------------------------*
+FORM USEREXIT_SAVE_DOCUMENT_PREPARE.
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""$"$\SE:(9) Form USEREXIT_SAVE_DOCUMENT_PREPARE, Start                                                                                                        A
+*$*$-Start: (9)---------------------------------------------------------------------------------$*$*
+ENHANCEMENT 1  ZKOSTL.    "active version
+if sy-tcode = 'VA01'.
+if vbak-auart = 'YGSO' or vbak-auart = 'YGCR' or vbak-auart = 'YGDR'.
+data lv_kostl  TYPE ZSD_SALE_GRP_TBL.
+DATA LV_KOSTL1 TYPE BSEG-KOSTL.
+data gs_vbap like  LINE OF xvbap[].
+
+READ TABLE xvbap INTO gs_vbap INDEX 1.
+clear: lv_kostl,LV_KOSTL1.
+SELECT SINGLE cost_center FROM ZSD_SALE_GRP_TBL INTO lv_kostl  WHERE SALES_GROUP = vbak-vkgrp and PLANT = gs_vbap-werks.
+SELECT SINGLE COST_CENTER FROM ZSD_SALE_GRP_TBL INTO LV_KOSTL1 WHERE SALES_GROUP = VBAK-VKGRP AND PLANT = GS_VBAP-WERKS.
+
+  CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+    EXPORTING
+      INPUT        = LV_KOSTL1
+   IMPORTING
+     OUTPUT        = LV_KOSTL1.
+
+if lv_kostl1 is  INITIAl.
+  MESSAGE 'Cost center does not exist in master data' TYPE 'E'.
+else.
+  vbak-kostl = lv_kostl1.
+endif.
+endif.
+endif.
+"""""""""""""for order type and inspection typ evalidation of material 09.02.21""""
+if sy-tcode = 'VA01'  or sy-tcode = 'VA02'.
+  TABLES:qmat.
+  DATA:msg TYPE string.
+  DATA: wA_qmat TYPE qmat.
+  if VBAK-AUART = 'YGRE'.
+    delete xvbap[]  WHERE kwmeng is INITIAL.
+    loop AT  xvbap INTO gs_vbap.
+      SELECT SINGLE * FROM qmat INTO wa_qmat
+                                        WHERE art = '05'
+                                        and   matnr = gs_vbap-matnr
+                                        and   werks = GS_VBAP-WERKS.
+        if wa_qmat is INITIAL.
+          CONCATENATE 'Inspection type NOT maintained for' gs_vbap-matnr 'and' gs_vbap-werks INTO msg SEPARATED BY space.
+          MESSAGE msg TYPE 'E'.
+*          MESSAGE 'Inspection type NOT maintained for Material and Plant' TYPE 'E'.
+*          screen-required = '1'.
+        endif.
+     CLEAR:wa_qmat,gs_vbap.
+    ENDLOOP.
+  endif.
+ENDIF.
+"""""end of editing""""
+ENDENHANCEMENT.
+ENHANCEMENT 2  ZSD_AUTH_BLOCK_VALIDATION.    "active version
+*
+*
+
+IF SY-TCODE = 'VA02'.
+
+  TYPES :     BEGIN OF TY_VBAP_TEMP,
+               VBELN TYPE VBAP-VBELN,
+               POSNR TYPE VBAP-POSNR,
+               ABGRU TYPE VBAP-ABGRU,
+             END OF TY_VBAP_TEMP.
+
+  DATA :   IT_VBAP_TMP TYPE TABLE OF TY_VBAP_TEMP,
+           IT_VBAP_TEMP TYPE TABLE OF TY_VBAP_TEMP,
+           WA_VBAP_TMP TYPE TY_VBAP_TEMP,
+           L_VBAP_TEMP TYPE VBELN_VA.
+
+  SELECT  VBELN
+          POSNR
+          ABGRU
+     FROM VBAP INTO TABLE IT_VBAP_TMP
+     WHERE VBELN = VBAK-VBELN.
+
+  LOOP AT XVBAP.
+    CLEAR WA_VBAP_TMP.
+    READ TABLE IT_VBAP_TMP INTO WA_VBAP_TMP WITH KEY VBELN = XVBAP-VBELN
+                                             POSNR = XVBAP-POSNR.
+    IF SY-SUBRC  EQ 0.
+
+      IF XVBAP-ABGRU = '' AND WA_VBAP_TMP-ABGRU = 'Z3'.
+        APPEND WA_VBAP_TMP TO IT_VBAP_TEMP.
+        L_VBAP_TEMP = WA_VBAP_TMP-VBELN.
+      ENDIF.
+    ENDIF.
+  ENDLOOP.
+
+*** Code
+  IF IT_VBAP_TEMP IS NOT INITIAL.
+    IF VBAK-AUART = 'YGSO' OR VBAK-AUART = 'YGSP'.
+
+      DATA:IT_RECEIVERS    TYPE TABLE OF  SOMLRECI1,
+           WA_IT_RECEIVERS LIKE LINE OF IT_RECEIVERS,
+           IT_PACKING_LIST TYPE TABLE OF  SOPCKLSTI1,
+           GD_DOC_DATA     TYPE SODOCCHGI1,
+           WA_IT_PACKING_LIST LIKE LINE OF  IT_PACKING_LIST,
+           PSUBJECT(90)       TYPE C,
+           IT_MESSAGE         TYPE STANDARD TABLE OF SOLISTI1,
+           WA_IT_MESSAGE      LIKE LINE OF IT_MESSAGE,
+           NUM_LINES TYPE I,
+           IT_MAILID TYPE TABLE OF ZVA02_MAIL_ID,
+           WA_MAILID TYPE ZVA02_MAIL_ID,
+           IT_LINES TYPE TABLE OF TLINE WITH HEADER LINE,
+           NAME1 TYPE NAME1_GP,
+           NAME2 TYPE NAME2_GP,
+           C1 TYPE STRING,
+           C2 TYPE THEAD-TDNAME,
+           T3 TYPE CHAR18,
+           T4 TYPE CHAR3,
+           T5 TYPE CHAR15,
+           T6 TYPE CHAR255,
+           t7 TYPE char15,
+           t8 TYPE char30.
+
+******* Code to Convert into PDF  ***************************
+      TYPES: BEGIN OF TY_VBAK,
+              VBELN TYPE VBAK-VBELN,
+              ERDAT TYPE VBAK-ERDAT,
+              AUART TYPE VBAK-AUART,
+              WAERK TYPE VBAK-WAERK,
+              KNUMV TYPE VBAK-KNUMV,
+              BSTNK TYPE VBAK-BSTNK,
+              KUNNR TYPE VBAK-KUNNR,
+              AUTLF TYPE VBAK-AUTLF,
+              VKORG TYPE VBAK-VKORG,
+              VTWEG TYPE VBAK-VTWEG,
+              SPART TYPE VBAK-SPART,
+              VKGRP TYPE VBAK-VKGRP,
+              BUKRS_VF TYPE VBAK-BUKRS_VF,
+              ZZTRANSP TYPE VBAK-ZZTRANSP,
+              ZZPDCHRG TYPE VBAK-ZZPDCHRG,
+              ZZPLOAD TYPE VBAK-ZZPLOAD,
+              ZZDESTN TYPE VBAK-ZZDESTN,
+              ZZLDSTYL TYPE VBAK-ZZLDSTYL,
+              ZZBLTYPE TYPE VBAK-ZZBLTYPE,
+              ZZINCO1 TYPE VBAK-ZZINCO1,
+              ZZINCO2 TYPE VBAK-ZZINCO2,
+            END OF TY_VBAK,
+
+*Structure declaration for Sales order item
+            BEGIN OF TYP_VBAP,
+             VBELN TYPE VBELN_VA,               "Sales Document
+             POSNR TYPE POSNR_VA,               "Sales Document Item
+             MATNR TYPE MATNR,
+             KDMAT TYPE MATNR_KU,
+             KWMENG TYPE KWMENG,
+             VRKME TYPE VRKME,
+             WERKS TYPE WERKS_EXT,
+            END OF TYP_VBAP,
+
+*Structure declaration for Sales Document: Business Data
+           BEGIN OF TY_VBKD,
+             VBELN TYPE VBELN,               "Sales Document
+             POSNR TYPE POSNR,               "Sales Document Item
+             INCO1 TYPE INCO1,
+             INCO2 TYPE INCO2,
+             ZTERM TYPE DZTERM,
+             BSTDK_E TYPE VBKD-BSTDK_E,
+           END OF TY_VBKD,
+
+* Structure declaration for Sales Document: Schedule Line Data
+           BEGIN OF TY_VBEP,
+             VBELN TYPE VBELN_VA,               "Sales Document
+             POSNR TYPE POSNR_VA,               "Sales Document Item
+             EDATU TYPE EDATU,                  "Schedule line date
+           END OF TY_VBEP,
+
+* Structure declaration for Addresses (Business Address Services)
+              BEGIN OF TY_ADRC,
+              ADDRNUMBER TYPE AD_ADDRNUM,           "Address number
+              NAME1   TYPE AD_NAME1,                               "Name 1
+              NAME2   TYPE AD_NAME2,                               "Name 2
+              CITY1   TYPE AD_CITY1,                 "City
+              POST_CODE1 TYPE  AD_PSTCD1,        "City postal code
+              STREET   TYPE AD_STREET,         "Street
+              HOUSE_NUM1 TYPE AD_HSNM1,        "House Number
+              STR_SUPPL1 TYPE AD_STRSPP1,                         "Street 2
+              STR_SUPPL2 TYPE AD_STRSPP2,                         "Street 3
+              COUNTRY   TYPE LAND1,             "Country Key
+              REGION TYPE REGIO,
+              TEL_NUMBER TYPE AD_TLNMBR1,           "First telephone no.: dialling code+number
+              FAX_NUMBER  TYPE  AD_FXNMBR1,      "First fax no.: dialling code+number
+              END OF TY_ADRC,
+
+* Structure declaration for Sales Document: Partner
+              BEGIN OF TY_VBPA,
+              VBELN  TYPE  VBELN,         "Sales and Distribution Document Number
+              POSNR TYPE  POSNR,         "Item number of the SD document
+              KUNNR TYPE KUNNR,       "customer number
+              PARVW  TYPE  PARVW,         "Partner Function
+              ADRNR  TYPE  ADRNR,         "Address
+              END OF TY_VBPA,
+
+** Structure declaration for Sales Document Flow
+              BEGIN OF TY_VBFA,
+              VBELV   TYPE   VBELN_VON,      "Preceding sales and distribution document
+              POSNV    TYPE   POSNR_VON,          "Preceding item of an SD document
+              VBELN   TYPE   VBELN_NACH,     "Subsequent sales and distribution document
+              POSNN   TYPE   POSNR_NACH,   "  Subsequent item of an SD document
+              VBTYP_V  TYPE VBTYP_V,         "Document category of preceding SD document
+              END OF TY_VBFA,
+
+* Structure declaration for Conditions (Transaction Data)
+              BEGIN OF TY_KONV,
+              KNUMV  TYPE  KNUMV,        "Number of the document condition
+              KPOSN  TYPE  KPOSN,        "Condition item number
+              KSCHL  TYPE  KSCHA,        "Condition type
+              KBETR  TYPE  KBETR,        "Rate (condition amount or percentage)
+              KWERT  TYPE KWERT,        "Condition base value
+              KPEIN TYPE KPEIN,
+              KSTEU TYPE KSTEU,
+              END OF TY_KONV,
+
+* Structure declaration for Customers: Terms of Payment Texts
+              BEGIN OF TY_TVZBT,
+              SPRAS  TYPE SPRAS,         "Language Key
+              ZTERM  TYPE  DZTERM,       "Terms of Payment Key
+              VTEXT  TYPE  DZTERM_BEZ,    "Description of terms of payment
+              END OF TY_TVZBT,
+
+* Structure declaration for Customers: Terms of Payment Texts
+            BEGIN OF TY_TVGRT,
+             SPRAS TYPE SPRAS,
+             VKGRP TYPE VKGRP,
+             BEZEI TYPE BEZEI20,
+            END OF TY_TVGRT,
+
+*Structure declaration for STXD SAPscript text file header
+            BEGIN OF TY_STXH,
+             TDOBJECT TYPE TDOBJECT,
+             TDID TYPE TDID,
+             TDSPRAS TYPE SPRAS,
+             TDNAME TYPE TDOBNAME,
+            END OF TY_STXH,
+
+*Structure declaration for Country Names
+            BEGIN OF TY_T005T,
+             SPRAS TYPE SPRAS,                  "Language Key
+             LAND1 TYPE LAND1,                  "Country Key
+             LANDX TYPE LANDX,                  "Country Name
+             LANDX50 TYPE LANDX50,
+            END OF TY_T005T,
+
+*Structure declaration for Customer Material HTS Code(Chapter ID)
+            BEGIN OF TY_HTS,
+             WERKS TYPE WERKS_D,
+             KUNNR TYPE KUNNR,
+             MATNR TYPE MATNR,
+             BRAND TYPE ZSD_HTS-BRAND,
+             HTSC  TYPE J_1ICHID,
+            END OF TY_HTS,
+
+            BEGIN OF TY_KNVV,
+            KUNNR TYPE KUNNR,
+            VKORG TYPE VKORG,
+            VTWEG TYPE VTWEG,
+            SPART TYPE SPART,
+            INCO2 TYPE INCO2,
+            END OF TY_KNVV.
+
+*&---------------------------------------------------------------------*
+*Internal Table and Workarea declarations
+*&---------------------------------------------------------------------*
+*Internal Table and Workarea declaration for Sales order header
+      DATA:IT_VBAK TYPE STANDARD TABLE OF TY_VBAK INITIAL SIZE 0,
+           WA_VBAK TYPE TY_VBAK,
+
+*Internal Table and Workarea declaration for Sales order item
+           T_VBAP TYPE STANDARD TABLE OF TYP_VBAP INITIAL SIZE 0,
+           W_VBAP TYPE TYP_VBAP,
+
+*Internal Table and Workarea declaration for Sales Document: Business Data
+           IT_VBKD TYPE STANDARD TABLE OF TY_VBKD INITIAL SIZE 0,
+           WA_VBKD TYPE TY_VBKD,
+           IT_VBKD1 TYPE STANDARD TABLE OF TY_VBKD INITIAL SIZE 0,
+           WA_VBKD1 TYPE TY_VBKD,
+
+*Internal Table and Workarea declaration for Sales Document: Schedule Line Data
+           IT_VBEP TYPE STANDARD TABLE OF TY_VBEP INITIAL SIZE 0,
+           WA_VBEP TYPE TY_VBEP,
+
+*Internal Table and Workarea declaration for Conditions (Transaction Data)
+           IT_KONV TYPE STANDARD TABLE OF TY_KONV INITIAL SIZE 0,
+           WA_KONV TYPE TY_KONV,
+
+* Internal table and Workareadeclaration for Addresses (Business Address Services)(comp code)
+           IT_ADRC TYPE STANDARD TABLE OF TY_ADRC INITIAL SIZE 0,
+           WA_ADRC TYPE TY_ADRC,
+           IT_ADRC1 TYPE STANDARD TABLE OF TY_ADRC INITIAL SIZE 0,
+           WA_ADRC1 TYPE TY_ADRC,
+
+*Internal table and Workareadeclaration for Customers: Terms of Payment Texts
+           IT_TVZBT TYPE STANDARD TABLE OF TY_TVZBT INITIAL SIZE 0,
+           WA_TVZBT TYPE TY_TVZBT,
+
+*Internal table and Workareadeclaration for Customers: Terms of Payment Texts
+           IT_TVGRT TYPE STANDARD TABLE OF TY_TVGRT INITIAL SIZE 0,
+           WA_TVGRT TYPE TY_TVGRT,
+
+*Internal Table and Workarea declaration for Sales Document Flow
+           IT_VBFA TYPE STANDARD TABLE OF TY_VBFA INITIAL SIZE 0,
+           WA_VBFA TYPE TY_VBFA,
+           IT_VBFA1 TYPE STANDARD TABLE OF TY_VBFA INITIAL SIZE 0,
+           WA_VBFA1 TYPE TY_VBFA,
+           IT_VBFA2 TYPE STANDARD TABLE OF TY_VBFA INITIAL SIZE 0,
+           WA_VBFA2 TYPE TY_VBFA,
+           IT_VBFA3 TYPE STANDARD TABLE OF TY_VBFA INITIAL SIZE 0,
+           WA_VBFA3 TYPE TY_VBFA,
+
+*Internal Table and Workarea declaration for Sales Document: Partner
+           IT_VBPA TYPE STANDARD TABLE OF TY_VBPA INITIAL SIZE 0,
+           WA_VBPA TYPE TY_VBPA,
+           IT_VBPA1 TYPE STANDARD TABLE OF TY_VBPA INITIAL SIZE 0,
+           WA_VBPA1 TYPE TY_VBPA,
+
+*Internal Table and Workarea declaration for STXD SAPscript text file header
+           IT_STXH TYPE STANDARD TABLE OF TY_STXH INITIAL SIZE 0,
+           WA_STXH TYPE TY_STXH,
+
+*Internal Table and Workarea declaration for Country Names
+           IT_T005T TYPE STANDARD TABLE OF TY_T005T INITIAL SIZE 0,
+           WA_T005T TYPE TY_T005T,
+           IT_T005T1 TYPE STANDARD TABLE OF TY_T005T INITIAL SIZE 0,
+           WA_T005T1 TYPE TY_T005T,
+
+*Internal Table and Workarea declaration for Customer Material HTS Code(Chapter ID)
+           IT_HTS TYPE STANDARD TABLE OF TY_HTS INITIAL SIZE 0,
+           WA_HTS TYPE TY_HTS,
+
+*Internal Table and Workarea declaration for Final data
+           IT_ITEM TYPE STANDARD TABLE OF ZSD_ORDER_FORM INITIAL SIZE 0,
+           WA_ITEM TYPE ZSD_ORDER_FORM, "TY_OUTPUT,
+           WA_HEADER TYPE ZSD_ORDER_HEAD,
+
+* Inter table declaration for KNVV
+          IT_KNVV TYPE STANDARD TABLE OF TY_KNVV INITIAL SIZE 0,
+          WA_KNVV TYPE TY_KNVV,
+
+*&---------------------------------------------------------------------*
+*&Global Data declarations
+*&---------------------------------------------------------------------*
+          LV_BANKL TYPE KNBK-BANKL,
+          LV_BANKL1 TYPE KNBK-BANKL,
+          LV_RATE TYPE STRING.
+
+      CLEAR:  WA_VBPA,
+              WA_VBFA,
+              WA_KONV,
+              WA_VBAK,
+              W_VBAP,
+              WA_VBKD,
+              WA_ADRC,
+              WA_ADRC1,
+              WA_VBEP,
+              WA_TVZBT,
+              WA_TVGRT,
+              WA_HTS,
+              WA_KONV,
+              WA_T005T,
+              WA_T005T1,
+              LV_BANKL,
+              WA_HEADER.
+
+*Refreshing Internal tables
+      REFRESH:IT_KONV,
+              IT_VBAK,
+              IT_VBFA,
+              T_VBAP,
+              IT_VBKD,
+              IT_VBEP,
+              IT_TVZBT,
+              IT_TVGRT,
+              IT_HTS,
+              IT_ADRC,
+              IT_ADRC1,
+              IT_KONV,
+              IT_T005T,
+              IT_T005T1,
+              IT_ITEM.
+
+*Getting VBAK data
+      SELECT VBELN
+             ERDAT
+             AUART
+             WAERK
+             KNUMV
+             BSTNK
+             KUNNR
+             AUTLF
+             VKORG
+             VTWEG
+             SPART
+             VKGRP
+             BUKRS_VF
+             ZZTRANSP
+             ZZPDCHRG
+             ZZPLOAD
+             ZZDESTN
+             ZZLDSTYL
+             ZZBLTYPE
+             ZZINCO1
+             ZZINCO2 FROM VBAK
+             INTO TABLE IT_VBAK
+             WHERE VBELN = VBAK-VBELN.
+
+*Getting VBAP data
+      IF IT_VBAK IS NOT INITIAL.
+        SELECT
+               VBELN
+               POSNR
+               MATNR
+               KDMAT
+               KWMENG
+               VRKME
+               WERKS
+              FROM VBAP
+              INTO TABLE T_VBAP
+              FOR ALL ENTRIES IN IT_VBAK
+              WHERE VBELN = IT_VBAK-VBELN.
+      ENDIF.
+
+*Getting VBKD data
+      IF T_VBAP IS NOT INITIAL.
+        SELECT VBELN
+               POSNR
+               INCO1
+               INCO2
+               ZTERM
+               BSTDK_E FROM VBKD
+               INTO TABLE IT_VBKD
+               FOR ALL ENTRIES IN T_VBAP
+               WHERE VBELN = T_VBAP-VBELN
+                 AND POSNR = T_VBAP-POSNR.
+      ENDIF.
+
+      IF IT_VBAK IS NOT INITIAL.
+        SELECT VBELN
+               POSNR
+               INCO1
+               INCO2
+               ZTERM
+               BSTDK_E FROM VBKD
+               INTO TABLE IT_VBKD1
+               FOR ALL ENTRIES IN IT_VBAK
+               WHERE VBELN = IT_VBAK-VBELN
+                 AND POSNR = ''.
+      ENDIF.
+
+****Getting VBEP data
+      IF T_VBAP IS NOT INITIAL.
+        SELECT VBELN
+               POSNR
+               EDATU FROM VBEP
+               INTO TABLE IT_VBEP
+               FOR ALL ENTRIES IN T_VBAP
+               WHERE VBELN = T_VBAP-VBELN
+                 AND POSNR = T_VBAP-POSNR.
+      ENDIF.
+
+******Get TVZBT data*****
+*  CHECK IT_VBKD IS NOT INITIAL.
+      IF IT_VBKD IS NOT INITIAL.
+        SELECT  SPRAS        "Language Key
+                ZTERM       "Terms of Payment Key
+                VTEXT       "Description of terms of payment
+                FROM TVZBT
+                INTO TABLE IT_TVZBT
+                FOR ALL ENTRIES IN IT_VBKD
+                WHERE ZTERM = IT_VBKD-ZTERM
+                AND SPRAS EQ 'EN'.
+*****Get TVGRT data
+*    CHECK IT_VBKD IS NOT INITIAL.
+        SELECT  SPRAS        "Language Key
+                VKGRP
+                BEZEI
+                FROM TVGRT
+                INTO TABLE IT_TVGRT
+                FOR ALL ENTRIES IN IT_VBAK
+                WHERE VKGRP = IT_VBAK-VKGRP
+                AND SPRAS EQ 'EN'.
+      ENDIF.
+
+*****Getting VBPA data
+      IF IT_VBAK IS NOT INITIAL.
+        SELECT  VBELN         "Sales and Distribution Document Number
+                POSNR         "Item number of the SD document
+                KUNNR        "customer number
+                PARVW          "Partner Function
+                ADRNR           "Address
+                FROM VBPA
+                  INTO TABLE IT_VBPA
+                  FOR ALL ENTRIES IN IT_VBAK
+                  WHERE VBELN = IT_VBAK-VBELN
+                    AND ( PARVW = 'WE' OR PARVW = 'SH' ).
+
+        SELECT  VBELN         "Sales and Distribution Document Number
+                POSNR         "Item number of the SD document
+                KUNNR        "customer number
+                PARVW          "Partner Function
+                ADRNR           "Address
+                FROM VBPA
+                  INTO TABLE IT_VBPA1
+                  FOR ALL ENTRIES IN IT_VBAK
+                  WHERE VBELN = IT_VBAK-VBELN
+                    AND ( PARVW = 'RE' OR PARVW = 'BP' ).
+      ENDIF.
+
+*****get adrc_cc data
+      IF IT_VBPA IS NOT INITIAL.
+        SELECT  ADDRNUMBER               "Address number
+                NAME1                                             "Name 1
+                NAME2                                             "Name 2
+                CITY1                       "City
+                POST_CODE1                "City postal code
+                STREET                     "Street
+                HOUSE_NUM1         "House Number
+                STR_SUPPL1                                        "Street 2
+                STR_SUPPL2                                        "Street 3
+                COUNTRY                      "Country Key
+                REGION
+                TEL_NUMBER                    "First telephone no.: dialling code+number
+                FAX_NUMBER                     "First fax no.: dialling code+number
+                FROM ADRC
+                INTO TABLE IT_ADRC
+                FOR ALL ENTRIES IN IT_VBPA
+                WHERE ADDRNUMBER = IT_VBPA-ADRNR.
+      ENDIF.
+
+      IF IT_VBPA1 IS NOT INITIAL.
+        SELECT  ADDRNUMBER               "Address number
+                NAME1                                             "Name 1
+                NAME2                                             "Name 2
+                CITY1                       "City
+                POST_CODE1                "City postal code
+                STREET                     "Street
+                HOUSE_NUM1        "House Number
+                STR_SUPPL1                                        "Street 2
+                STR_SUPPL2                                        "Street 3
+                COUNTRY                      "Country Key
+                REGION
+                TEL_NUMBER                    "First telephone no.: dialling code+number
+                FAX_NUMBER                     "First fax no.: dialling code+number
+                FROM ADRC
+                INTO TABLE IT_ADRC1
+                FOR ALL ENTRIES IN IT_VBPA1
+                WHERE ADDRNUMBER = IT_VBPA1-ADRNR.
+      ENDIF.
+****get BANK details
+      IF IT_VBAK IS NOT INITIAL.
+        CLEAR WA_VBAK.
+        READ TABLE IT_VBAK INTO WA_VBAK INDEX 1.
+        SELECT SINGLE BANKL FROM KNBK
+               INTO LV_BANKL
+               WHERE KUNNR = WA_VBAK-KUNNR.
+        IF SY-SUBRC EQ 0.
+          SELECT SINGLE BANKA STRAS ORT01 BRNCH
+                 INTO CORRESPONDING FIELDS OF WA_HEADER
+                 FROM BNKA
+                 WHERE BANKL = LV_BANKL.
+        ENDIF.
+      ENDIF.
+
+*Getting KONV data
+      IF IT_VBAK IS NOT INITIAL.
+        SELECT  KNUMV      "Number of the document condition
+                KPOSN          "Condition item number
+                KSCHL       "Condition type
+                KBETR         "Rate (condition amount or percentage)
+                KWERT         "Condition base value        "Condition value
+                KPEIN
+                KSTEU
+                FROM KONV
+                INTO TABLE IT_KONV
+                FOR ALL ENTRIES IN IT_VBAK
+                WHERE KNUMV = IT_VBAK-KNUMV
+                AND KSCHL IN ('ZBSP' , 'ZSUR' , 'ZDSC' , 'ZCDS' , 'ZHDS' , 'ZPLC' , 'ZPLL' ,
+                              'ZADC' , 'ZF00' , 'ZINS' , 'ZBNK').
+      ENDIF.
+
+***********Getting  T005T data
+      IF IT_ADRC IS NOT INITIAL.
+        SELECT SPRAS
+               LAND1
+               LANDX
+               LANDX50 FROM T005T
+               INTO TABLE IT_T005T
+               FOR ALL ENTRIES IN IT_ADRC
+               WHERE SPRAS EQ 'EN'
+                 AND LAND1 = IT_ADRC-COUNTRY.
+      ENDIF.
+
+      IF IT_ADRC1 IS NOT INITIAL.
+        SELECT SPRAS
+               LAND1
+               LANDX
+               LANDX50 FROM T005T
+               INTO TABLE IT_T005T1
+               FOR ALL ENTRIES IN IT_ADRC1
+               WHERE SPRAS EQ 'EN'
+                 AND LAND1 = IT_ADRC1-COUNTRY.
+      ENDIF.
+
+****Getting  ZSD_HTS data
+      IF IT_VBAK IS NOT INITIAL.
+        SELECT WERKS
+               KUNNR
+               MATNR
+               BRAND
+               HTSC  FROM ZSD_HTS
+               INTO TABLE IT_HTS
+               FOR ALL ENTRIES IN IT_VBAK
+               WHERE KUNNR = IT_VBAK-KUNNR.
+      ENDIF.
+
+****Getting Final data*****************
+      CLEAR : WA_ITEM, WA_HEADER.
+      REFRESH : IT_ITEM.  "IT_PROFORMA.
+      DATA : T1 TYPE STRING,
+             T2 TYPE STRING,
+*         T3 TYPE STRING,
+             A1 TYPE STRING,
+             A2 TYPE STRING,
+             A3 TYPE STRING,
+*         T4 TYPE STRING,
+*         T5 TYPE STRING,
+*         T6 TYPE STRING,
+             X1 TYPE STRING,
+             X2 TYPE STRING,
+             SHIP TYPE STRING.
+      DATA : OUTPUT TYPE STRING,
+             D1 TYPE STRING,
+             D2 TYPE STRING,
+             D3 TYPE STRING,
+             L_INCO2 TYPE INCO2,
+             L_ZTERM TYPE DZTERM.
+      DATA : P1 TYPE P DECIMALS 2,
+             P2 TYPE P DECIMALS 2.
+      SORT T_VBAP BY VBELN POSNR.
+      SORT IT_VBAK BY VBELN.
+      SORT IT_KONV BY KNUMV KPOSN.
+
+      LOOP AT T_VBAP INTO W_VBAP.
+
+        WA_ITEM-VBELN = W_VBAP-VBELN.
+        WA_ITEM-POSNR = W_VBAP-POSNR.
+        WA_ITEM-MATNR = W_VBAP-MATNR.
+        WA_ITEM-KDMAT = W_VBAP-KDMAT.
+        X1 = W_VBAP-KWMENG.
+        SPLIT X1 AT '.' INTO X1 X2.
+        WA_ITEM-KWMENG = X1.
+        WA_ITEM-VRKME = W_VBAP-VRKME.
+
+        CLEAR WA_VBAK.
+        READ TABLE IT_VBAK INTO WA_VBAK WITH KEY VBELN = W_VBAP-VBELN.
+        IF SY-SUBRC = 0.
+          WA_HEADER-VBELN = WA_VBAK-VBELN.           "billing number
+          WA_HEADER-WAERK = WA_VBAK-WAERK.           "document currency
+          WA_HEADER-ZZINCO1 = WA_VBAK-ZZINCO1.           "delivery terms
+          WA_HEADER-ZZINCO2 = WA_VBAK-ZZINCO2.
+          WA_ITEM-BSTNK = WA_VBAK-BSTNK.
+          WA_HEADER-KURRF = P2.
+          WA_HEADER-BUKRS = WA_VBAK-BUKRS_VF.
+          WA_HEADER-ERDAT = WA_VBAK-ERDAT.
+          WA_HEADER-ZZTRANSP = WA_VBAK-ZZTRANSP.       "Mode of Transpert
+          WA_HEADER-ZZPDCHRG = WA_VBAK-ZZPDCHRG.      "Port of discharge
+          WA_HEADER-ZZPLOAD = WA_VBAK-ZZPLOAD.  "  Port of Loading
+          WA_HEADER-ZZDESTN = WA_VBAK-ZZDESTN.   "Place of Final Destination
+          WA_HEADER-ZZLDSTYL = WA_VBAK-ZZLDSTYL.
+          WA_HEADER-ZZBLTYPE = WA_VBAK-ZZBLTYPE.
+          WA_HEADER-KUNNR = WA_VBAK-KUNNR.
+          WA_HEADER-AUTLF = WA_VBAK-AUTLF.
+          WA_HEADER-AUART = WA_VBAK-AUART.
+        ENDIF.
+
+        CLEAR WA_HTS.
+        READ TABLE IT_HTS INTO WA_HTS WITH KEY KUNNR = WA_VBAK-KUNNR
+                                               MATNR = W_VBAP-MATNR.
+        IF SY-SUBRC EQ 0.
+          WA_ITEM-HTSC = WA_HTS-HTSC.
+          WA_ITEM-BRAND = WA_HTS-BRAND.
+        ENDIF.
+
+        CLEAR WA_VBPA.
+        READ TABLE IT_VBPA INTO WA_VBPA WITH KEY VBELN = WA_VBAK-VBELN
+                                                   PARVW = 'WE'.
+        IF SY-SUBRC = 0.
+          CLEAR : WA_ADRC,T1,T2,T3,T4,T5,T6,A1,A2,A3.
+          READ TABLE IT_ADRC INTO WA_ADRC WITH KEY ADDRNUMBER = WA_VBPA-ADRNR.
+          IF SY-SUBRC = 0.
+            WA_HEADER-CON_NAME1 = WA_ADRC-NAME1.
+            WA_HEADER-CON_NAME2 = WA_ADRC-NAME2.
+            WA_HEADER-CON_STREET = WA_ADRC-STREET.
+            WA_HEADER-CON_STR_SUPPL1 = WA_ADRC-STR_SUPPL1.
+            WA_HEADER-CON_STR_SUPPL2 = WA_ADRC-STR_SUPPL2.
+            WA_HEADER-CON_HOUSE_NUM1 = WA_ADRC-HOUSE_NUM1.
+            T1 = WA_ADRC-CITY1.
+            T2 = WA_ADRC-POST_CODE1.
+*            WA_HEADER-CON_COUNTRY = WA_ADRC-COUNTRY.
+            T3 = WA_ADRC-TEL_NUMBER.
+            T4 = WA_ADRC-FAX_NUMBER.
+
+            SELECT SINGLE BEZEI FROM T005U
+              INTO WA_HEADER-CON_REGION
+              WHERE BLAND = WA_ADRC-REGION
+                AND LAND1 = WA_ADRC-COUNTRY
+                AND SPRAS EQ 'EN'.
+
+            IF T1 IS NOT INITIAL.
+              CONCATENATE A1 T1 INTO A1.
+            ENDIF.
+
+            IF T2 IS NOT INITIAL.
+              CONCATENATE A1 T2 INTO A1 SEPARATED BY '-'.
+            ENDIF.
+
+            WA_HEADER-CON_CITY1 = A1.
+
+            IF T3 IS NOT INITIAL.
+              CONCATENATE 'PHONE' T3 INTO T3 SEPARATED BY ':'.
+            ENDIF.
+
+            WA_HEADER-CON_TEL_NUMBER  = T3.
+            IF T4 IS NOT INITIAL.
+              CONCATENATE 'FAX' T4 INTO T4 SEPARATED BY ':'.
+            ENDIF.
+            WA_HEADER-CON_FAX_NUMBER = T4.
+
+            CLEAR WA_T005T.
+            READ TABLE IT_T005T INTO WA_T005T WITH KEY LAND1 = WA_ADRC-COUNTRY .
+            IF SY-SUBRC = 0.
+              WA_HEADER-LANDX = WA_T005T-LANDX.
+              WA_HEADER-CON_COUNTRY = WA_T005T-LANDX.
+            ENDIF.
+
+*          WA_HEADER-CON_CITY1 = A1.
+*          CONCATENATE WA_HEADER-CON_CITY1 WA_HEADER-CON_COUNTRY INTO WA_HEADER-CON_CITY1 SEPARATED BY ','.
+          ENDIF.
+        ENDIF.
+
+*Bill to party
+        CLEAR WA_VBPA1.
+        READ TABLE IT_VBPA1 INTO WA_VBPA1 WITH KEY VBELN = WA_VBAK-VBELN
+                                                   PARVW = 'RE' .
+        IF SY-SUBRC = 0.
+          CLEAR : WA_ADRC1,T1,T2,T3,T4,T5,T6,A1,A2,A3.
+          READ TABLE IT_ADRC1 INTO WA_ADRC1 WITH KEY ADDRNUMBER = WA_VBPA1-ADRNR .
+          IF SY-SUBRC = 0.
+            WA_HEADER-BUYER_NAME1 = WA_ADRC1-NAME1.
+            WA_HEADER-BUYER_NAME2 = WA_ADRC1-NAME2.
+            T1 = WA_ADRC1-CITY1.
+            WA_HEADER-BUYER_COUNTRY = WA_ADRC1-COUNTRY.
+            T4 = WA_ADRC1-FAX_NUMBER.
+            T3 = WA_ADRC1-TEL_NUMBER.
+            T2 = WA_ADRC1-POST_CODE1.
+            WA_HEADER-BUYER_STR_SUPPL1 = WA_ADRC1-STR_SUPPL1.
+            WA_HEADER-BUYER_STR_SUPPL2 = WA_ADRC1-STR_SUPPL2.
+            WA_HEADER-BUYER_STREET = WA_ADRC1-STREET.
+            WA_HEADER-BUYER_HOUSE_NUM1 = WA_ADRC1-HOUSE_NUM1.
+            SELECT SINGLE BEZEI FROM T005U
+              INTO WA_HEADER-BUYER_REGION
+              WHERE BLAND = WA_ADRC1-REGION
+                AND LAND1 = WA_ADRC1-COUNTRY
+                AND SPRAS EQ 'EN'.
+            CLEAR WA_T005T1.
+            READ TABLE IT_T005T1 INTO WA_T005T1 WITH KEY LAND1 = WA_ADRC1-COUNTRY .
+            IF SY-SUBRC = 0.
+              WA_HEADER-BUYER_COUNTRY = WA_T005T1-LANDX.
+            ENDIF.
+            IF T1 IS NOT INITIAL.
+              CONCATENATE A1 T1 INTO A1.
+            ENDIF.
+
+            IF T2 IS NOT INITIAL.
+              CONCATENATE A1 T2 INTO A1 SEPARATED BY '-'.
+            ENDIF.
+
+            WA_HEADER-BUYER_CITY1 = A1.
+*          CONCATENATE    WA_HEADER-BUYER_CITY1   WA_HEADER-BUYER_COUNTRY INTO WA_HEADER-BUYER_CITY1 SEPARATED BY ','.
+
+            IF T3 IS NOT INITIAL.
+              CONCATENATE 'PHONE' T3 INTO T3 SEPARATED BY ':'.
+            ENDIF.
+            WA_HEADER-BUYER_TEL_NUMBER = T3.
+
+            IF T4 IS NOT INITIAL.
+              CONCATENATE 'FAX' T4 INTO T4 SEPARATED BY ':'.
+            ENDIF.
+            WA_HEADER-BUYER_FAX_NUMBER = T4.
+*          WA_HEADER-BUYER_CITY1 = A1.
+*          CONCATENATE    WA_HEADER-BUYER_CITY1   WA_HEADER-LANDX INTO WA_HEADER-BUYER_CITY1 SEPARATED BY ','.
+
+          ENDIF.
+        ENDIF.
+
+        CLEAR WA_KONV.
+        CLEAR LV_RATE.
+        READ TABLE IT_KONV INTO WA_KONV WITH KEY KNUMV = WA_VBAK-KNUMV
+                                                 KPOSN = W_VBAP-POSNR
+                                                 KSCHL = 'ZBSP'.
+        IF SY-SUBRC = 0.
+*      WA_KONV-KBETR = WA_KONV-KBETR / WA_KONV-KPEIN.
+          LV_RATE = WA_KONV-KBETR / WA_KONV-KPEIN.
+          WA_ITEM-RATE = LV_RATE.   "WA_KONV-KBETR.
+          WA_ITEM-KSTEU = WA_KONV-KSTEU.
+          WA_ITEM-KWERT = WA_KONV-KWERT.  "WA_ITEM-RATE * W_VBAP-KWMENG. Changed on 25.06.2013
+        ENDIF.
+*For Surcharges
+        CLEAR WA_KONV.
+        READ TABLE IT_KONV INTO WA_KONV WITH KEY KNUMV = WA_VBAK-KNUMV
+                                                 KPOSN = W_VBAP-POSNR
+                                                 KSCHL = 'ZSUR' .
+        IF SY-SUBRC = 0.
+          WA_ITEM-SURRATE = WA_KONV-KBETR.
+          WA_ITEM-SURAMT  = WA_KONV-KWERT.
+          WA_ITEM-KSTEU_S = WA_KONV-KSTEU.
+        ENDIF.
+*For Less Discount
+        CLEAR WA_KONV.
+        READ TABLE IT_KONV INTO WA_KONV WITH KEY KNUMV = WA_VBAK-KNUMV
+                                                 KPOSN = W_VBAP-POSNR
+                                                 KSCHL = 'ZDSC'.
+        IF SY-SUBRC = 0.
+          WA_HEADER-DISCNT  = WA_HEADER-DISCNT + WA_KONV-KWERT.
+        ENDIF.
+
+        CLEAR WA_KONV.
+        READ TABLE IT_KONV INTO WA_KONV WITH KEY KNUMV = WA_VBAK-KNUMV
+                                                 KPOSN = W_VBAP-POSNR
+                                                 KSCHL = 'ZHDS'.
+        IF SY-SUBRC = 0.
+          WA_HEADER-DISCNT  = WA_HEADER-DISCNT + WA_KONV-KWERT.
+        ENDIF.
+
+        CLEAR WA_KONV.
+        READ TABLE IT_KONV INTO WA_KONV WITH KEY KNUMV = WA_VBAK-KNUMV
+                                                 KPOSN = W_VBAP-POSNR
+                                                 KSCHL = 'ZCDS'.
+        IF SY-SUBRC = 0.
+          WA_HEADER-DISCNT  = WA_HEADER-DISCNT + WA_KONV-KWERT.
+        ENDIF.
+
+*For Additions
+        CLEAR WA_KONV.
+        READ TABLE IT_KONV INTO WA_KONV WITH KEY KNUMV = WA_VBAK-KNUMV
+                                                 KPOSN = W_VBAP-POSNR
+                                                 KSCHL = 'ZPLC'.
+        IF SY-SUBRC = 0.
+          WA_HEADER-ADDTN  = WA_HEADER-ADDTN + WA_KONV-KWERT.
+        ENDIF.
+
+        CLEAR WA_KONV.
+        READ TABLE IT_KONV INTO WA_KONV WITH KEY KNUMV = WA_VBAK-KNUMV
+                                                 KPOSN = W_VBAP-POSNR
+                                                 KSCHL = 'ZPLL'.
+        IF SY-SUBRC = 0.
+          WA_HEADER-ADDTN  = WA_HEADER-ADDTN + WA_KONV-KWERT.
+        ENDIF.
+
+        CLEAR WA_KONV.
+        READ TABLE IT_KONV INTO WA_KONV WITH KEY KNUMV = WA_VBAK-KNUMV
+                                                 KPOSN = W_VBAP-POSNR
+                                                 KSCHL = 'ZADC'.
+        IF SY-SUBRC = 0.
+          WA_HEADER-ADDTN  = WA_HEADER-ADDTN + WA_KONV-KWERT.
+        ENDIF.
+
+        CLEAR WA_KONV.
+        READ TABLE IT_KONV INTO WA_KONV WITH KEY KNUMV = WA_VBAK-KNUMV
+                                                 KPOSN = W_VBAP-POSNR
+                                                 KSCHL = 'ZINS'.
+        IF SY-SUBRC = 0.
+          WA_HEADER-ADDTN  = WA_HEADER-ADDTN + WA_KONV-KWERT.
+        ENDIF.
+
+        CLEAR WA_KONV.
+        READ TABLE IT_KONV INTO WA_KONV WITH KEY KNUMV = WA_VBAK-KNUMV
+                                                 KPOSN = W_VBAP-POSNR
+                                                 KSCHL = 'ZF00'.
+        IF SY-SUBRC = 0.
+          WA_HEADER-ADDTN  = WA_HEADER-ADDTN + WA_KONV-KWERT.
+        ENDIF.
+
+        CLEAR WA_KONV.
+        READ TABLE IT_KONV INTO WA_KONV WITH KEY KNUMV = WA_VBAK-KNUMV
+                                                 KPOSN = W_VBAP-POSNR
+                                                 KSCHL = 'ZBNK'.
+        IF SY-SUBRC = 0.
+          WA_HEADER-ADDTN  = WA_HEADER-ADDTN + WA_KONV-KWERT.
+        ENDIF.
+
+        CLEAR WA_VBKD.
+        READ TABLE IT_VBKD INTO WA_VBKD WITH KEY VBELN = W_VBAP-VBELN
+                                                 POSNR = W_VBAP-POSNR.
+        IF SY-SUBRC EQ 0.
+          WA_ITEM-BSTDK_E = WA_VBKD-BSTDK_E.
+        ENDIF.
+
+        CLEAR WA_VBKD1.
+        READ TABLE IT_VBKD1 INTO WA_VBKD1 WITH KEY VBELN = W_VBAP-VBELN.
+        IF SY-SUBRC EQ 0.
+          WA_HEADER-INCO1 = WA_VBKD1-INCO1.
+          WA_HEADER-INCO2 = WA_VBKD1-INCO2.
+        ENDIF.
+
+        CLEAR L_INCO2.
+        SELECT SINGLE INCO2
+               FROM KNVV
+               INTO L_INCO2
+               WHERE KUNNR = WA_VBPA-KUNNR
+               AND   VKORG = WA_VBAK-VKORG
+               AND   VTWEG = WA_VBAK-VTWEG
+               AND   SPART = WA_VBAK-SPART.
+        IF SY-SUBRC = 0 AND ( L_INCO2 NE WA_HEADER-INCO2 ).
+          WA_HEADER-INCO_C = 'X'.
+        ENDIF.
+
+        CLEAR L_ZTERM.
+        SELECT SINGLE ZTERM
+               FROM KNVV
+               INTO L_ZTERM
+               WHERE KUNNR = WA_VBAK-KUNNR
+               AND   VKORG = WA_VBAK-VKORG
+               AND   VTWEG = WA_VBAK-VTWEG
+               AND   SPART = WA_VBAK-SPART.
+        IF SY-SUBRC = 0 AND ( L_ZTERM NE WA_VBKD1-ZTERM ).
+          WA_HEADER-ZTERM_C = 'X'.
+        ENDIF.
+
+        CLEAR WA_TVZBT.
+        READ TABLE IT_TVZBT INTO WA_TVZBT WITH KEY ZTERM = WA_VBKD-ZTERM .
+        IF SY-SUBRC = 0.
+          WA_HEADER-VTEXT = WA_TVZBT-VTEXT.         "Terms of Delivery and Payment
+        ENDIF.
+
+        CLEAR WA_TVGRT.
+        READ TABLE IT_TVGRT INTO WA_TVGRT WITH KEY VKGRP = WA_VBAK-VKGRP.
+        IF SY-SUBRC = 0.
+          WA_HEADER-SGROUP = WA_TVGRT-BEZEI.         "Terms of Delivery and Payment
+        ENDIF.
+
+        CLEAR WA_VBEP.
+        READ TABLE IT_VBEP INTO WA_VBEP WITH KEY VBELN = W_VBAP-VBELN
+                                                 POSNR = W_VBAP-POSNR.
+        IF SY-SUBRC EQ 0.
+          WA_ITEM-EDATU = WA_VBEP-EDATU.
+        ENDIF.
+
+        APPEND WA_ITEM TO IT_ITEM.
+        CLEAR WA_ITEM.
+
+        AT LAST.
+          IF WA_HEADER-DISCNT LT 0.
+            WA_HEADER-DISCNT = WA_HEADER-DISCNT * -1.
+          ENDIF.
+        ENDAT.
+
+      ENDLOOP.
+
+********* End Code for Filling Internal Table
+
+*********** Converting into PDF
+      DATA :      FM_NAME TYPE RS38L_FNAM,
+                  W_CONTROL TYPE SSFCTRLOP,
+                  STRING1 TYPE STRING,
+                  DATE_LOW TYPE CHAR10,
+                  DATE_HIGH TYPE CHAR10,
+                  T_OTF_FROM_FM TYPE SSFCRESCL,
+                  T_OTF TYPE TABLE OF ITCOO,
+                  T_PDF_TAB TYPE TABLE OF TLINE,
+                  T_MESSAGE_TEXT TYPE TABLE OF TLINE,
+                  W_MESSAGE_TEXT TYPE TLINE,
+                  IT_MESS_BOD TYPE TABLE OF SOLISTI1,
+                  W_MESS_BOD TYPE  SOLISTI1,
+                  I_PDF TYPE TABLE OF SO_TEXT255,
+                  WA_PDF TYPE SO_TEXT255,
+                  TAB_LINES TYPE SY-TABIX,
+                  GD_BUFFER TYPE STRING,
+                  G_HEADER TYPE STRING,
+                  I_MESSAGE TYPE TABLE OF  SOLISTI1,
+                  W_MESSAGE TYPE  SOLISTI1.
+
+      CALL FUNCTION 'SSF_FUNCTION_MODULE_NAME'
+        EXPORTING
+          FORMNAME = 'ZSD_SF_ORDER'
+        IMPORTING
+          FM_NAME  = FM_NAME.
+      IF SY-SUBRC <> 0.
+* MESSAGE ID SY-MSGID TYPE SY-MSGTY NUMBER SY-MSGNO
+*         WITH SY-MSGV1 SY-MSGV2 SY-MSGV3 SY-MSGV4.
+      ENDIF.
+
+**** Code to Generate PDF and then mail
+
+**    W_CONTROL-NO_DIALOG = 'X'.
+***    W_CONTROL-NO_CLOSE = ' '.
+**    W_CONTROL-GETOTF = 'X'.
+***    W_CONTROL-PREVIEW = 'X'.
+
+      W_CONTROL-NO_DIALOG = 'X'.
+      W_CONTROL-NO_CLOSE = ' '.
+      W_CONTROL-GETOTF = 'X'.
+      W_CONTROL-PREVIEW = 'X'.
+
+      CALL FUNCTION FM_NAME "'/1BCDWB/SF00000189'
+        EXPORTING
+         CONTROL_PARAMETERS         = W_CONTROL
+          WA_HEADER                  = WA_HEADER
+          LV_BANKL                   = LV_BANKL
+       IMPORTING
+*   DOCUMENT_OUTPUT_INFO       = DOCUMENT_OUTPUT_INFO
+         JOB_OUTPUT_INFO            = T_OTF_FROM_FM
+*   JOB_OUTPUT_OPTIONS         = JOB_OUTPUT_OPTIONS
+        TABLES
+          IT_FINAL                   = IT_ITEM
+       EXCEPTIONS
+         FORMATTING_ERROR           = 1
+         INTERNAL_ERROR             = 2
+         SEND_ERROR                 = 3
+         USER_CANCELED              = 4
+                .
+
+      IF T_OTF_FROM_FM-OTFDATA[] IS INITIAL.
+        CALL FUNCTION FM_NAME "'/1BCDWB/SF00000090'
+              EXPORTING
+              CONTROL_PARAMETERS         = W_CONTROL
+              IMPORTING
+              JOB_OUTPUT_INFO            = T_OTF_FROM_FM
+*   EXPORTING
+          TABLES
+            IT_FINAL                    = IT_ITEM[]
+                  .
+      ENDIF.
+
+      REFRESH T_OTF.
+      T_OTF[] = T_OTF_FROM_FM-OTFDATA[].
+
+      DATA: L_DUMMY TYPE STANDARD TABLE OF TLINE,
+      PDF_DATA TYPE XSTRING,
+      PDF_SIZE TYPE I.
+      REFRESH : T_PDF_TAB, T_OTF_FROM_FM-OTFDATA[].
+      CLEAR: PDF_DATA, PDF_SIZE.
+
+      CALL FUNCTION 'CONVERT_OTF'
+        EXPORTING
+          FORMAT        = 'PDF'
+          MAX_LINEWIDTH = 132
+        IMPORTING
+          BIN_FILESIZE  = PDF_SIZE " W_BIN_FILESIZE
+        TABLES
+          OTF           = T_OTF
+          LINES         = T_PDF_TAB.
+      IF SY-SUBRC <> 0.
+* MESSAGE ID SY-MSGID TYPE SY-MSGTY NUMBER SY-MSGNO
+*         WITH SY-MSGV1 SY-MSGV2 SY-MSGV3 SY-MSGV4.
+      ENDIF.
+
+      REFRESH T_MESSAGE_TEXT.
+      CALL FUNCTION 'CONVERT_OTF'
+        EXPORTING
+          FORMAT        = 'ASCII'
+          MAX_LINEWIDTH = 132
+        TABLES
+          OTF           = T_OTF
+          LINES         = T_MESSAGE_TEXT.
+      IF SY-SUBRC <> 0.
+* MESSAGE ID SY-MSGID TYPE SY-MSGTY NUMBER SY-MSGNO
+*         WITH SY-MSGV1 SY-MSGV2 SY-MSGV3 SY-MSGV4.
+      ENDIF.
+
+      REFRESH IT_MESS_BOD.
+      LOOP AT T_MESSAGE_TEXT INTO W_MESSAGE_TEXT.
+*      IT_MESS_BOD = W_MESSAGE_TEXT-TDLINE.
+        W_MESS_BOD = W_MESSAGE_TEXT-TDLINE.
+        APPEND W_MESS_BOD TO IT_MESS_BOD.
+        CLEAR W_MESS_BOD.
+      ENDLOOP.
+
+      REFRESH I_PDF.
+      CALL FUNCTION 'SX_TABLE_LINE_WIDTH_CHANGE'
+        EXPORTING
+          LINE_WIDTH_DST = '255'
+        TABLES
+          CONTENT_IN     = T_PDF_TAB[]
+          CONTENT_OUT    = I_PDF[].
+
+      DESCRIBE TABLE I_PDF LINES TAB_LINES.
+      CLEAR GD_BUFFER.
+
+      LOOP AT I_PDF INTO WA_PDF.                             "IT_PDF_OUTPUT.
+        TRANSLATE WA_PDF USING ' ~'.            "IT_PDF_OUTPUT USING ' ~'.
+*    CONCATENATE GD_BUFFER IT_PDF_OUTPUT INTO GD_BUFFER.
+        CONCATENATE GD_BUFFER WA_PDF INTO GD_BUFFER.
+      ENDLOOP.
+
+      TRANSLATE GD_BUFFER USING '~ '.
+      REFRESH I_MESSAGE.
+
+      DO.
+        W_MESSAGE = GD_BUFFER.
+        APPEND W_MESSAGE TO I_MESSAGE.
+        SHIFT GD_BUFFER LEFT BY 255 PLACES.
+        IF GD_BUFFER IS INITIAL.
+          EXIT.
+        ENDIF.
+      ENDDO.
+
+****************  End  Converted into pdf.
+
+      IF T_VBAP IS NOT INITIAL.
+        SELECT * FROM ZVA02_MAIL_ID INTO TABLE IT_MAILID FOR ALL ENTRIES IN T_VBAP WHERE WERKS = T_VBAP-WERKS AND AUART = VBAK-AUART.
+      ENDIF.
+
+      LOOP AT IT_MAILID INTO WA_MAILID.
+        FREE WA_IT_RECEIVERS.
+        WA_IT_RECEIVERS-RECEIVER   = WA_MAILID-MAILTO.
+        WA_IT_RECEIVERS-REC_TYPE   = 'U'.
+        WA_IT_RECEIVERS-COM_TYPE   = 'INT'.
+        WA_IT_RECEIVERS-NOTIF_DEL  = 'X'.
+        WA_IT_RECEIVERS-NOTIF_NDEL = 'X'.
+        APPEND WA_IT_RECEIVERS TO IT_RECEIVERS .
+        CLEAR WA_MAILID.
+      ENDLOOP.
+
+      "&--- Read the Number of lines in the Internal Table
+      DESCRIBE TABLE IT_RECEIVERS LINES NUM_LINES.
+
+      "&--- Check the Sender Email id or SAP User id is got or not.
+      IF NUM_LINES IS NOT INITIAL.
+*&---------------------------------------------------------------------
+* Add thetext to mail text table
+*&----------------------------------------------------------------------
+*&-- Subject of the mail -------------&*
+        CLEAR : C1.
+        CONCATENATE 'Sample Order No' VBAK-VBELN 'Dated'
+                                      VBAK-ERDAT+6(2)'.'
+                                      VBAK-ERDAT+4(2)'.'
+                                      VBAK-ERDAT+0(4)
+                                      INTO C1 SEPARATED BY SPACE.
+        PSUBJECT = C1.
+
+*&--  Body  of the mail ----------------&*
+        CLEAR WA_IT_MESSAGE.
+        WA_IT_MESSAGE-LINE = 'Dear Sir/Madam,'.
+        APPEND WA_IT_MESSAGE TO IT_MESSAGE.
+
+        CLEAR WA_IT_MESSAGE.
+        WA_IT_MESSAGE-LINE = '                               '.
+        APPEND WA_IT_MESSAGE TO IT_MESSAGE.
+
+        SELECT SINGLE NAME1 NAME2 FROM KNA1 INTO (NAME1,NAME2) WHERE KUNNR = VBAK-KUNNR.
+
+        CLEAR : C1,WA_IT_MESSAGE.
+        CONCATENATE 'Sample Order No.' VBAK-VBELN 'for Buyer' NAME1 NAME2 'Buyer Code' VBAK-KUNNR
+                    'is created as per attached details.' INTO C1 SEPARATED BY SPACE.
+        WA_IT_MESSAGE-LINE = C1.
+        APPEND WA_IT_MESSAGE TO IT_MESSAGE.
+
+        CLEAR : C1,WA_IT_MESSAGE.
+        WA_IT_MESSAGE-LINE = 'Please take urgent action to get the same ready and inform marketing.'.
+        APPEND WA_IT_MESSAGE TO IT_MESSAGE.
+
+        CLEAR WA_IT_MESSAGE.
+        WA_IT_MESSAGE-LINE = '                               '.
+        APPEND WA_IT_MESSAGE TO IT_MESSAGE.
+
+        CLEAR : T3,T4,T5,T6,t7,t8,WA_IT_MESSAGE.
+        T3 = 'Material No.'.
+        T4 = 'UOM'.
+        T5 = 'Quantity'.
+        T6 = 'Material Description'.
+        t7 = 'Plant Code'.
+        t8 = 'Plant Description'.
+        WA_IT_MESSAGE-LINE+0(18) = T3.
+        WA_IT_MESSAGE-LINE+22(3) = T4.
+        WA_IT_MESSAGE-LINE+29(15) = T5.
+        WA_IT_MESSAGE-LINE+48(40) = T6.
+        WA_IT_MESSAGE-LINE+92(15) = T7.
+        WA_IT_MESSAGE-LINE+111(30) = T8.
+*  CONCATENATE t3 t4 t5 t6 INTO WA_IT_MESSAGE-LINE SEPARATED BY '    '.
+        APPEND WA_IT_MESSAGE TO IT_MESSAGE.
+
+        CLEAR WA_IT_MESSAGE.
+
+        LOOP AT XVBAP.
+          CLEAR : C2,T3,T4,T5,T6,t7,t8.
+          T3 = XVBAP-MATNR.
+          T4 = XVBAP-KMEIN.
+          T5 = XVBAP-KWMENG.
+          t7 = xvbap-werks.
+          select SINGLE name1 from t001w INTO t8 where werks = t7.
+          CONCATENATE XVBAP-VBELN XVBAP-POSNR INTO C2.
+
+          refresh it_lines.
+          CALL FUNCTION 'READ_TEXT'
+            EXPORTING
+              ID       = 'GRUN'
+              LANGUAGE = 'E'
+              NAME     = C2
+              OBJECT   = 'VBBP'
+            TABLES
+              LINES    = IT_LINES.
+
+          LOOP AT IT_LINES.
+            IF SY-TABIX = 1.
+              CLEAR WA_IT_MESSAGE.
+              WA_IT_MESSAGE-LINE+0(18) = T3.
+              WA_IT_MESSAGE-LINE+22(3) = T4.
+              CONDENSE T5.
+              WA_IT_MESSAGE-LINE+29(15) = T5.
+*              WA_IT_MESSAGE-LINE+48     = IT_LINES-TDLINE.
+
+               WA_IT_MESSAGE-LINE+48(40)     = IT_LINES-TDLINE.
+               WA_IT_MESSAGE-LINE+92(15) = T7.
+               WA_IT_MESSAGE-LINE+111(30) = T8.
+
+*     CONCATENATE t3 t4 t5 it_lines-tdline INTO WA_IT_MESSAGE-LINE SEPARATED BY '    '.
+            ELSE.
+              CLEAR WA_IT_MESSAGE.
+*              WA_IT_MESSAGE-LINE+48 = IT_LINES-TDLINE.
+              WA_IT_MESSAGE-LINE+48(40) = IT_LINES-TDLINE.
+            ENDIF.
+            APPEND WA_IT_MESSAGE TO IT_MESSAGE.
+          ENDLOOP.
+
+          CLEAR WA_IT_MESSAGE.
+          WA_IT_MESSAGE-LINE = '                               '.
+          APPEND WA_IT_MESSAGE TO IT_MESSAGE.
+        ENDLOOP.
+
+        CLEAR WA_IT_MESSAGE.
+        WA_IT_MESSAGE-LINE = '                               '.
+        APPEND WA_IT_MESSAGE TO IT_MESSAGE.
+
+        CLEAR WA_IT_MESSAGE.
+        WA_IT_MESSAGE-LINE = '                               '.
+        APPEND WA_IT_MESSAGE TO IT_MESSAGE.
+
+        CLEAR WA_IT_MESSAGE.
+        WA_IT_MESSAGE-LINE = 'Regards,'.
+        APPEND WA_IT_MESSAGE TO IT_MESSAGE.
+
+        CLEAR WA_IT_MESSAGE.
+        WA_IT_MESSAGE-LINE = 'Marketing Team.'.
+        APPEND WA_IT_MESSAGE TO IT_MESSAGE.
+
+**********& Send EMAIL MESSAGE  &*********************************
+*  GD_DOC_DATA-DOC_SIZE = 1.
+***Populate the subject/generic message attributes
+*  GD_DOC_DATA-OBJ_LANGU = SY-LANGU.
+*  GD_DOC_DATA-OBJ_NAME = 'SAPRPT'.
+        GD_DOC_DATA-OBJ_DESCR = PSUBJECT.
+*  GD_DOC_DATA-SENSITIVTY = 'F'.
+
+*Describe the body of the message
+****** Code for attaching****
+        CLEAR WA_IT_PACKING_LIST.
+        REFRESH IT_PACKING_LIST.
+        DESCRIBE TABLE IT_MESSAGE LINES TAB_LINES.
+
+        CLEAR WA_IT_PACKING_LIST-TRANSF_BIN.
+        WA_IT_PACKING_LIST-TRANSF_BIN = 1.
+        WA_IT_PACKING_LIST-HEAD_START = 1.
+        WA_IT_PACKING_LIST-HEAD_NUM = 0.
+        WA_IT_PACKING_LIST-BODY_START = 1.
+        WA_IT_PACKING_LIST-OBJ_DESCR  = 'Sample Order'.
+        WA_IT_PACKING_LIST-DOC_TYPE = 'RAW'.
+        WA_IT_PACKING_LIST-BODY_NUM   = TAB_LINES.
+        APPEND WA_IT_PACKING_LIST TO IT_PACKING_LIST.
+
+        DESCRIBE TABLE I_MESSAGE LINES TAB_LINES.
+        CLEAR WA_IT_PACKING_LIST.
+        WA_IT_PACKING_LIST-TRANSF_BIN = 'X'.
+        WA_IT_PACKING_LIST-HEAD_START = 1.
+        WA_IT_PACKING_LIST-HEAD_NUM   = 1.
+        WA_IT_PACKING_LIST-BODY_START = 1.
+        WA_IT_PACKING_LIST-OBJ_LANGU = 'E'.
+        WA_IT_PACKING_LIST-DOC_TYPE   = 'PDF'.
+        WA_IT_PACKING_LIST-OBJ_DESCR  = 'PDF ATTACHMENT'.
+        WA_IT_PACKING_LIST-OBJ_NAME   = 'PDF ATTACHMENT'.
+        WA_IT_PACKING_LIST-BODY_NUM   = TAB_LINES.
+        WA_IT_PACKING_LIST-DOC_SIZE   = TAB_LINES * 255.
+*    W_PACKING_LIST-OBJ_DESCR  = G_HEADER.
+*    W_PACKING_LIST-OBJ_NAME   = G_HEADER.
+        APPEND  WA_IT_PACKING_LIST TO IT_PACKING_LIST.
+        CLEAR WA_IT_PACKING_LIST.
+
+*&------ Call the Function Module to send the message to External and SAP Inbox
+        CALL FUNCTION 'SO_DOCUMENT_SEND_API1'
+          EXPORTING
+            DOCUMENT_DATA              = GD_DOC_DATA
+            SENDER_ADDRESS             = 'sap@groz-tools.com'  "Sender's Address
+            SENDER_ADDRESS_TYPE        = 'INT'
+            PUT_IN_OUTBOX              = 'X'
+            COMMIT_WORK                = 'X'
+          TABLES
+            PACKING_LIST               = IT_PACKING_LIST
+            CONTENTS_TXT               = IT_MESSAGE
+            CONTENTS_BIN               = I_MESSAGE    " PDF Attachment
+            RECEIVERS                  = IT_RECEIVERS
+          EXCEPTIONS
+            TOO_MANY_RECEIVERS         = 1
+            DOCUMENT_NOT_SENT          = 2
+            DOCUMENT_TYPE_NOT_EXIST    = 3
+            OPERATION_NO_AUTHORIZATION = 4
+            PARAMETER_ERROR            = 5
+            X_ERROR                    = 6
+            ENQUEUE_ERROR              = 7
+            OTHERS                     = 8.
+        IF SY-SUBRC EQ 0.
+          WAIT UP TO 2 SECONDS.
+          SUBMIT RSCONN01 WITH MODE = 'INT'
+                               AND RETURN.
+        ENDIF.
+      ENDIF.
+
+    ELSEIF VBAK-AUART = 'YGJO' OR VBAK-AUART = 'YGST' or VBAK-AUART = 'YTRD' OR VBAK-AUART = 'YTRD' OR VBAK-AUART = 'YGMS' OR VBAK-AUART = 'YGRO'
+        OR VBAK-AUART = 'YGSP' OR VBAK-AUART = 'YGTO' OR VBAK-AUART = 'YGTR'.
+      PERFORM VALIDATE_AUTH_BLOCK IN PROGRAM ZSD_AUTH_BLOCK_VALID USING L_VBAP_TEMP.
+    ENDIF.
+  ENDIF.
+ENDIF.
+
+
+ENDENHANCEMENT.
+ENHANCEMENT 1  ZSD_CHECK_CONDTYPE.    "active version
+*
+   data: wa_vbap1 type vbap.
+  if sy-ucomm = 'SICH'.
+    clear wa_vbap1.
+    read table xvbap into wa_vbap1 index 1.
+    if sy-subrc = 0.
+       if ( sy-tcode = 'VA01' or sy-tcode = 'VA02' ) and WA_VBAP1-WERKS = '1000'.
+         if VBAK-auart = 'YGJO' or VBAK-auart = 'YGMS' or VBAK-AUART = 'YTRD' or VBAK-auart = 'YGST' or VBAK-auart = 'YGRO' or VBAK-auart = 'YGSP' or VBAK-auart = 'YGTO' or VBAK-auart = 'YGTP' or VBAK-auart = 'YGTR' .
+           read table xkomv with key kschl = 'JEXP'.
+*           if sy-subrc <> 0 .
+*              sy-ucomm = 'ENT1'.
+*              fcode = 'ENT1'.
+*              message 'Please maintain JEXP Condition ' type 'E'.
+*           endif.
+         endif.
+       endif.
+     endif.
+   endif.
+ENDENHANCEMENT.
+ENHANCEMENT 2  ZSD_VA01_FILL_DEFAULTS.    "active version
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""$"$\SE:(10) Form USEREXIT_SAVE_DOCUMENT_PREPARE, Start, Enhancement ZSD_VA01_FILL_DEFAULTS, Start                                                            A
+*$*$-Start: (10)--------------------------------------------------------------------------------$*$*
+ENHANCEMENT 1  ZSD_QUANTITY_CHANGE.    "active version
+*
+
+IF SY-TCODE = 'VA02'.
+
+*TYPES :     BEGIN OF TY_QVBAP,
+*             VBELN TYPE VBAP-VBELN,
+*             POSNR TYPE VBAP-POSNR,
+*             KWMENG TYPE VBAP-KWMENG,
+*           END OF TY_QVBAP,
+*
+*           BEGIN OF TY_QVBEP,
+*             VBELN TYPE VBEP-VBELN,
+*             EDATU TYPE VBEP-EDATU,
+*           END OF TY_QVBEP,
+*
+*           BEGIN OF TY_VBAP_VBEP,
+*             VBELN TYPE VBELN_VA,
+*             POSNR TYPE POSNR_VA,
+*             KWMENG TYPE KWMENG,
+*             EDATU TYPE EDATU,
+*           END OF TY_VBAP_VBEP.
+*
+*DATA :   T_QVBAP TYPE TABLE OF TY_QVBAP,
+*         W_QVBAP TYPE TY_QVBAP,
+*         T_QVBEP TYPE TABLE OF TY_QVBEP,
+*         W_QVBEP TYPE TY_QVBEP,
+*         T_VBAP_VBEP TYPE TABLE OF TY_VBAP_VBEP,
+*         IT_VBAP_VBEP TYPE TABLE OF TY_VBAP_VBEP,
+*         W_VBAP_VBEP TYPE TY_VBAP_VBEP,
+*         L_QVBELN type VBELN_VA.
+*
+*
+*
+*SELECT  VBELN
+*        POSNR
+*        KWMENG
+*     FROM VBAP INTO TABLE T_QVBAP
+*     WHERE VBELN = VBAK-VBELN.
+*
+*SELECT VBELN
+*       EDATU
+*  FROM VBEP INTO TABLE T_QVBEP
+*  WHERE VBELN = VBAK-VBELN.
+*
+*LOOP AT T_QVBAP INTO W_QVBAP.
+*W_VBAP_VBEP-VBELN = W_QVBAP-VBELN.
+*W_VBAP_VBEP-POSNR = W_QVBAP-POSNR.
+*W_VBAP_VBEP-KWMENG = W_QVBAP-KWMENG.
+*CLEAR W_QVBEP.
+*READ TABLE T_QVBEP INTO W_QVBEP WITH KEY VBELN = W_QVBAP-VBELN.
+*IF SY-SUBRC = 0.
+*W_VBAP_VBEP-EDATU = W_QVBEP-EDATU.
+*ENDIF.
+*APPEND W_VBAP_VBEP TO T_VBAP_VBEP.
+*CLEAR W_VBAP_VBEP.
+*ENDLOOP.
+*
+*LOOP AT XVBAP.
+*LOOP AT XVBEP.
+*READ TABLE T_VBAP_VBEP INTO W_VBAP_VBEP WITH KEY VBELN = XVBAP-VBELN
+*                                                 POSNR = XVBAP-POSNR.
+*IF SY-SUBRC = 0.
+*IF XVBAP-KWMENG NE W_VBAP_VBEP-KWMENG OR XVBEP-EDATU NE W_VBAP_VBEP-EDATU.
+*   append W_VBAP_VBEP to IT_VBAP_VBEP .
+*   L_QVBELN = W_VBAP_VBEP-VBELN.
+*ENDIF.
+*ENDIF.
+*ENDLOOP.
+*ENDLOOP.
+  DATA: BEGIN OF VTX_VBAP OCCURS 0.
+          INCLUDE STRUCTURE VBAPVB.
+  DATA: END OF VTX_VBAP.
+
+  DATA: BEGIN OF VTX_VBEP OCCURS 0.
+          INCLUDE STRUCTURE VBEPVB.
+  DATA: END OF VTX_VBEP.
+
+  DATA: BEGIN OF VTY_VBAP OCCURS 0.
+          INCLUDE STRUCTURE VBAPVB.
+  DATA: END OF VTY_VBAP.
+
+  DATA:BEGIN OF VTY_VBEP OCCURS 0.
+          INCLUDE STRUCTURE VBEPVB.
+  DATA: END OF VTY_VBEP.
+
+  TYPES:
+        BEGIN OF VT_FINAL,
+        VBELN TYPE VBELN_VA,
+        POSNR TYPE POSNR_VA,
+        OLD_QTY TYPE MENGE_D,
+        NEW_QTY TYPE MENGE_D,
+        OLD_DAT TYPE EDATU,
+        NEW_DAT TYPE EDATU,
+        KUNNR   TYPE KNA1-KUNNR,
+        MATNR  TYPE MATNR,
+        WERKS TYPE WERKS_D,
+        END OF VT_FINAL.
+
+  DATA: VT_FINAL TYPE STANDARD TABLE OF VT_FINAL.
+  DATA: VWX_VBAP TYPE VBAPVB,
+        VWX_VBEP TYPE VBEPVB,
+        VWY_VBAP TYPE VBAPVB,
+        VWY_VBEP TYPE VBEPVB,
+        VW_FINAL TYPE VT_FINAL.
+
+  REFRESH : VTX_VBAP,
+            VTX_VBEP ,
+            VTY_VBAP ,
+            VTY_VBEP ,
+            VT_FINAL.
+
+  CLEAR:VWX_VBAP,
+        VWX_VBEP ,
+        VWY_VBAP ,
+        VWY_VBEP,
+        VW_FINAL .
+
+  VTX_VBAP[] = XVBAP[].
+  VTX_VBEP[] = XVBEP[].
+  VTY_VBAP[] = YVBAP[].
+  VTY_VBEP[] = YVBEP[].
+
+  DELETE  VTX_VBEP  WHERE ETENR = '2'.
+  DELETE  VTY_VBEP  WHERE ETENR = '2'.
+
+  LOOP AT VTX_VBAP INTO VWX_VBAP.
+
+    CLEAR VWY_VBAP.
+    READ TABLE VTY_VBAP INTO VWY_VBAP WITH KEY VBELN = VWX_VBAP-VBELN POSNR = VWX_VBAP-POSNR.
+
+*  IF SY-SUBRC = 0.                                 "***Modify
+*    VW_FINAL-MATNR = VWY_VBAP-MATNR.
+    IF SY-SUBRC = 0 AND VWX_VBAP-KWMENG NE VWY_VBAP-KWMENG.
+      VW_FINAL-OLD_QTY = VWY_VBAP-KWMENG.
+      VW_FINAL-NEW_QTY = VWX_VBAP-KWMENG.
+    ENDIF.
+*  ENDIF.                                           "***Modify
+
+    CLEAR VWX_VBEP .
+    READ TABLE VTX_VBEP INTO VWX_VBEP WITH KEY VBELN = VWX_VBAP-VBELN POSNR = VWX_VBAP-POSNR.
+    IF SY-SUBRC = 0.
+      CLEAR VWY_VBEP .
+      READ TABLE VTY_VBEP INTO VWY_VBEP WITH KEY VBELN = VWX_VBEP-VBELN POSNR = VWX_VBEP-POSNR.
+      IF SY-SUBRC = 0.
+        IF VWX_VBEP-EDATU NE VWY_VBEP-EDATU.
+          VW_FINAL-OLD_DAT = VWY_VBEP-EDATU.
+          VW_FINAL-NEW_DAT = VWX_VBEP-EDATU.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+
+    IF  ( VW_FINAL-OLD_DAT IS NOT INITIAL AND VW_FINAL-NEW_DAT IS NOT INITIAL ) OR
+        ( VW_FINAL-OLD_QTY IS NOT INITIAL AND VW_FINAL-NEW_QTY IS NOT INITIAL ).
+      VW_FINAL-MATNR = VWX_VBAP-MATNR.                                                   "MODIFY
+      VW_FINAL-VBELN = VWX_VBAP-VBELN.
+      VW_FINAL-POSNR = VWX_VBAP-POSNR.
+      VW_FINAL-KUNNR = VBAK-KUNNR.
+      VW_FINAL-WERKS = VWX_VBAP-WERKS.
+      APPEND VW_FINAL TO VT_FINAL.
+      CLEAR VW_FINAL.
+    ENDIF.
+
+  ENDLOOP.
+
+  IF VT_FINAL IS NOT INITIAL.
+    PERFORM MAIL_SEND_QTY_CHANGE IN PROGRAM ZSD_QTY_CHG USING VT_FINAL.
+  ENDIF.
+ENDIF.
+*
+*if IT_VBAP_VBEP is not INITIAL.
+*    PERFORM VALIDATE_QUANTITY IN PROGRAM ZSD_QUANTITY_CHANGE using L_QVBELN.
+*endif.
+
+ENDENHANCEMENT.
+*$*$-End:   (10)--------------------------------------------------------------------------------$*$*
+*savinG fields to VBAK - SALES HEADER FETCHING FROM CUSTOMER MASTER
+
+*break abapcons.
+*** IF SY-TCODE = 'VA01'.
+***
+***   DATA : T_ZCUST_MASTER TYPE STANDARD TABLE OF ZCUST_MASTER,
+***           W_ZCUST_MASTER TYPE ZCUST_MASTER.
+***
+***
+****    IF VBAK-ZZTRANSP IS INITIAL.
+***       REFRESH : T_ZCUST_MASTER.
+***
+***    SELECT  *
+***           FROM ZCUST_MASTER
+***           INTO CORRESPONDING FIELDS OF TABLE T_ZCUST_MASTER
+***           WHERE KUNNR   = VBAK-KUNNR.
+***
+***       CLEAR : W_ZCUST_MASTER.
+***      READ TABLE T_ZCUST_MASTER INTO W_ZCUST_MASTER INDEX 1 .
+***         IF SY-SUBRC = 0.
+***
+***          IF VBAK-AUART = 'YGSO'.
+***             IF W_ZCUST_MASTER-ZTRANSP = '6'.
+***
+***                IF  W_ZCUST_MASTER-ZTRANSP IS INITIAL.
+***                  VBAK-ZZTRANSP      =   W_ZCUST_MASTER-ZTRANSP.
+***                ENDIF.
+***                IF W_ZCUST_MASTER-ZPDCHRG IS INITIAL.
+***                  VBAK-ZZPDCHRG      =   W_ZCUST_MASTER-ZPDCHRG.
+***                ENDIF.
+***                 IF W_ZCUST_MASTER-ZPLOAD IS INITIAL.
+***                  VBAK-ZZPLOAD       =   W_ZCUST_MASTER-ZPLOAD.
+***                 ENDIF.
+***                 IF W_ZCUST_MASTER-ZDESTN IS INITIAL.
+***                  VBAK-ZZDESTN       =   W_ZCUST_MASTER-ZDESTN.
+***                 ENDIF.
+***                 IF  W_ZCUST_MASTER-ZAIRPORT IS INITIAL.
+***                  VBAK-ZZAIRPORT     =   W_ZCUST_MASTER-ZAIRPORT.
+***                 ENDIF.
+***               ELSEIF W_ZCUST_MASTER-ZTRANSP2 = '6'.
+***                 IF W_ZCUST_MASTER-ZTRANSP2 IS INITIAL.
+***                  VBAK-ZZTRANSP      =   W_ZCUST_MASTER-ZTRANSP2.
+***                 ENDIF.
+***                IF W_ZCUST_MASTER-ZPDCHRG2 IS INITIAL.
+***                  VBAK-ZZPDCHRG     =   W_ZCUST_MASTER-ZPDCHRG2.
+***                ENDIF.
+***                 IF W_ZCUST_MASTER-ZPLOAD2 IS INITIAL.
+***                  VBAK-ZZPLOAD      =   W_ZCUST_MASTER-ZPLOAD2.
+***                 ENDIF.
+***                IF W_ZCUST_MASTER-ZDESTN2 IS INITIAL.
+***                  VBAK-ZZDESTN      =   W_ZCUST_MASTER-ZDESTN2.
+***                 ENDIF.
+***                 IF W_ZCUST_MASTER-ZAIRPORT2 IS INITIAL.
+***                  VBAK-ZZAIRPORT    =   W_ZCUST_MASTER-ZAIRPORT2.
+***                 ENDIF.
+***               ELSEIF W_ZCUST_MASTER-ZTRANSP3 = '6'.
+***                IF W_ZCUST_MASTER-ZTRANSP3 IS INITIAL.
+***                  VBAK-ZZTRANSP      =   W_ZCUST_MASTER-ZTRANSP3.
+***                 ENDIF.
+***                 IF W_ZCUST_MASTER-ZPDCHRG3 IS INITIAL.
+***                  VBAK-ZZPDCHRG     =   W_ZCUST_MASTER-ZPDCHRG3.
+***                 ENDIF.
+***                 IF W_ZCUST_MASTER-ZPLOAD3 IS INITIAL.
+***                   VBAK-ZZPLOAD      =   W_ZCUST_MASTER-ZPLOAD3.
+***                  ENDIF.
+***                 IF W_ZCUST_MASTER-ZDESTN3 IS INITIAL.
+***                   VBAK-ZZDESTN      =   W_ZCUST_MASTER-ZDESTN3.
+***                 ENDIF.
+***                  IF W_ZCUST_MASTER-ZAIRPORT3 IS INITIAL .
+***                   VBAK-ZZAIRPORT    =   W_ZCUST_MASTER-ZAIRPORT3.
+***                  ENDIF.
+***               ELSEIF W_ZCUST_MASTER-ZTRANSP4 = '6'.
+***                   IF  W_ZCUST_MASTER-ZTRANSP4 IS INITIAL .
+***                      VBAK-ZZTRANSP      =  W_ZCUST_MASTER-ZTRANSP4.
+***                   ENDIF.
+***                   IF W_ZCUST_MASTER-ZPDCHRG4 IS INITIAL.
+***                     VBAK-ZZPDCHRG     =   W_ZCUST_MASTER-ZPDCHRG4.
+***                   ENDIF.
+***                  IF  W_ZCUST_MASTER-ZPLOAD4 IS INITIAL .
+***                   VBAK-ZZPLOAD      =   W_ZCUST_MASTER-ZPLOAD4.
+***                  ENDIF.
+***                  IF W_ZCUST_MASTER-ZDESTN4 IS INITIAL.
+***                   VBAK-ZZDESTN      =   W_ZCUST_MASTER-ZDESTN4.
+***                  ENDIF.
+***                  IF  W_ZCUST_MASTER-ZAIRPORT4 IS INITIAL.
+***                   VBAK-ZZAIRPORT    =   W_ZCUST_MASTER-ZAIRPORT4.
+***                  ENDIF.
+***               ENDIF.
+***
+***
+***             IF W_ZCUST_MASTER-ZLDSTYL IS INITIAL.
+***               VBAK-ZZLDSTYL      =   W_ZCUST_MASTER-ZLDSTYL.
+***             ENDIF.
+***             IF W_ZCUST_MASTER-ZMAXSHIP IS INITIAL.
+***               VBAK-ZZMAXSHIP     =   W_ZCUST_MASTER-ZMAXSHIP.
+***             ENDIF.
+***             IF  W_ZCUST_MASTER-ZMINSHIP IS INITIAL.
+***               VBAK-ZZMINSHIP     =   W_ZCUST_MASTER-ZMINSHIP.
+***             ENDIF.
+***              IF W_ZCUST_MASTER-ZPALLET IS INITIAL.
+***               VBAK-ZZPALLET      =   W_ZCUST_MASTER-ZPALLET.
+***              ENDIF.
+***              IF W_ZCUST_MASTER-ZDATE1 IS INITIAL.
+***               VBAK-ZZDATE1       =   W_ZCUST_MASTER-ZDATE1.
+***              ENDIF.
+***              IF W_ZCUST_MASTER-ZDAYS IS INITIAL.
+***               VBAK-ZZDAYS        =   W_ZCUST_MASTER-ZDAYS .
+***              ENDIF.
+***              IF W_ZCUST_MASTER-ZBLTYPE IS INITIAL.
+***               VBAK-ZZBLTYPE      =   W_ZCUST_MASTER-ZBLTYPE.
+***              ENDIF.
+***              IF W_ZCUST_MASTER-ZINCO1 IS INITIAL.
+***               VBAK-ZZINCO1       =   W_ZCUST_MASTER-ZINCO1.
+***              ENDIF.
+***              IF W_ZCUST_MASTER-ZINCO2 IS INITIAL.
+***               VBAK-ZZINCO2       =   W_ZCUST_MASTER-ZINCO2.
+***              ENDIF.
+***
+***         ENDIF.
+***
+***
+****       ELSE.
+***
+***
+***         IF W_ZCUST_MASTER-ZTRANSP = '3' OR  W_ZCUST_MASTER-ZTRANSP2 = '3' OR  W_ZCUST_MASTER-ZTRANSP3 = '3'
+***           OR  W_ZCUST_MASTER-ZTRANSP4 = '3'.
+****
+***              IF W_ZCUST_MASTER-ZTRANSP = '3'.
+***                IF W_ZCUST_MASTER-ZTRANSP IS INITIAL.
+***                 VBAK-ZZTRANSP      =   W_ZCUST_MASTER-ZTRANSP.
+***                ENDIF.
+***                IF W_ZCUST_MASTER-ZPDCHRG IS INITIAL.
+***                 VBAK-ZZPDCHRG      =   W_ZCUST_MASTER-ZPDCHRG.
+***                ENDIF.
+***                IF W_ZCUST_MASTER-ZPLOAD IS INITIAL .
+***                 VBAK-ZZPLOAD       =   W_ZCUST_MASTER-ZPLOAD.
+***                ENDIF.
+***                 IF W_ZCUST_MASTER-ZDESTN IS INITIAL.
+***                  VBAK-ZZDESTN       =   W_ZCUST_MASTER-ZDESTN.
+***                 ENDIF.
+***                IF W_ZCUST_MASTER-ZAIRPORT IS INITIAL.
+***                 VBAK-ZZAIRPORT     =   W_ZCUST_MASTER-ZAIRPORT.
+***                ENDIF.
+***             ELSEIF W_ZCUST_MASTER-ZTRANSP2 = '3'.
+***                IF  W_ZCUST_MASTER-ZTRANSP2 IS INITIAL.
+***                  VBAK-ZZTRANSP      =  W_ZCUST_MASTER-ZTRANSP2.
+***                ENDIF.
+***                IF W_ZCUST_MASTER-ZPDCHRG2 IS INITIAL.
+***                 VBAK-ZZPDCHRG     =   W_ZCUST_MASTER-ZPDCHRG2.
+***                ENDIF.
+***                IF W_ZCUST_MASTER-ZPLOAD2 IS INITIAL.
+***                 VBAK-ZZPLOAD      =   W_ZCUST_MASTER-ZPLOAD2.
+***                ENDIF.
+***                IF  W_ZCUST_MASTER-ZDESTN2 IS INITIAL.
+***                 VBAK-ZZDESTN      =   W_ZCUST_MASTER-ZDESTN2.
+***                ENDIF.
+***                IF W_ZCUST_MASTER-ZAIRPORT2 IS INITIAL.
+***                 VBAK-ZZAIRPORT    =   W_ZCUST_MASTER-ZAIRPORT2.
+***                ENDIF.
+***            ELSEIF W_ZCUST_MASTER-ZTRANSP3 = '3'.
+***                IF W_ZCUST_MASTER-ZTRANSP3 IS INITIAL.
+***                 VBAK-ZZTRANSP      =  W_ZCUST_MASTER-ZTRANSP3.
+***                ENDIF.
+***                IF W_ZCUST_MASTER-ZPDCHRG3 IS INITIAL.
+***                 VBAK-ZZPDCHRG     =   W_ZCUST_MASTER-ZPDCHRG3.
+***                ENDIF.
+***                IF  W_ZCUST_MASTER-ZPLOAD3 IS INITIAL.
+***                 VBAK-ZZPLOAD      =   W_ZCUST_MASTER-ZPLOAD3.
+***                ENDIF.
+***                IF  W_ZCUST_MASTER-ZDESTN3 IS INITIAL.
+***                 VBAK-ZZDESTN      =   W_ZCUST_MASTER-ZDESTN3.
+***                ENDIF.
+***                IF W_ZCUST_MASTER-ZAIRPORT3 IS INITIAL.
+***                 VBAK-ZZAIRPORT    =   W_ZCUST_MASTER-ZAIRPORT3.
+***                ENDIF.
+***             ELSEIF W_ZCUST_MASTER-ZTRANSP4 = '3'.
+***               IF W_ZCUST_MASTER-ZTRANSP4 IS INITIAL.
+***                VBAK-ZZTRANSP      =  W_ZCUST_MASTER-ZTRANSP4.
+***               ENDIF.
+***               IF W_ZCUST_MASTER-ZTRANSP4 IS INITIAL.
+***                VBAK-ZZPDCHRG     =  W_ZCUST_MASTER-ZTRANSP4.
+***               ENDIF.
+***               IF W_ZCUST_MASTER-ZPLOAD4 IS INITIAL.
+***                VBAK-ZZPLOAD      =   W_ZCUST_MASTER-ZPLOAD4.
+***               ENDIF.
+***               IF W_ZCUST_MASTER-ZDESTN4 IS INITIAL.
+***                VBAK-ZZDESTN      =   W_ZCUST_MASTER-ZDESTN4.
+***               ENDIF.
+***               IF W_ZCUST_MASTER-ZAIRPORT4 IS INITIAL.
+***                VBAK-ZZAIRPORT    =   W_ZCUST_MASTER-ZAIRPORT4.
+***               ENDIF.
+***           ENDIF.
+***
+***
+****
+***            IF  W_ZCUST_MASTER-ZLDSTYL IS INITIAL.
+***               VBAK-ZZLDSTYL      =   W_ZCUST_MASTER-ZLDSTYL.
+***             ENDIF.
+***             IF W_ZCUST_MASTER-ZMAXSHIP IS INITIAL.
+***               VBAK-ZZMAXSHIP     =   W_ZCUST_MASTER-ZMAXSHIP.
+***             ENDIF.
+***             IF W_ZCUST_MASTER-ZMINSHIP IS INITIAL.
+***               VBAK-ZZMINSHIP     =   W_ZCUST_MASTER-ZMINSHIP.
+***             ENDIF.
+***             IF W_ZCUST_MASTER-ZPALLET IS INITIAL.
+***               VBAK-ZZPALLET      =   W_ZCUST_MASTER-ZPALLET.
+***             ENDIF.
+***             IF W_ZCUST_MASTER-ZDATE1 IS INITIAL.
+***               VBAK-ZZDATE1       =   W_ZCUST_MASTER-ZDATE1.
+***             ENDIF.
+***             IF W_ZCUST_MASTER-ZDAYS IS INITIAL.
+***               VBAK-ZZDAYS        =   W_ZCUST_MASTER-ZDAYS .
+***             ENDIF.
+***             IF  W_ZCUST_MASTER-ZBLTYPE IS INITIAL.
+***               VBAK-ZZBLTYPE      =   W_ZCUST_MASTER-ZBLTYPE.
+***             ENDIF.
+***              IF W_ZCUST_MASTER-ZINCO1 IS INITIAL.
+***               VBAK-ZZINCO1       =   W_ZCUST_MASTER-ZINCO1.
+***              ENDIF.
+***             IF  W_ZCUST_MASTER-ZINCO2 IS INITIAL.
+***               VBAK-ZZINCO2       =   W_ZCUST_MASTER-ZINCO2.
+***             ENDIF.
+***
+***          ENDIF.
+****     ENDIF.
+***
+***   ENDIF.
+****       ENDIF.
+***    ENDIF.
+
+
+
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""$"$\SE:(11) Form USEREXIT_SAVE_DOCUMENT_PREPARE, Start, Enhancement ZSD_VA01_FILL_DEFAULTS, End                                                              A
+*$*$-Start: (11)--------------------------------------------------------------------------------$*$*
+ENHANCEMENT 1  ZSD_AUTHORIZATION.    "active version
+*
+
+  IF SY-TCODE = 'VA01'OR SY-TCODE = 'VA02' .            "AND SY-UNAME = 'ABAPCONS'.
+*BREAK sapmm.
+
+   TYPES : BEGIN OF TY_MARD,
+            MATNR TYPE MATNR,
+            WERKS TYPE WERKS_D,
+            LGORT TYPE LGORT_D,
+           END OF TY_MARD,
+           BEGIN OF TY_VBAP,
+             VBELN TYPE VBAP-VBELN,
+             POSNR TYPE VBAP-POSNR,
+             MATNR TYPE VBAP-MATNR,
+           END OF TY_VBAP.
+
+
+
+   DATA :
+          T_ZSD_USER TYPE STANDARD TABLE OF ZSD_USER,
+          T_MARD TYPE STANDARD TABLE OF TY_MARD,
+          W_MARD TYPE TY_MARD,
+          W_ZSD_USER TYPE ZSD_USER,
+          IT_VBAP TYPE TABLE OF TY_VBAP,
+          WA_VBAP TYPE TY_VBAP,
+          L1 TYPE I.
+   CLEAR : W_ZSD_USER,W_MARD.
+   REFRESH : T_ZSD_USER.",T_MARD.
+*   SELECT MATNR
+*          WERKS
+*          LGORT
+*          FROM MARD
+*          INTO TABLE T_MARD
+*          WHERE MATNR = VBAP-MATNR AND
+*                WERKS = VBAP-WERKS.
+*     CLEAR L1.
+*     DESCRIBE TABLE T_MARD LINES L1.
+*
+*     IF L1 = '1'.
+*      CLEAR W_MARD .
+*      READ TABLE T_MARD INTO W_MARD INDEX 1 .
+*        IF SY-SUBRC = 0.
+*          VBAP-LGORT = W_MARD-LGORT.                    "Storage Location
+*          ENDIF.
+*       ENDIF.
+
+   SELECT VBELN
+          POSNR
+          MATNR
+     FROM VBAP INTO TABLE IT_VBAP
+     WHERE VBELN = VBAK-VBELN.
+
+
+    SELECT MANDT
+           VKORG
+           USER1
+           FROM ZSD_USER
+           INTO TABLE T_ZSD_USER
+           WHERE VKORG = VBAK-VKORG AND
+                 USER1 = VBAK-ERNAM.
+    CLEAR : W_ZSD_USER.
+    READ TABLE T_ZSD_USER INTO W_ZSD_USER WITH KEY VKORG = VBAK-VKORG
+                                                   USER1 = SY-UNAME.
+
+ IF SY-SUBRC = 0.
+    VBAP-ABGRU = 'Z3'.        "authorization block
+
+  LOOP AT XVBAP.
+ CLEAR WA_VBAP.
+ READ TABLE IT_VBAP INTO WA_VBAP WITH KEY VBELN = XVBAP-VBELN
+                                          POSNR = XVBAP-POSNR.
+ IF SY-SUBRC  NE 0.
+
+  XVBAP-ABGRU = 'Z3'.
+  MODIFY XVBAP.
+ ENDIF.
+  ENDLOOP.
+  ENDIF.
+
+*   IF SY-UCOMM = 'BABS'.
+*       MESSAGE 'Your not Authorized' TYPE 'A'.
+*       ENDIF.
+
+*  IF VBAP-ABGRU IS NOT INITIAL.
+*    LOOP AT SCREEN.
+*        IF SCREEN-NAME = 'VBAP-ABGRU'.
+*         SCREEN-INPUT = 0.
+*         MODIFY SCREEN.
+*       ENDIF.
+*     ENDLOOP.
+*    ENDIF.
+    ENDIF.
+*BREAK-POINT.
+     IF SY-TCODE = 'VA01'.
+if vbak-auart = 'YGSO' or vbak-auart = 'YGCR' or vbak-auart = 'YGDR'.
+     DATA: IT_SAL TYPE TABLE OF ZSD_SALE_GRP_TBL, "ZCOSALE,
+           WA_SAL TYPE ZSD_SALE_GRP_TBL. "ZCOSALE.
+
+     DATA: WERKS TYPE VBAP-WERKS.
+
+     LOOP AT XVBAP.
+     WERKS = XVBAP-WERKS.
+     ENDLOOP.
+
+*     SELECT * FROM ZCOSALE INTO TABLE IT_SAL
+*                           WHERE VKGRP = VBAK-VKGRP
+*                           AND   VKORG = VBAK-VKORG
+*                           AND   VTWEG = VBAK-VTWEG
+*                           AND   SPART = VBAK-SPART
+*                           AND   WERKS = WERKS.
+
+*     READ TABLE IT_SAL INTO WA_SAL WITH KEY VKGRP = VBAK-VKGRP
+*                                            VKORG = VBAK-VKORG
+*                                            VTWEG = VBAK-VTWEG
+*                                            SPART = VBAK-SPART
+*                                            WERKS = WERKS.
+
+     SELECT * FROM ZSD_SALE_GRP_TBL INTO TABLE IT_SAL
+                           WHERE SALES_GROUP = VBAK-VKGRP
+                           AND   PLANT = WERKS.
+
+     READ TABLE IT_SAL INTO WA_SAL WITH KEY SALES_GROUP = VBAK-VKGRP
+                                            PLANT = WERKS.
+
+     IF SY-SUBRC = 0.
+     VBAK-KOSTL = WA_SAL-COST_CENTER. "*WA_SAL-KOSTL.
+     ENDIF.
+    ENDIF.
+ENDIF.
+
+ENDENHANCEMENT.
+*$*$-End:   (11)--------------------------------------------------------------------------------$*$*
+ENDENHANCEMENT.
+ENHANCEMENT 1  ZSD_VA01_REFERENCESTAT_VAL.    "active version
+*IF SY-TCODE = 'VA01'.
+* BREAK-POINT.
+
+*TABLES : ZREF_STATUS.
+*TYPES : BEGIN OF ty_zstatus_time,
+*         mandt TYPE mandt,
+*         vbeln TYPE vbuP-vbeln,
+*         FKSAA TYPE VBUP-FKSAA,
+*        END OF ty_zstatus_time.
+*DATA : it_zstatus_time TYPE STANDARD TABLE OF ty_zstatus_time,
+*       wa_zstatus_time TYPE ty_zstatus_time.
+**DATA : *LOG1 TYPE STANDARD TABLE OF ZLOG,
+**       WA_LOG1 TYPE ZLOG.
+*SELECT * FROM ZREF_STATUS INTO TABLE it_zstatus_time WHERE vbeln = xvbuP-vbeln.
+*
+*  LOOP AT it_zstatus_time INTO wa_zstatus_time WHERE vbeln = xvbuP-vbeln.
+*   IF XVBUP-FKSAA EQ 'C'.
+*    MESSAGE 'ORDER ALREADY COMPLETED' TYPE 'E'.
+*   ENDIF.
+*ENDLOOP.
+*
+*    ENDIF.
+*DATA : w_vbak TYPE vbak.
+*
+    IF sy-tcode = 'VA01' OR sy-tcode = 'VA02'.
+*BREAK-POINT.
+      VBUP-RFSTA = 'C'.
+*
+    ENDIF.
+
+* ENDIF.
+ENDENHANCEMENT.
+*$*$-End:   (9)---------------------------------------------------------------------------------$*$*
+
+
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""$"$\SE:(12) Form USEREXIT_SAVE_DOCUMENT_PREPARE, End                                                                                                         A
+*$*$-Start: (12)--------------------------------------------------------------------------------$*$*
+ENHANCEMENT 3  ZSD_VA01_FILL_DEFAULTS.    "active version
+*error message when there is no pack bom
+*        TABLES:ZPP_PACK.
+  DATA:T_PACK TYPE TABLE OF ZPP_PACK,
+        w_pack TYPE ZPP_PACK,Q TYPE STRING.
+  if SY-UCOMM <> 'POLO' AND ( SY-TCODE = 'VA01' OR SY-TCODE = 'VA02' ) AND ( VBAK-AUART = 'YGJO' OR VBAK-AUART = 'YGST' or VBAK-AUART = 'YTRD' OR VBAK-AUART = 'YTRD' OR VBAK-AUART = 'YGRO' OR
+                       VBAK-AUART = 'YGTR' OR VBAK-AUART = 'YGCF' OR VBAK-AUART = 'YGCI' OR VBAK-AUART = 'YGCP' OR
+                       VBAK-AUART = 'YGFD' OR VBAK-AUART = 'YGPO' ) AND vbak-vkorg <> '2000'.
+  SELECT * FROM ZPP_PACK inTO TABLE T_PACK  FOR ALL ENTRIES IN XVBAP WHERE matnr = xvbap-matnr AND
+          werks = xvbap-WERKS AND cost = '' AND
+          KUNNR = VBAK-KUNNR AND DEL = ''.
+  LOOP AT xvbap WHERE updkz <> 'D'.
+*    READ TABLE ivbap WITH KEY POSNR = XVBAP-POSNR.
+*    if sy-SUBRC = 0.
+READ TABLE T_PACK INTO W_PACK WITH KEY matnr = xvbap-matnr.
+IF Sy-SUBRC <> 0.
+
+  CONCATENATE 'Material' xvbap-matnr 'Customer' vbak-KUNNR
+              'combination Packing BOM not Maintained'
+              INTO q SEPARATED BY SPACE.
+*    CLEAR VBAP.
+  MESSAGE q TYPE 'E' ."DISPLAY LIKE 'E'.
+  ENDIF.
+*endif.
+ENDLOOP.
+endif.
+ENDENHANCEMENT.
+*$*$-End:   (12)--------------------------------------------------------------------------------$*$*
+ENDFORM.
+*eject
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""$"$\SE:(13) Include MV45AFZZ, End                                                                                                                            S
+*$*$-Start: (13)--------------------------------------------------------------------------------$*$*
+ENHANCEMENT 2  ZSD_INCOTERMS.    "active version
+*
+    FORM cnfd_date USING CALCDT L_ZDAYS.
+ DATA  :         l_factid TYPE FABKL,
+     l TYPE i,
+     t_dats TYPE TABLE OF RKE_DAT,
+      zdays TYPE T5A4A-DLYDY.
+
+SELECT SINGLE FABKL FROM T001W INTO l_factid WHERE  werks = vbap-werks.
+      refresh:t_dats.
+  CALL FUNCTION 'RKE_SELECT_FACTDAYS_FOR_PERIOD'
+    EXPORTING
+      I_DATAB                     = vbak-AUDAT
+      I_DATBI                     = CALCDt
+      I_FACTID                    = l_FACTID
+    TABLES
+      ETH_DATS                    = t_DATS
+   EXCEPTIONS
+     DATE_CONVERSION_ERROR       = 1
+            .
+  DESCRIBE TABLE t_dats LINES l.
+  IF l <> l_zdays.
+ZDAYS = l_zdays - l.
+  CALL FUNCTION 'RP_CALC_DATE_IN_INTERVAL'
+    EXPORTING
+      DATE            = calcdt
+      DAYS            = zDAYS
+      MONTHS          = '0'
+      SIGNUM          = '+'
+      YEARS           = '0'
+   IMPORTING
+     CALC_DATE       = CALCDt
+            .
+  PERFORM cnfd_date USING calcdt l_zdays.
+else.
+  vbkd-BSTDK_E = CALCDt.
+  ENDIF.
+    endform.
+ENDENHANCEMENT.
+*$*$-End:   (13)--------------------------------------------------------------------------------$*$*
