@@ -1,0 +1,92 @@
+METHOD if_ex_me_change_outtab_cus~fill_outtab.
+step1 : field add in MEREP_OUTTAB_EBAN 'se11' structure.
+  DATA: lr_banfn TYPE RANGE OF cdobjectv,
+        lv_banfn TYPE cdobjectv,
+        lv_bnfpo TYPE cdobjectv,
+        lt_text  TYPE STANDARD TABLE OF tline,
+        lv_name  TYPE char70.
+
+  FIELD-SYMBOLS:
+    <fs_out>     TYPE any,
+    <fs_banfn>   TYPE any,
+    <fs_bnfpo>   TYPE any,
+    <fs_prdate>  TYPE any,
+    <fs_long>    TYPE any.
+
+  CHECK im_struct_name = 'MEREP_OUTTAB_EBAN'.
+
+  "--------------------------------------------------
+  " Collect BANFN
+  "--------------------------------------------------
+  LOOP AT ch_outtab ASSIGNING <fs_out>.
+    ASSIGN COMPONENT 'BANFN' OF STRUCTURE <fs_out> TO <fs_banfn>.
+    IF <fs_banfn> IS ASSIGNED AND <fs_banfn> IS NOT INITIAL.
+      APPEND VALUE #( sign = 'I' option = 'EQ' low = <fs_banfn> ) TO lr_banfn.
+    ENDIF.
+  ENDLOOP.
+
+  SORT lr_banfn BY low.
+  DELETE ADJACENT DUPLICATES FROM lr_banfn COMPARING low.
+
+  "--------------------------------------------------
+  " Fetch PR Release Date
+  "--------------------------------------------------
+  SELECT a~objectid,
+         a~udate
+    FROM cdhdr AS a
+    INNER JOIN cdpos AS b
+      ON b~changenr = a~changenr
+   WHERE a~objectclas = 'BANF'
+     AND a~objectid   IN @lr_banfn
+     AND b~fname      = 'BANPR'
+     AND b~value_new  = '05'
+    INTO TABLE @DATA(it_cdhdr).
+
+  SORT it_cdhdr BY objectid.
+
+  "--------------------------------------------------
+  " Fill Output Fields
+  "--------------------------------------------------
+  LOOP AT ch_outtab ASSIGNING <fs_out>.
+
+    ASSIGN COMPONENT 'BANFN'        OF STRUCTURE <fs_out> TO <fs_banfn>.
+    ASSIGN COMPONENT 'BNFPO'        OF STRUCTURE <fs_out> TO <fs_bnfpo>.
+    ASSIGN COMPONENT 'PR_REL_DATE'  OF STRUCTURE <fs_out> TO <fs_prdate>.
+    ASSIGN COMPONENT 'ZZLONG_TEXT'  OF STRUCTURE <fs_out> TO <fs_long>.
+
+    " PR Release Date
+    IF <fs_prdate> IS ASSIGNED AND <fs_banfn> IS ASSIGNED.
+      READ TABLE it_cdhdr INTO DATA(ls_cdhdr)
+           WITH KEY objectid = <fs_banfn>.
+      IF sy-subrc = 0.
+        <fs_prdate> = ls_cdhdr-udate.
+      ENDIF.
+    ENDIF.
+
+    " Long Text
+    IF <fs_long> IS ASSIGNED AND <fs_long> IS INITIAL
+       AND <fs_banfn> IS ASSIGNED AND <fs_bnfpo> IS ASSIGNED.
+
+      lv_name = |{ <fs_banfn> }{ <fs_bnfpo> }|.
+      CLEAR lt_text.
+
+      CALL FUNCTION 'READ_TEXT'
+        EXPORTING
+          client   = sy-mandt
+          id       = 'B01'
+          language = sy-langu
+          name     = lv_name
+          object   = 'EBAN'
+        TABLES
+          lines    = lt_text.
+EXCEPTIONS id = 1 language = 2 name = 3 not_found = 4 object = 5 reference_check = 6 wrong_access_to_archive = 7 OTHERS = 8
+
+      READ TABLE lt_text INTO DATA(ls_text) INDEX 1.
+      IF sy-subrc = 0.
+        <fs_long> = ls_text-tdline.
+      ENDIF.
+    ENDIF.
+
+  ENDLOOP.
+
+ENDMETHOD.
