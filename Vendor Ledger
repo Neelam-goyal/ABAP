@@ -1,0 +1,1017 @@
+*&---------------------------------------------------------------------*
+*& Report ZFI_REP_VENDOR_LEDGER
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+report  zfi_rep_vendor_ledger.
+include zfi_rep_vendor_ledger_top.
+include zfi_rep_vendor_ledger_get.
+include zfi_rep_vendor_ledger_disp.
+
+START-OF-SELECTION.
+  perform get_data.
+  perform final_data.
+
+END-OF-SELECTION.
+*  select single werks into gv_plant from bseg where bukrs eq sbukrs.
+*  select single name1 into gv_compname from t001w where werks eq gv_plant.
+*  translate gv_compname to upper case.
+
+  if S_SCR eq 'X'.
+     g_repid = sy-repid.
+     perform f_list.
+  elseif S_PRN eq 'X'.
+    SELECT single concat( name1 , name2 ) FROM lfa1  where lifnr eq @slifnr-low INTO  @gv_vendname.
+*     select single name1 into gv_vendname from lfa1 where lifnr eq slifnr-low.
+     concatenate 'Account : ' gv_vendname into gv_vendname separated by space.
+     CALL FUNCTION 'SSF_FUNCTION_MODULE_NAME'
+      exporting
+        formname = c_formname
+      importing
+        fm_name  = fm_name.
+
+     IF SY-SUBRC <> 0.
+       WRITE 'Function module not found.'.
+     ENDIF.
+
+     call function fm_name
+      exporting
+        pfdate   = sdate-low
+        ptdate   = sdate-high
+        plifnr   = slifnr-low
+        pbukrs   = gv_compname
+      tables
+        it_final = it_fin.
+
+  endif.
+
+*&---------------------------------------------------------------------*
+*& Include          ZFI_REP_VENDOR_LEDGER_TOP
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&  Include           ZFI_REP_VENDOR_LEDGER_TOP
+*&---------------------------------------------------------------------*
+tables : acdoca.
+data : return	        type bapireturn,
+       openbal        type table of zlifnrbal,
+       lt_openbal     type table of zlifnrbal,
+       lt_openbal_sum type table of zlifnrbal,
+       lw_openbal     type zlifnrbal,
+       wopenbal       type zlifnrbal,
+       tacdoca        type table of zacdoca,
+       wacdoca        type zacdoca,
+       wacdoca2       type zacdoca,
+       tacdoca2       type table of zacdoca,
+       lt_acdoca_tds  type table of zacdoca,
+       lw_acdoca_tds  type          zacdoca,
+       tt074t         type table of t074t,
+       wt074t         type t074t.
+
+types : begin of ty_lfa1,
+          lifnr type lifnr,
+          name1	type name1_gp,
+        end of ty_lfa1.
+types : begin of ty_cskt,
+          kostl type kostl,
+          ltext type kltxt,
+        end of ty_cskt.
+
+data : lt_cskt  type table of ty_cskt,
+       lt_cskt2 type table of ty_cskt.
+
+data : tlfa1   type table of ty_lfa1,
+       lt_lfa1 type table of ty_lfa1, "++v1.1
+       wlfa1   type ty_lfa1.
+
+types : begin of ty_bkpf,
+          bukrs	type bukrs,
+          belnr	type belnr_d,
+          gjahr	type gjahr,
+          bldat	type bldat,
+          budat	type budat,
+          cpudt type cpudt,
+          xblnr	type xblnr1,
+          bktxt	type bktxt,
+        end of ty_bkpf.
+
+DATA : TBKPF TYPE TABLE OF TY_BKPF,
+       WBKPF TYPE TY_BKPF.
+
+DATA : TSKAT  TYPE TABLE OF SKAT,
+       WSKAT  TYPE SKAT,
+       TCEPCT TYPE TABLE OF CEPCT,
+       WCEPCT TYPE CEPCT.
+
+types :  begin of ty_fin.
+           include structure zfi_led.
+         types : end of ty_fin.
+
+types : begin of ty_final,
+          rclnt	    type mandt,
+          rldnr	    type fins_ledger,
+          rbukrs    type bukrs,
+          gjahr	    type gjahr,
+          belnr	    type belnr_d,
+          xblnr	    type xblnr1,
+          bktxt	    type bktxt,
+          docln	    type docln6,
+          ryear	    type gjahr_pos,
+          rtcur	    type rtcur,
+          racct	    type racct,
+          txt50	    type txt50_skat,
+          rcntr	    type kostl,
+          ltext     type kltxt,    " ++v1.1
+          prctr	    type prctr,
+          hsldeb    type vlcur12,
+          cslcer    type vlcur12,
+          hsl	      type vlcur12,
+          csl	      type vlcur12,
+          budat	    type budat,
+          bldat	    type bldat,
+          blart	    type blart,
+          blart_des type t003t-ltext,
+          zuonr	    type dzuonr,
+          bschl	    type bschl,
+          sgtxt	    type sgtxt,
+          lifnr	    type lifnr,
+          name1	    type name1_gp,
+          kunnr     type kunnr,
+          koart	    type koart,
+          umskz	    type umskz,
+          ltext1    type ltext_074t,
+          augdt	    type augdt,
+          augbl	    type augbl,
+          shkzg     type char2, "shkzg,
+          openbal   type vlcur12,
+          closebal  type vlcur12,
+          werks     type werks_d,
+          tds	      type vlcur12,
+        end of ty_final.
+
+Data : it_fin type ty_fin occurs 0 with header line,
+       wa_fin type ty_fin.
+
+data : tfinal    type table of ty_final,
+       wfinal    type ty_final,
+       vendor    type lifnr,
+       prctr     type prctr,
+       belnr     type belnr_d,
+       closebal  type vlcur12,
+       lv_opbalp like bapi3006_4-balance,
+       lt_t003t type table of t003t,
+       lw_t003t type          t003t.
+
+DATA: w_repid    like      sy-repid,
+      w_f2code   like      sy-ucomm value  '&ETA',
+      i_fieldcat type      slis_t_fieldcat_alv,
+      i_heading  type      slis_t_listheader,
+      i_layout   type      slis_layout_alv,
+      i_events   type      slis_t_event,
+      i_print    type      slis_print_alv.                  "#EC *
+
+data : wa_fieldcat type slis_fieldcat_alv.
+data : sr          type i,
+       lv_curr     type char1,
+       gv_vendname type string,
+       gv_compname type string,
+       gv_plant    type string,
+       lv_totdbamt   like bapi3006_4-balance,
+       lv_totcramt   like bapi3006_4-balance.
+
+*----------------------------------------------------------------------*
+*        AlV Data Declaration
+*----------------------------------------------------------------------*
+TYPE-POOLS : SLIS.
+CONSTANTS:
+GC_FORMNAME_TOP_OF_PAGE TYPE SLIS_FORMNAME VALUE 'TOP_OF_PAGE'.
+DATA  :   G_REPID LIKE SY-REPID.
+DATA  :
+  "       used for individual column
+  GT_FIELDCAT         TYPE SLIS_T_FIELDCAT_ALV,
+  G_TABNAME           TYPE SLIS_TABNAME VALUE 'ITAB_OPEN_H',
+  "       used for layout type
+  GS_LAYOUT           TYPE SLIS_LAYOUT_ALV,
+  GX_VARIANT          LIKE DISVARIANT,
+  G_VARIANT           LIKE DISVARIANT,
+  "       used for subtotal
+  GS_SUB              TYPE SLIS_SUBTOT_TEXT,
+  GT_SP_GROUP         TYPE SLIS_T_SP_GROUP_ALV,
+  "       used for events in the report
+  GT_EVENTS           TYPE SLIS_T_EVENT,
+  GT_COL              TYPE SLIS_COLOR, "used for layout color
+  "       for sorting the table
+  GT_SORT             TYPE SLIS_T_SORTINFO_ALV,
+  GT_LIST_TOP_OF_PAGE TYPE SLIS_T_LISTHEADER,
+  "       contains the user event
+  G_USER_COMMAND      LIKE SLIS_EV_USER_COMMAND VALUE 'USER_COMMAND',
+  ALV_EVENT           TYPE  SLIS_ALV_EVENT, "structure event handling
+  GT_PRINT            TYPE SLIS_PRINT_ALV.
+DATA : POS TYPE I VALUE 1,
+       ROW TYPE I VALUE 1.
+
+DATA : P_TEXT, CNTR(1) VALUE 1.
+
+DATA : IT_FILTER TYPE  SLIS_T_FILTER_ALV.
+DATA : GS_KEYINFO       TYPE SLIS_KEYINFO_ALV,
+       G_TABNAME_HEADER TYPE SLIS_TABNAME,
+       G_TABNAME_ITEM   TYPE SLIS_TABNAME.
+
+CONSTANTS : C_FORMNAME TYPE RS38L_FNAM VALUE 'ZSF_FI_VEND_LEDGER'.
+DATA        FM_NAME    TYPE RS38L_FNAM.
+
+DATA : LV_C TYPE CHAR1 .
+DATA : LV_V TYPE CHAR1 .
+
+SELECTION-SCREEN : BEGIN OF BLOCK B1 WITH FRAME TITLE TEXT-001.
+PARAMETERS       : SBUKRS TYPE ACDOCA-RBUKRS OBLIGATORY.
+SELECT-OPTIONS   : SLIFNR FOR  ACDOCA-LIFNR  OBLIGATORY NO-EXTENSION no INTERVALS,
+                   SPRCTR FOR  ACDOCA-PRCTR  OBLIGATORY,
+                   SDATE  FOR  ACDOCA-BUDAT  OBLIGATORY NO-EXTENSION,
+                   SUMSKZ FOR  ACDOCA-UMSKZ  NO-EXTENSION NO INTERVALS.
+*                   SZUONR FOR  ACDOCA-ZUONR  NO-EXTENSION NO INTERVALS.
+PARAMETERS       : R_CUST  AS CHECKBOX.
+PARAMETERS       : R_CLEAR AS CHECKBOX DEFAULT 'X'.
+SELECTION-SCREEN : END OF BLOCK B1.
+
+SELECTION-SCREEN : BEGIN OF BLOCK B2 WITH FRAME TITLE TEXT-002.
+PARAMETERS       : P_AMTLC RADIOBUTTON GROUP RG1  DEFAULT 'X',
+                   P_AMTFC RADIOBUTTON GROUP RG1.
+SELECTION-SCREEN : END OF BLOCK B2.
+
+SELECTION-SCREEN: BEGIN OF BLOCK B3 WITH FRAME TITLE TEXT-001.
+PARAMETERS : S_SCR RADIOBUTTON GROUP G1,
+             S_PRN RADIOBUTTON GROUP G1.
+SELECTION-SCREEN: END OF BLOCK B3.
+
+*&---------------------------------------------------------------------*
+*&  Include           ZFI_REP_VENDOR_LEDGER_GET
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM get_data.
+  IF p_amtlc = 'X'.
+    lv_curr = 'X'.
+  ELSEIF p_amtfc = 'X'.
+    lv_curr = 'Y'.
+  ENDIF.
+  CALL FUNCTION 'Z_FI_VENDOR_BAL'
+    EXPORTING
+      sbukrs  = sbukrs
+      fromdt  = sdate-low
+      todt    = sdate-high
+      lv_curr = lv_curr
+      customer = lv_c
+    IMPORTING
+      return  = return
+    TABLES
+      slifnr  = slifnr
+      sprctr  = sprctr
+      openbal = openbal
+      tacdoca = tacdoca
+      sumskz  = sumskz.
+
+
+*  SELECT rclnt rldnr rbukrs gjahr belnr docln ryear rtcur racct rcntr prctr hsl drcrk budat bldat blart zuonr bschl sgtxt lifnr kunnr
+*         koart umskz augdt augbl werks wsl ktosl FROM acdoca INTO TABLE tacdoca2 FOR ALL ENTRIES IN tacdoca WHERE rldnr = '0L'
+*         AND rbukrs = sbukrs
+*         AND belnr  = tacdoca-belnr
+*         AND budat  IN sdate
+*         AND umskz IN sumskz.
+*         and umskz in zumskz.
+
+  SELECT bukrs as rbukrs gjahr belnr docln gjahr as ryear  racct rcntr prctr hsl drcrk budat bldat blart zuonr bschl sgtxt lifnr kunnr
+         koart umskz augdt augbl werks wsl ktosl FROM bseg INTO TABLE tacdoca2 FOR ALL ENTRIES IN tacdoca WHERE rldnr = '0L'
+         AND rbukrs = sbukrs
+         AND belnr  = tacdoca-belnr
+         AND budat  IN sdate
+         AND umskz IN sumskz.
+
+
+  IF sy-subrc IS INITIAL.
+    REFRESH lt_acdoca_tds.
+    lt_acdoca_tds = tacdoca2[].
+    DELETE tacdoca2 WHERE koart <> 'K'.
+    DELETE lt_acdoca_tds  WHERE ktosl <> 'WIT'.
+    SORT lt_acdoca_tds BY rbukrs
+                          belnr
+                          gjahr
+                          prctr.
+    SELECT * FROM t003t INTO TABLE lt_t003t FOR ALL ENTRIES IN tacdoca2 WHERE spras = sy-langu AND blart = tacdoca2-blart.
+  ENDIF.
+
+  SELECT lifnr name1 FROM lfa1 INTO TABLE tlfa1 WHERE  lifnr IN slifnr and KTOKK = 'YEMP'.
+  SELECT kostl ltext FROM cskt INTO TABLE lt_cskt FOR ALL ENTRIES IN tacdoca WHERE spras = 'E' AND kokrs = 'CDBG' AND kostl = tacdoca-rcntr.
+  IF tacdoca IS NOT INITIAL.
+    SELECT bukrs
+           belnr
+           gjahr
+           bldat
+           budat
+           cpudt
+           xblnr
+           bktxt FROM bkpf INTO TABLE tbkpf
+           FOR ALL ENTRIES IN tacdoca
+           WHERE bukrs = sbukrs
+           AND   belnr = tacdoca-belnr
+           AND   gjahr = tacdoca-gjahr.
+
+    IF tacdoca2 IS NOT INITIAL.
+    ENDIF.
+
+    SELECT * FROM skat INTO TABLE tskat FOR ALL ENTRIES IN tacdoca WHERE saknr = tacdoca-racct.
+    SELECT * FROM skat APPENDING TABLE tskat FOR ALL ENTRIES IN tacdoca2 WHERE saknr = tacdoca2-racct.
+    SELECT * FROM cepct INTO TABLE tcepct FOR ALL ENTRIES IN tacdoca WHERE prctr = tacdoca-prctr.
+
+  ENDIF.
+
+  IF tacdoca IS NOT INITIAL.
+    SELECT * FROM t074t INTO TABLE tt074t FOR ALL ENTRIES IN tacdoca WHERE spras = 'E' AND koart = tacdoca-koart AND shbkz = tacdoca-umskz.
+  ENDIF.
+
+  IF tacdoca2 IS NOT INITIAL.
+    SELECT * FROM t074t APPENDING TABLE tt074t FOR ALL ENTRIES IN tacdoca2 WHERE spras = 'E' AND   koart = tacdoca2-koart AND   shbkz = tacdoca2-umskz.
+    SELECT kostl ltext FROM cskt INTO TABLE lt_cskt2 FOR ALL ENTRIES IN tacdoca2 WHERE spras = 'E' AND kokrs = 'CDBG' AND kostl = tacdoca2-rcntr.
+  ENDIF.
+
+  SELECT SINGLE werks INTO gv_plant FROM bseg WHERE bukrs EQ sbukrs AND werks <> ''.
+  SELECT SINGLE name1, name2 FROM t001w INTO @DATA(wa_comp_name) WHERE werks EQ @gv_plant.
+  CONCATENATE wa_comp_name-name1 wa_comp_name-name2 INTO gv_compname SEPARATED BY space.
+  TRANSLATE gv_compname TO UPPER CASE.
+
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  FINAL_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM final_data.
+  " SORT TACDOCA BY LIFNR PRCTR+0(4) BUDAT BELNR ."DESCENDING.
+
+  DATA t_tmp  TYPE TABLE OF zacdoca.
+  DATA p_tmp  TYPE TABLE OF zacdoca.
+  DATA w_tmp  TYPE zacdoca.
+  DATA lv_tmp TYPE i.
+
+  FIELD-SYMBOLS <lfs_openbal> TYPE zlifnrbal.
+
+  SORT tacdoca BY lifnr
+                  budat
+                  belnr. " DESCENDING.
+  t_tmp[] = tacdoca[].
+  p_tmp[] = tacdoca[].
+  DELETE ADJACENT DUPLICATES FROM t_tmp COMPARING lifnr budat belnr.
+
+  REFRESH lt_openbal[].
+  lt_openbal[] = openbal[].
+  SORT openbal BY lifnr.
+
+*  loop at t_tmp into w_tmp where blart = 'KZ' or blart = 'ZP'.
+*    lv_tmp = 1.
+*    loop at tacdoca into wacdoca where belnr = w_tmp-belnr and gjahr = w_tmp-gjahr.
+*      wacdoca-srno = lv_tmp.
+*      lv_tmp += 1.
+*      modify tacdoca from wacdoca.
+*    endloop.
+*  endloop.
+
+*  delete tacdoca where srno > 1 and ( blart = 'KZ' or blart = 'ZP' ).
+  if R_CLEAR eq ''.
+     delete tacdoca where blart = 'AB' .
+  endif.
+
+  LOOP AT tacdoca INTO wacdoca WHERE blart = 'KZ' OR blart = 'ZP'.
+*    wacdoca-hsl = 0.
+*    loop at p_tmp into w_tmp where belnr = wacdoca-belnr and gjahr = wacdoca-gjahr.
+*      wacdoca-hsl += w_tmp-hsl.
+*    endloop.
+    IF wacdoca-hsl > 0.
+      wacdoca-drcrk = 'S'.
+    ELSE.
+      wacdoca-drcrk = 'H'.
+    ENDIF.
+    MODIFY tacdoca FROM wacdoca.
+  ENDLOOP.
+
+  LOOP AT tacdoca INTO wacdoca WHERE budat IN sdate AND koart = 'K'.
+    IF vendor <> wacdoca-lifnr.
+      CLEAR closebal.
+      READ TABLE openbal ASSIGNING <lfs_openbal> WITH KEY lifnr = wacdoca-lifnr.
+      IF sy-subrc = 0.
+        wopenbal = <lfs_openbal>.
+        wfinal-openbal = wopenbal-hsl.
+      ENDIF.
+    ENDIF.
+
+    wfinal-rbukrs = wacdoca-rbukrs.
+    wfinal-gjahr  = wacdoca-gjahr.
+    wfinal-belnr  = wacdoca-belnr.
+    wfinal-werks  = wacdoca-prctr+0(4).
+    IF wacdoca-drcrk = 'H'.
+      wfinal-shkzg = 'CR'.
+    ELSEIF wacdoca-drcrk = 'S'.
+      wfinal-shkzg = 'DR'.
+    ENDIF.
+    belnr = wacdoca-belnr.
+    READ TABLE tbkpf INTO wbkpf WITH KEY belnr = wacdoca-belnr
+                                         budat = wacdoca-budat.
+    IF sy-subrc = 0.
+      wfinal-xblnr = wbkpf-xblnr.
+      wfinal-bktxt = wbkpf-bktxt.
+      wfinal-augdt = wbkpf-cpudt.
+    ENDIF.
+    READ TABLE tlfa1 INTO wlfa1 WITH KEY lifnr = wacdoca-lifnr.
+    IF sy-subrc = 0.
+      wfinal-name1 = wlfa1-name1.
+    ENDIF.
+    wfinal-ryear = wacdoca-ryear.
+    wfinal-rtcur = wacdoca-rtcur.
+    wfinal-racct = wacdoca-racct.
+    READ TABLE tskat INTO wskat WITH KEY saknr = wacdoca-racct.
+    IF sy-subrc = 0.
+      wfinal-txt50 = wskat-txt50.
+    ENDIF.
+    wfinal-rcntr = wacdoca-rcntr.
+    wfinal-prctr = wacdoca-prctr.
+    prctr        = wacdoca-prctr.
+    vendor       = wacdoca-lifnr.
+    IF lv_curr = 'Y'.
+      wacdoca-hsl = wacdoca-wsl.
+    ENDIF.
+
+    wfinal-hsldeb = wacdoca-hsl.
+    READ TABLE tt074t INTO wt074t WITH KEY koart = wacdoca-koart
+                                           shbkz = wacdoca-umskz.
+    IF sy-subrc = 0.
+      wfinal-ltext1 = wt074t-ltext.
+    ENDIF.
+    wfinal-budat = wacdoca-budat.
+    wfinal-bldat = wacdoca-bldat.
+    wfinal-blart = wacdoca-blart.
+
+    CLEAR lw_t003t.
+    READ TABLE lt_t003t INTO lw_t003t WITH KEY blart = wacdoca-blart.
+    IF sy-subrc IS INITIAL.
+      wfinal-blart_des = lw_t003t-ltext.
+    ENDIF.
+
+    wfinal-zuonr = wacdoca-zuonr.
+    wfinal-bschl = wacdoca-bschl.
+    wfinal-sgtxt = wacdoca-sgtxt.
+    IF wacdoca-koart = 'K'.
+      wfinal-lifnr = wacdoca-lifnr.
+    ENDIF.
+
+    wfinal-koart = wacdoca-koart.
+    IF wacdoca-koart = 'D'.
+      wfinal-kunnr = wacdoca-kunnr.
+    ENDIF.
+    wfinal-umskz = wacdoca-umskz.
+    wfinal-augbl = wacdoca-augbl.
+    closebal     += wfinal-openbal + wacdoca-hsl.
+    wfinal-closebal = closebal.
+
+*    <lfs_openbal>-hsl = closebal.
+
+    IF wacdoca-drcrk = 'H'.
+      wfinal-hsldeb = wacdoca-hsl.
+    ENDIF.
+    READ TABLE lt_cskt INTO DATA(wa_cskt) WITH KEY kostl = wfinal-rcntr.
+    IF sy-subrc = 0.
+      wfinal-ltext = wa_cskt-ltext.
+      CLEAR wa_cskt.
+    ENDIF.
+    CLEAR lw_acdoca_tds.
+    READ TABLE lt_acdoca_tds INTO lw_acdoca_tds WITH KEY rbukrs = wacdoca-rbukrs
+                                                         belnr  = wacdoca-belnr
+                                                         gjahr  = wacdoca-gjahr.
+
+    IF sy-subrc IS INITIAL.
+      IF lv_curr = 'Y'.
+        wfinal-tds = lw_acdoca_tds-wsl.
+      ELSE.
+        wfinal-tds = lw_acdoca_tds-hsl.
+      ENDIF.
+    ENDIF.
+    APPEND wfinal TO tfinal.
+    CLEAR wfinal.
+    CLEAR wlfa1.
+    CLEAR wskat.
+    CLEAR wt074t.
+
+    LOOP AT tacdoca2 INTO wacdoca2 WHERE     belnr  = belnr
+                                         AND docln <> wacdoca-docln
+                                         AND budat IN sdate
+                                         AND koart <> 'K'.
+      wfinal-rbukrs = wacdoca2-rbukrs.
+      wfinal-gjahr  = wacdoca2-gjahr.
+      wfinal-belnr  = wacdoca2-belnr.
+      wfinal-xblnr  = wbkpf-xblnr.
+      wfinal-bktxt  = wbkpf-bktxt.
+      wfinal-augdt  = wbkpf-cpudt.
+      wfinal-ryear  = wacdoca2-ryear.
+      wfinal-rtcur  = wacdoca2-rtcur.
+      CLEAR lw_acdoca_tds.
+      READ TABLE lt_acdoca_tds INTO lw_acdoca_tds WITH KEY rbukrs = wacdoca2-rbukrs
+                                                           belnr  = wacdoca2-belnr
+                                                           gjahr  = wacdoca2-gjahr.
+      IF sy-subrc IS INITIAL.
+        IF lv_curr = 'Y'.
+          wfinal-tds = lw_acdoca_tds-wsl.
+        ELSE.
+          wfinal-tds = lw_acdoca_tds-hsl.
+        ENDIF.
+      ENDIF.
+
+      IF wacdoca2-drcrk = 'H'.
+        wfinal-shkzg = 'CR'. " wacdoca-drcrk.
+      ELSEIF wacdoca2-drcrk = 'S'.
+        wfinal-shkzg = 'DR'.
+      ENDIF.
+
+      READ TABLE tt074t INTO wt074t WITH KEY koart = wacdoca2-koart
+                                             shbkz = wacdoca2-umskz.
+      IF sy-subrc = 0.
+        wfinal-ltext1 = wt074t-ltext.
+      ENDIF.
+      READ TABLE tskat INTO wskat WITH KEY saknr = wacdoca2-racct.
+      IF sy-subrc = 0.
+        wfinal-txt50 = wskat-txt50.
+      ENDIF.
+      wfinal-racct = wacdoca2-racct.
+      wfinal-rcntr = wacdoca2-rcntr.
+      wfinal-prctr = wacdoca2-prctr.
+
+      IF lv_curr = 'Y'.
+        wacdoca2-hsl = wacdoca2-wsl.
+      ENDIF.
+
+      IF wacdoca2-drcrk = 'S'.
+        wfinal-hsldeb = wacdoca2-hsl.
+      ELSEIF wacdoca2-drcrk = 'H'.
+        wfinal-hsldeb = wacdoca2-hsl.
+      ENDIF.
+      READ TABLE tlfa1 INTO wlfa1 WITH KEY lifnr = wacdoca2-lifnr.
+      IF sy-subrc = 0.
+        wfinal-name1 = wlfa1-name1.
+      ENDIF.
+      wfinal-budat = wacdoca2-budat.
+      wfinal-bldat = wacdoca2-bldat.
+      wfinal-blart = wacdoca2-blart.
+
+      CLEAR lw_t003t.
+      READ TABLE lt_t003t INTO lw_t003t WITH KEY blart = wacdoca2-blart.
+      IF sy-subrc IS INITIAL.
+        wfinal-blart_des = lw_t003t-ltext.
+      ENDIF.
+      wfinal-zuonr = wacdoca2-zuonr.
+      wfinal-bschl = wacdoca2-bschl.
+      wfinal-sgtxt = wacdoca2-sgtxt.
+      wfinal-lifnr = wacdoca2-lifnr.
+      wfinal-koart = wacdoca2-koart.
+      IF wacdoca2-koart = 'D'.
+        wfinal-kunnr = wacdoca2-kunnr.
+      ENDIF.
+      wfinal-umskz = wacdoca2-umskz.
+      wfinal-augbl = wacdoca2-augbl.
+      READ TABLE lt_cskt2 INTO DATA(wa_cskt2) WITH KEY kostl = wfinal-rcntr.
+      IF sy-subrc = 0.
+        wfinal-ltext = wa_cskt2-ltext.
+        CLEAR wa_cskt2.
+      ENDIF.
+      APPEND wfinal TO tfinal.
+      DELETE tacdoca2.
+      CLEAR wacdoca2.
+      CLEAR wfinal.
+      CLEAR wlfa1.
+      CLEAR wskat.
+    ENDLOOP.
+    CLEAR wfinal.
+    CLEAR wacdoca.
+    CLEAR wacdoca2.
+    CLEAR belnr.
+  ENDLOOP.
+  "
+  CLEAR closebal.
+  READ TABLE openbal ASSIGNING <lfs_openbal> WITH KEY lifnr = slifnr-low.
+  IF sy-subrc = 0.
+    IF wopenbal-hsl IS INITIAL.
+      wopenbal = <lfs_openbal>.
+      wa_fin-clblamt = abs( wopenbal-hsl - wopenbal-csl ).
+    ENDIF.
+    wa_fin-color   = 'C51'.
+    wa_fin-budat   = sdate-low.
+    wa_fin-sgtxt   = 'Opening Balance'.
+    wa_fin-clblamt = abs( wopenbal-hsl ).
+*    if wfinal-closebal > 0.
+    IF wopenbal-hsl GT 0.
+      wa_fin-drcrt = 'Dr'.
+    ELSE.
+      wa_fin-drcrt = 'Cr'.
+    ENDIF.
+    APPEND wa_fin TO it_fin.
+    CLEAR wa_fin.
+  ENDIF.
+
+  LOOP AT tfinal INTO wfinal.
+    wa_fin-bukrs = wfinal-rbukrs.
+    wa_fin-belnr = wfinal-belnr.
+    wa_fin-gjahr = wfinal-gjahr.
+    wa_fin-blart = wfinal-blart.
+    wa_fin-budat = wfinal-budat.
+
+    wa_fin-bldat = wfinal-bldat.
+    wa_fin-xblnr = wfinal-xblnr.
+    wa_fin-prctr = wfinal-prctr.
+
+    SELECT SINGLE
+    FROM acdoca AS ze
+    INNER JOIN acdoca AS re ON
+      re~awref = ze~awref AND
+      re~gjahr = ze~gjahr AND
+      re~rbukrs = ze~rbukrs AND
+      re~ebeln IS NOT INITIAL AND
+      re~blart = char`RE`
+    FIELDS re~sgtxt
+    WHERE
+      ze~belnr = @wa_fin-belnr AND
+      ze~gjahr = @wa_fin-gjahr AND
+      ze~blart = @wa_fin-blart AND
+      @wa_fin-blart = char`ZE` AND
+      ze~rbukrs = @wa_fin-bukrs
+    INTO @wa_fin-sgtxt.
+    IF sy-subrc <> 0.
+      wa_fin-sgtxt = wfinal-sgtxt.
+    ENDIF.
+    IF wfinal-hsldeb > 0.
+      wa_fin-dramt = abs( wfinal-hsldeb ).
+    ELSEIF wfinal-hsldeb < 0.
+      wa_fin-cramt = abs( wfinal-hsldeb ).
+    ENDIF.
+    wa_fin-clblamt = abs( wfinal-closebal ).
+
+    IF wfinal-tds IS INITIAL.
+      SELECT SINGLE dmbtr FROM bseg INTO wa_fin-tdsam
+      WHERE belnr = wa_fin-belnr AND bukrs = wa_fin-bukrs AND gjahr = wa_fin-gjahr AND h_blart = 'KZ' AND hkont = '0001460018'.
+    ELSE.
+      wa_fin-tdsam   = abs( wfinal-tds ).
+    ENDIF.
+    lv_totdbamt    += wa_fin-dramt.
+    lv_totcramt    += wa_fin-cramt.
+    IF wfinal-closebal > 0.
+      wa_fin-drcrt = 'Dr'.
+    ELSE.
+      wa_fin-drcrt = 'Cr'.
+    ENDIF.
+    APPEND wa_fin TO it_fin.
+    CLEAR wa_fin.
+  ENDLOOP.
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&  Include           ZFI_REP_VENDOR_LEDGER_DISPLAY
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  F_DISPLAY_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM f_field_cat .
+  w_repid = sy-repid.
+  i_layout-colwidth_optimize = 'X'.
+  i_layout-detail_popup      = ' '.
+  i_layout-detail_titlebar   = 'DETAILS OF RECORD'.
+  i_layout-info_fieldname    = 'W_COLOR'.
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  GRID_DISPLAY
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM grid_display .
+  DATA : l_repid TYPE disvariant.
+  l_repid = sy-repid.
+  w_repid = sy-repid.
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+    EXPORTING
+      i_callback_program      = w_repid
+      i_callback_user_command = 'USER_COMMAND'
+      i_callback_top_of_page  = 'SUB_TOP_OF_PAGE'
+      is_layout               = i_layout
+      it_fieldcat             = i_fieldcat[]
+      i_save                  = 'X'
+      is_variant              = l_repid
+      it_events               = i_events
+    TABLES
+      t_outtab                = tfinal
+    EXCEPTIONS
+      program_error           = 1
+      OTHERS                  = 2.
+ENDFORM.
+
+FORM FIELDCAT_INIT USING RT_FIELDCAT TYPE SLIS_T_FIELDCAT_ALV.
+  DATA: LS_FIELDCAT TYPE SLIS_FIELDCAT_ALV.
+  DATA : W_COL TYPE I VALUE 0.
+
+  ADD 1 TO W_COL.
+  CLEAR LS_FIELDCAT.
+  LS_FIELDCAT-ROW_POS     =  '1'.
+  LS_FIELDCAT-COL_POS     =  W_COL.
+  LS_FIELDCAT-KEY         =  ''.
+  LS_FIELDCAT-TABNAME     =  'IT_FIN'.
+  LS_FIELDCAT-FIELDNAME   =  'BELNR'.
+  LS_FIELDCAT-OUTPUTLEN   =  '10'.
+  LS_FIELDCAT-JUST        =  'L'.
+  LS_FIELDCAT-SELTEXT_L   =  'Doc No.'.
+  APPEND LS_FIELDCAT TO RT_FIELDCAT.
+
+  LS_FIELDCAT-ROW_POS     =  '1'.
+  LS_FIELDCAT-COL_POS     =  W_COL.
+  LS_FIELDCAT-KEY         =  ''.
+  LS_FIELDCAT-TABNAME     =  'IT_FIN'.
+  LS_FIELDCAT-FIELDNAME   =  'BUDAT'.
+  LS_FIELDCAT-OUTPUTLEN   =  '10'.
+  LS_FIELDCAT-JUST        =  'L'.
+  LS_FIELDCAT-SELTEXT_L   =  'Posting Date'.
+  APPEND LS_FIELDCAT TO RT_FIELDCAT.
+
+  LS_FIELDCAT-ROW_POS     =  '1'.
+  LS_FIELDCAT-COL_POS     =  W_COL.
+  LS_FIELDCAT-KEY         =  ''.
+  LS_FIELDCAT-TABNAME     =  'IT_FIN'.
+  LS_FIELDCAT-FIELDNAME   =  'BLDAT'.
+  LS_FIELDCAT-OUTPUTLEN   =  '10'.
+  LS_FIELDCAT-JUST        =  'L'.
+  LS_FIELDCAT-SELTEXT_L   =  'Document Date'.
+  APPEND LS_FIELDCAT TO RT_FIELDCAT.
+
+  LS_FIELDCAT-ROW_POS     =  '1'.
+  LS_FIELDCAT-COL_POS     =  W_COL.
+  LS_FIELDCAT-KEY         =  ''.
+  LS_FIELDCAT-TABNAME     =  'IT_FIN'.
+  LS_FIELDCAT-FIELDNAME   =  'BLART'.
+  LS_FIELDCAT-OUTPUTLEN   =  '10'.
+  LS_FIELDCAT-JUST        =  'L'.
+  LS_FIELDCAT-SELTEXT_L   =  'Doc Type'.
+  APPEND LS_FIELDCAT TO RT_FIELDCAT.
+
+  LS_FIELDCAT-ROW_POS     =  '1'.
+  LS_FIELDCAT-COL_POS     =  W_COL.
+  LS_FIELDCAT-KEY         =  ''.
+  LS_FIELDCAT-TABNAME     =  'IT_FIN'.
+  LS_FIELDCAT-FIELDNAME   =  'PRCTR'.
+  LS_FIELDCAT-OUTPUTLEN   =  '10'.
+  LS_FIELDCAT-JUST        =  'L'.
+  LS_FIELDCAT-SELTEXT_L   =  'Profit Centre'.
+  APPEND LS_FIELDCAT TO RT_FIELDCAT.
+
+  LS_FIELDCAT-ROW_POS     =  '1'.
+  LS_FIELDCAT-COL_POS     =  W_COL.
+  LS_FIELDCAT-KEY         =  ''.
+  LS_FIELDCAT-TABNAME     =  'IT_FIN'.
+  LS_FIELDCAT-FIELDNAME   =  'XBLNR'.
+  LS_FIELDCAT-OUTPUTLEN   =  '10'.
+  LS_FIELDCAT-JUST        =  'L'.
+  LS_FIELDCAT-SELTEXT_L   =  'Particulars'.
+  APPEND LS_FIELDCAT TO RT_FIELDCAT.
+
+  LS_FIELDCAT-ROW_POS     =  '1'.
+  LS_FIELDCAT-COL_POS     =  W_COL.
+  LS_FIELDCAT-KEY         =  ''.
+  LS_FIELDCAT-TABNAME     =  'IT_FIN'.
+  LS_FIELDCAT-FIELDNAME   =  'SGTXT'.
+  LS_FIELDCAT-OUTPUTLEN   =  '50'.
+  LS_FIELDCAT-JUST        =  'L'.
+  LS_FIELDCAT-SELTEXT_L   =  'Narration'.
+  APPEND LS_FIELDCAT TO RT_FIELDCAT.
+
+  LS_FIELDCAT-ROW_POS     =  '1'.
+  LS_FIELDCAT-COL_POS     =  W_COL.
+  LS_FIELDCAT-KEY         =  ''.
+  LS_FIELDCAT-TABNAME     =  'IT_FIN'.
+  LS_FIELDCAT-FIELDNAME   =  'TDSAM'.
+  LS_FIELDCAT-OUTPUTLEN   =  '25'.
+  LS_FIELDCAT-JUST        =  'L'.
+  LS_FIELDCAT-DO_SUM      =  'X'.
+  LS_FIELDCAT-SELTEXT_L   =  'TDS Amount'.
+  APPEND LS_FIELDCAT TO RT_FIELDCAT.
+
+  LS_FIELDCAT-ROW_POS     =  '1'.
+  LS_FIELDCAT-COL_POS     =  W_COL.
+  LS_FIELDCAT-KEY         =  ''.
+  LS_FIELDCAT-TABNAME     =  'IT_FIN'.
+  LS_FIELDCAT-FIELDNAME   =  'DRAMT'.
+  LS_FIELDCAT-OUTPUTLEN   =  '25'.
+  LS_FIELDCAT-JUST        =  'L'.
+*  LS_FIELDCAT-DO_SUM      =  'X'.
+  LS_FIELDCAT-SELTEXT_L   =  'Debit  Amt(Rs.)'.
+  APPEND LS_FIELDCAT TO RT_FIELDCAT.
+
+  LS_FIELDCAT-ROW_POS     =  '1'.
+  LS_FIELDCAT-COL_POS     =  W_COL.
+  LS_FIELDCAT-KEY         =  ''.
+  LS_FIELDCAT-TABNAME     =  'IT_FIN'.
+  LS_FIELDCAT-FIELDNAME   =  'CRAMT'.
+  LS_FIELDCAT-OUTPUTLEN   =  '25'.
+  LS_FIELDCAT-JUST        =  'L'.
+*  LS_FIELDCAT-DO_SUM      =  'X'.
+  LS_FIELDCAT-SELTEXT_L   =  'Credit Amt(Rs.)'.
+  APPEND LS_FIELDCAT TO RT_FIELDCAT.
+
+  LS_FIELDCAT-ROW_POS     =  '1'.
+  LS_FIELDCAT-COL_POS     =  W_COL.
+  LS_FIELDCAT-KEY         =  ''.
+  LS_FIELDCAT-TABNAME     =  'IT_FIN'.
+  LS_FIELDCAT-FIELDNAME   =  'CLBLAMT'.
+  LS_FIELDCAT-OUTPUTLEN   =  '25'.
+  LS_FIELDCAT-JUST        =  'L'.
+  LS_FIELDCAT-DO_SUM      =  ''.
+  LS_FIELDCAT-SELTEXT_L   =  'Balance(Rs.)'.
+  APPEND LS_FIELDCAT TO RT_FIELDCAT.
+
+  LS_FIELDCAT-ROW_POS     =  '1'.
+  LS_FIELDCAT-COL_POS     =  W_COL.
+  LS_FIELDCAT-KEY         =  ''.
+  LS_FIELDCAT-TABNAME     =  'IT_FIN'.
+  LS_FIELDCAT-FIELDNAME   =  'DRCRT'.
+  LS_FIELDCAT-OUTPUTLEN   =  '25'.
+  LS_FIELDCAT-JUST        =  'L'.
+  LS_FIELDCAT-SELTEXT_L   =  'Type'.
+  APPEND LS_FIELDCAT TO RT_FIELDCAT.
+
+ENDFORM.
+
+* *-------------------------------------------------------------------*
+*       FORM ALV_END_OF_LIST                                          *
+*---------------------------------------------------------------------*
+*       ........                                                      *
+*---------------------------------------------------------------------*
+FORM ALV_END_OF_LIST.
+*  DATA : LV_TOTCLAMT   LIKE BAPI3006_4-BALANCE,
+*         LV_OPBAL      LIKE BAPI3006_4-BALANCE,
+*         LV_CLBAL      LIKE BAPI3006_4-BALANCE,
+*         LV_OPBALSG(2) TYPE C,
+*         LV_CLBALSG(2) TYPE C.
+*
+*  FIELD-SYMBOLS : <LFS_OPENBAL> TYPE ANY.
+*
+*  CLEAR : CLOSEBAL.
+*  READ TABLE OPENBAL ASSIGNING <LFS_OPENBAL> WITH KEY LIFNR = SLIFNR-LOW.
+*  IF SY-SUBRC = 0.
+*     WOPENBAL = <LFS_OPENBAL>.
+*     LV_OPBALP = WOPENBAL-HSL - WOPENBAL-CSL .
+*
+*     LV_TOTCLAMT = ( LV_OPBALP + LV_TOTDBAMT ) - LV_TOTCRAMT.
+*
+*     IF LV_OPBALP GE 0.
+*        LV_OPBALSG = 'Dr'.
+*        LV_OPBAL = LV_OPBALP.
+*     ELSE.
+*        LV_OPBALSG = 'Cr'.
+*        LV_OPBAL = LV_OPBALP * '-1'.
+*     ENDIF.
+*
+*     IF LV_TOTCLAMT GE 0.
+*        LV_CLBALSG = 'Dr'.
+*        LV_CLBAL = LV_TOTCLAMT.
+*     ELSE.
+*        LV_CLBALSG = 'Cr'.
+*        LV_CLBAL = LV_TOTCLAMT * '-1'.
+*     ENDIF.
+*
+*     SKIP 1.
+*     FORMAT COLOR 5 INVERSE ON.
+*
+*     WRITE : /40 'Op. Balance  : ',LV_OPBAL    DECIMALS 2,LV_OPBALSG .
+*     WRITE : /40 'Total Debit  : ',LV_TOTDBAMT DECIMALS 2.
+*     WRITE : /40 'Total Credit : ',LV_TOTCRAMT DECIMALS 2.
+*     WRITE : /40 '----------------------------------------------------'.
+*     WRITE : /40 'Cl. Balance  : ',LV_CLBAL    DECIMALS 2,LV_CLBALSG.
+*     WRITE : /40 '----------------------------------------------------'.
+*     WRITE : /.
+*  ENDIF.
+ENDFORM .
+
+* *---------------------------------------------------------------------*
+*       FORM ALV_TOP_OF_LIST                                          *
+*---------------------------------------------------------------------*
+*       ........                                                      *
+*---------------------------------------------------------------------*
+FORM ALV_TOP_OF_LIST.
+  SELECT SINGLE NAME1 INTO GV_VENDNAME FROM LFA1 WHERE LIFNR EQ SLIFNR-LOW.
+  CONCATENATE 'Account : ' SLIFNR-LOW ' - ' GV_VENDNAME INTO GV_VENDNAME SEPARATED BY SPACE.
+  SKIP 1.
+  FORMAT COLOR 5 INVERSE ON.
+  WRITE : /(120) gv_compname CENTERED.
+  WRITE : /(120) 'Vendor Account Ledger' CENTERED.
+  WRITE : /(120) GV_VENDNAME CENTERED.
+  WRITE : /.
+  WRITE : / 'Period From :',Sdate-LOW , ' To ', Sdate-HIGH .
+  WRITE : /.
+  CLEAR : GV_VENDNAME.
+ENDFORM .
+
+FORM SORT_INIT USING P_GT_SORT LIKE GT_SORT.
+     DATA LT_SORT TYPE SLIS_SORTINFO_ALV.
+ENDFORM.
+
+FORM ALV_EVENT_INIT.
+  CLEAR ALV_EVENT.
+  ALV_EVENT-NAME = SLIS_EV_TOP_OF_PAGE.
+  ALV_EVENT-FORM  = 'ALV_TOP_OF_PAGE'.
+  APPEND ALV_EVENT TO GT_EVENTS.
+
+  CLEAR ALV_EVENT.
+  ALV_EVENT-NAME = SLIS_EV_TOP_OF_LIST.
+  ALV_EVENT-FORM  = 'ALV_TOP_OF_LIST'.
+  APPEND ALV_EVENT TO GT_EVENTS.
+
+  CLEAR ALV_EVENT.
+  ALV_EVENT-NAME = SLIS_EV_END_OF_LIST.
+  ALV_EVENT-FORM  = 'ALV_END_OF_LIST'.
+  APPEND ALV_EVENT TO GT_EVENTS.
+
+  CLEAR ALV_EVENT.
+  ALV_EVENT-NAME = SLIS_EV_END_OF_PAGE.
+  ALV_EVENT-FORM  = 'ALV_END_OF_PAGE'.
+  CLEAR ALV_EVENT.
+ENDFORM.
+
+FORM F_LIST.
+  REFRESH GT_FIELDCAT.
+
+  PERFORM ALV_EVENT_INIT. "using alv_events[]
+
+  PERFORM :  FIELDCAT_INIT USING GT_FIELDCAT[],
+             SORT_INIT     USING GT_SORT[].
+
+  CLEAR GS_LAYOUT.
+  GS_LAYOUT-KEY_HOTSPOT           = 'X'.
+  GS_LAYOUT-NO_KEYFIX             = ''.
+  GS_LAYOUT-TOTALS_ONLY           = 'X'.
+  GS_LAYOUT-GET_SELINFOS          = ''.
+  GS_LAYOUT-TOTALS_TEXT           = ''.
+  GS_LAYOUT-SUBTOTALS_TEXT        = 'Sub Total'.
+  GS_LAYOUT-NUMC_SUM              = 'X'.
+  GS_LAYOUT-DETAIL_INITIAL_LINES  = 'X'.
+  GS_LAYOUT-TOTALS_BEFORE_ITEMS   = ' '.
+  GS_LAYOUT-NO_VLINE              = ' '.
+  GS_LAYOUT-DEF_STATUS            = ''.
+  GS_LAYOUT-NO_KEYFIX             = 'X'.
+  GS_LAYOUT-ZEBRA                 = 'X'.
+  GS_LAYOUT-HOTSPOT_FIELDNAME     = ''.
+  GS_LAYOUT-WINDOW_TITLEBAR       = 'Vendor Account Ledger' .
+  GS_LAYOUT-COLWIDTH_OPTIMIZE     = 'X'.
+  GS_LAYOUT-GET_SELINFOS          = ''.
+  GS_LAYOUT-DETAIL_POPUP          = ''.
+  GS_LAYOUT-TOTALS_ONLY           = 'X'.
+  GS_LAYOUT-DETAIL_TITLEBAR       = 'Vendor Account Ledger' .
+  GS_LAYOUT-COLWIDTH_OPTIMIZE     = 'X'.
+  GS_LAYOUT-INFO_FIELDNAME        = 'COLOR'.
+
+  CALL FUNCTION 'REUSE_ALV_LIST_DISPLAY'
+    EXPORTING
+      I_CALLBACK_PROGRAM      = G_REPID
+      IS_LAYOUT               = GS_LAYOUT
+      IT_SORT                 = GT_SORT[]
+      I_CALLBACK_USER_COMMAND = 'USER_COMMAND'
+      IT_FIELDCAT             = GT_FIELDCAT[]
+      IT_EVENTS               = GT_EVENTS[]
+      I_SAVE                  = 'X'
+*      i_linemark_fieldname    = 'COLOR'
+*     is_variant              = variant_detail
+    TABLES
+      T_OUTTAB                = IT_FIN.
+ENDFORM.
+
+* *-------------------------------------------------------------------*
+*       FORM USER_COMMAND                                             *
+*---------------------------------------------------------------------*
+*       ........                                                      *
+*---------------------------------------------------------------------*
+FORM USER_COMMAND USING UCOMM LIKE SY-UCOMM SELFIELD TYPE SLIS_SELFIELD.
+  READ TABLE IT_FIN INDEX SELFIELD-TABINDEX.
+  CASE SELFIELD-SEL_TAB_FIELD.
+    WHEN 'IT_FIN-BELNR'.
+      SET PARAMETER ID 'BUK'  FIELD IT_FIN-BUKRS.
+      SET PARAMETER ID 'BLN'  FIELD IT_FIN-BELNR.
+      SET PARAMETER ID 'GJR'  FIELD IT_FIN-GJAHR.
+      CALL TRANSACTION 'FB03' AND SKIP FIRST SCREEN.
+  ENDCASE.
+ENDFORM.
