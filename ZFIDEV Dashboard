@@ -1,0 +1,237 @@
+*&---------------------------------------------------------------------*
+*& Report ZFI_DEVELOPMENT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+report zfi_development.
+
+data:
+  "*Reports
+  r_vag   type c,   "*Vendor Ageing
+  r_cag   type c,   "*Customer Ageing
+  r_vr    type c,   "*Vendor Report
+  r_cr    type c,   "*Customer Report
+  r_dn    type c,   "*Debit Note
+  r_cdr   type c,   "*Cash Discount Report
+  r_ppr   type c,   "*Purchase & Payment Report
+  r_srr   type c,   "*Sale & Receipt Report
+  r_vcc   type c,   "*Vendor Cheque Clearing Report
+  r_cal   type c,   "*Customer Account Ledger
+  r_val   type c,   "*Vendor Account Ledger
+  r_tds   type c,   "*TDS Report
+  r_gst   type c,   "*GST Report ( Inward/ Outward)
+  "*Print Outs
+  p_adv   type c,   "*Payment Advice
+  p_chq   type c,   "*Cheque Print
+  p_vch   type c,   "*VOUCHER  Print
+  p_dbc   type c,   "*Debit Credit Note
+  p_vbc   type c,   "*Vendor Balance confirmation letter
+  p_cbc   type c,   "*Customer Balance confirmation letter
+  p_imdbc type c,   "Import Debit Note
+  "*Process
+  e_amail type c, "*Payment Advice Mail
+  e_pdc   type c, "*Post Dated Cheque
+  "*Maintainatble
+  m_amail type c, "*Maintain Advice mail ID
+  m_vpay  type c, "*Maintain Advice mail ID
+  m_miro  type c,
+  m_bnk   type c,           """""""""""BRS Uploading
+  m_rcm   type c,           """""""""RCM Invoice
+  rd10    type c.
+data: r_disp type c,
+      p_disp type c,
+      e_disp type c,
+      m_disp type c.
+
+call screen 9001.
+*&---------------------------------------------------------------------*
+*& Module STATUS_9001 OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+module status_9001 output.
+  set pf-status 'ZDEV_STAT'.
+  set titlebar 'ZDEV_TIT'.
+
+  loop at screen.
+
+    if r_disp = 'X'.
+
+      if screen-group1 ne 'RPG'.
+        screen-input = 0.
+      endif.
+      if screen-group1 eq 'GEX'.
+        screen-input = 1.
+      endif.
+
+    elseif p_disp = 'X'.
+
+      if screen-group1 ne 'PPG'.
+        screen-input = 0.
+      endif.
+      if screen-group1 eq 'GEX'.
+        screen-input = 1.
+      endif.
+
+    elseif e_disp = 'X'.
+
+      if screen-group1 ne 'EPG'.
+        screen-input = 0.
+      endif.
+      if screen-group1 eq 'GEX'.
+        screen-input = 1.
+      endif.
+
+    elseif m_disp = 'X'.
+
+      if screen-group1 ne 'MPG'.
+        screen-input = 0.
+      endif.
+      if screen-group1 eq 'GEX'.
+        screen-input = 1.
+      endif.
+
+    else.
+
+      screen-input = 0.
+
+    endif.
+
+    modify screen.
+
+  endloop.
+
+endmodule.
+*&---------------------------------------------------------------------*
+*&      Module  USER_COMMAND_9001  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+module user_command_9001 input.
+
+  case sy-ucomm.
+    when 'BACK' or 'EXIT' or 'CANCEL'.
+      leave to screen 0.
+
+    when 'SD_REP'.
+      clear: r_disp, p_disp, e_disp, m_disp.
+      clear: r_vag, r_cag, r_vr, r_cr, r_dn, r_cdr, r_ppr, r_srr, r_vcc, r_cal, r_val, r_tds, r_gst.
+      clear: e_amail, e_pdc.
+      clear: m_amail.
+      clear: p_adv, p_chq, p_vch, p_dbc, p_imdbc.
+      r_disp = 'X'.
+
+    when 'SD_PRINT'.
+      clear: r_disp, p_disp, e_disp, m_disp.
+      clear: r_vag, r_cag, r_vr, r_cr, r_dn, r_cdr, r_ppr, r_srr, r_vcc, r_cal, r_val, r_tds, r_gst.
+      clear: e_amail, e_pdc.
+      clear: m_amail.
+      clear: p_adv, p_chq, p_vch, p_dbc ,  p_imdbc .
+      p_disp = 'X'.
+
+    when 'SD_PROC'.
+      clear: r_disp, p_disp, e_disp, m_disp.
+      e_disp = 'X'.
+
+    when 'SD_ZMAINT'.
+      clear: r_disp, p_disp, e_disp, m_disp.
+      m_disp = 'X'.
+
+    when 'EXEC'.
+
+*------------------------------------------------------------------*
+      "*Reports
+*------------------------------------------------------------------*
+
+      if r_vag = 'X'.      "*Vendor Ageing
+*        SUBMIT zfi_vendor_ageing_rpt VIA SELECTION-SCREEN AND RETURN.
+        submit zfi_vendor_ageing_ver via selection-screen and return.    "YFI_VENDOR_AGEING_RPT
+
+      elseif r_cag = 'X'.  "*Customer Ageing
+*        SUBMIT zfi_customer_ageing_rpt VIA SELECTION-SCREEN AND RETURN.
+*        submit yfi_customer_ageing_rpt via selection-screen and return.
+        submit zrfi_customer_ageing_new via selection-screen and return.
+
+      ELSEIF r_vr  = 'X'.  "*Vendor Report
+*        MESSAGE 'Under development' TYPE 'I'.
+*        SUBMIT ZFI_VENDOR_OPEN_BAL VIA SELECTION-SCREEN AND RETURN.
+         SUBMIT ZFI_REP_VENDOR_LEDGER VIA SELECTION-SCREEN AND RETURN.
+
+      ELSEIF r_cr  = 'X'.  "*Customer Report
+*        MESSAGE 'Under development' TYPE 'I'.
+*        SUBMIT ZCUSTOMER_LEDGER VIA SELECTION-SCREEN AND RETURN.
+         SUBMIT ZFI_REP_CUST_LEDGER VIA SELECTION-SCREEN AND RETURN.
+
+      elseif r_dn  = 'X'.  "*Debit Note
+
+      elseif r_cdr = 'X'.  "*Cash Discount Report
+        "SUBMIT ZFI_CASH_DISCOUNT_REPORT VIA SELECTION-SCREEN AND RETURN.
+
+      elseif r_ppr = 'X'.  "*Purchase & Payment Report
+        "SUBMIT ZFI_PUR_PAYMENT_REPORT VIA SELECTION-SCREEN AND RETURN.
+
+      elseif r_srr = 'X'.  "*Sale & Receipt Report
+        "SUBMIT ZFI_SALE_RECPT_REPORT VIA SELECTION-SCREEN AND RETURN.
+
+      elseif r_vcc = 'X'.  "*Vendor Cheque Clearing Report
+*        SUBMIT zfi_chq_clearing_report VIA SELECTION-SCREEN AND RETURN.
+
+      elseif r_cal = 'X'.  "*Customer Account Ledger
+
+      elseif r_val = 'X'.  "*Vendor Account Ledger
+
+      elseif r_tds = 'X'.  "*TDS Report
+        submit zfi_tds_report via selection-screen and return.   "ZFI_TDS_REPORT
+
+      elseif r_gst = 'X'.  "*GST Report ( Inward/ Outward)
+        call transaction 'ZPUR_REG'.
+
+        "*Process
+*------------------------------------------------------------------*
+        "*Print Outs
+*------------------------------------------------------------------*
+
+      elseif p_chq = 'X'. "*Cheque Print
+        submit zfi_cheque_printing via selection-screen and return.
+
+      elseif p_adv = 'X'.
+*        SUBMIT zfi_payment_advice_print VIA SELECTION-SCREEN AND RETURN.
+        submit zfi_payment_advice_print via selection-screen and return.    "ZFI_PAYMENT_ADVICE_PRINT1
+
+      elseif p_vch = 'X'. "*Cheque Print
+        submit zjv_print  via selection-screen and return. "zpsr2rr018jvprint
+
+      elseif p_dbc = 'X'.
+        submit zfi_vendor_credit_note_print via selection-screen and return.   "ZFI_VENDOR_CREDIT_NOTE_PRINT
+
+      elseif p_imdbc = 'X'.
+        submit zfi_vendor_credit_note_print1 via selection-screen and return.   "ZFI_VENDOR_CREDIT_NOTE_PRINT
+
+      elseif p_vbc = 'X'.  "*Vendor Balance confirmation letter
+        submit zfi_vendor_conf_letter via selection-screen and return.    "ZFI_VENDOR_CONF_LETTER
+
+      elseif p_cbc = 'X'.  "*Customer Balance confirmation letter
+        submit zfi_customer_conf_letter via selection-screen and return.
+*      ELSEIF  M_VPAY = 'X'.
+*        SUBMIT ZFI_VENDOR_PAYMENT VIA SELECTION-SCREEN AND RETURN .
+
+      elseif  m_miro = 'X'.
+        submit ZFI_PURCHASE_RETURN via selection-screen and return.  "miro debit note
+*      "Uploader
+      elseif e_pdc = 'X'.
+        submit zfi_bapi_fb01 via selection-screen and return.
+        "*Maintainatble
+      elseif m_bnk = 'X'.
+        submit zfi_vendor_credit_note_print2 via selection-screen and return.
+*      ELSEIF m_rcm = 'X'. """RCM Invoice
+*        SUBMIT zfi_rev_charge1 VIA SELECTION-SCREEN AND RETURN.
+*      ELSEIF rd10 = 'X'. """RCM Invoice
+*        SUBMIT zmm_tax_invoice VIA SELECTION-SCREEN AND RETURN.
+
+      endif.
+
+    when 'ECR'.
+
+  endcase.
+
+endmodule.
