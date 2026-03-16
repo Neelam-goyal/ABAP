@@ -1,0 +1,3963 @@
+*&---------------------------------------------------------------------*
+*& Report ZFI_VENDOR_AGEING_VER
+*&---------------------------------------------------------------------*
+*& Program Name    :ZFI_VENDOR_AGEING_VER                              &*
+*& Functional      :Dinesh                                             &*
+*& Consultant      :                                                   &*
+*& Author          :Dinesh                                             &*
+*& Module Name     :FICO                                               &*
+*& Program Type    :Executable Program                                 &*
+*& Create Date     :28.08.2020                                         &*
+*& SAP Release     :                                                   &*
+*& Transport No    :                                                   &*
+*& Transaction code:                                                   &*
+*& Description     :Driver Program to execute Vendor Ageing Report     &*
+*&---------------------------------------------------------------------*
+*& Change History  :                                                   &*
+*& Date      Changed by       Correction-id        Description         &*
+*&-------------------------------------------------------------------- &*
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+report zfir_ven_ageing1 message-id zfico.
+
+INCLUDE ZFIR_VEN_AGEING_01."Global Data Declaration
+INCLUDE ZFIR_VEN_AGEING_02."Selection Screen Definition
+INCLUDE ZFIR_VEN_AGEING_03."processing Routines
+
+
+*----------------------------------------------------------------------*
+* AT SELECTION-SCREEN ON VALUE REQUEST                                 *
+*----------------------------------------------------------------------*
+at selection-screen on value-request for p_vari.
+  perform get_vari.   " F4 help for layout
+
+*----------------------------------------------------------------------*
+* AT SELECTION-SCREEN                                                  *
+*----------------------------------------------------------------------*
+at selection-screen.
+  perform check_days_breakup.
+
+at selection-screen on p_budat.
+  perform check_key_date.
+
+*----------------------------------------------------------------------*
+* AT SELECTION-SCREEN OUTPUT                                           *
+*----------------------------------------------------------------------*
+at selection-screen output.
+  if p_det = 'X'.
+    loop at screen.
+      if screen-group1 = 'MAT'.
+        screen-intensified = '1'.
+        screen-active = 0.
+        screen-display_3d = '1'.
+        modify screen.
+      endif.
+    endloop.
+  else.
+    loop at screen.
+      if screen-group1 = 'MAT'.
+        screen-intensified = '1'.
+        screen-active = 1.
+        screen-display_3d = '1'.
+        modify screen.
+      endif.
+    endloop.
+  endif.
+  perform restrict_prctr.
+
+*----------------------------------------------------------------------*
+* START-OF-SELECTION                                                   *
+*----------------------------------------------------------------------*
+start-of-selection.
+  perform get_data.
+  perform fill_data.
+  perform build_event.
+  perform build_layout.
+  perform build_fcat.
+  perform build_sort.
+  perform build_filter.
+* PERFORM check_variant.
+ perform display_alv.
+
+
+
+*----------------------------------------------------------------------*
+* END-OF-SELECTION                                                     *
+*----------------------------------------------------------------------*
+end-of-selection.
+*&---------------------------------------------------------------------*
+*& Form CALCULATE_DAYS1
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*      -->P_GS_OUTPUT_DUEDT  text
+*&---------------------------------------------------------------------*
+form calculate_days1 using p_date.
+  data: lv_diff  type p,
+        lv_early type c.
+
+  call function '/SDF/CMO_DATETIME_DIFFERENCE'
+    exporting
+      date1            = p_date
+      date2            = p_budat
+    importing
+      datediff         = lv_diff
+      earliest         = lv_early
+    exceptions
+      invalid_datetime = 1
+      others           = 2.
+  if sy-subrc <> 0.
+    message id sy-msgid type sy-msgty number sy-msgno
+            with sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  endif.
+
+  if gs_output-osbal < 0.
+    if gs_output-umskz is not initial.
+      gs_output-advan = gs_output-osbal.
+    else.
+      gs_output-crbal = gs_output-osbal.
+       endif.
+  endif.
+
+  if lv_early = 1 or lv_early = 0.
+    if gs_output-osbal > 0.
+      if lv_diff ge p_days0 and lv_diff le p_days1.
+        gs_output-range1 = gs_output-osbal.
+      elseif lv_diff gt p_days1 and lv_diff le p_days2.
+        gs_output-range2 = gs_output-osbal.
+      elseif lv_diff gt p_days2 and lv_diff le p_days3.
+        gs_output-range3 = gs_output-osbal.
+      elseif lv_diff gt p_days3 and lv_diff le p_days4.
+        gs_output-range4 = gs_output-osbal.
+      elseif lv_diff gt p_days4 and lv_diff le p_days5.
+        gs_output-range5 = gs_output-osbal.
+      elseif lv_diff gt p_days5 ."and lv_diff le p_days6.
+        gs_output-range9 = gs_output-osbal.
+**      elseif lv_diff gt p_days6 and lv_diff le p_days7.
+**        gs_output-range7 = gs_output-osbal.
+**      elseif lv_diff gt p_days7 and lv_diff le p_days8.
+**        gs_output-range8 = gs_output-osbal.
+**      elseif lv_diff gt p_days8.
+**        gs_output-range9 = gs_output-osbal.
+      endif.
+    endif.
+  elseif lv_early = 2.
+    if gs_output-osbal > 0.
+*      BREAK abap.
+      gs_output-nodue = gs_output-osbal.
+    endif.
+  endif.
+endform. " CALCULATE_DAYS
+
+
+*&---------------------------------------------------------------------*
+*&  Include           ZFIR_VEN_AGEING_01
+*&---------------------------------------------------------------------*
+
+*----------------------------------------------------------------------*
+* TABLES DECLARATIONS                                                  *
+*----------------------------------------------------------------------*
+TABLES: faglflexa, bsid, bsad, vbrp, icon, faede,bsik,bsak.
+
+*----------------------------------------------------------------------*
+* TYPES                                                                *
+*----------------------------------------------------------------------*
+TYPE-POOLS: slis, sscr.
+
+TYPES: BEGIN OF ty_output,
+         blart        TYPE blart,
+         lifnr        TYPE lifnr,
+         ort01        TYPE ort01,
+         bldat        TYPE bldat,
+         belnr        TYPE belnr_d,
+         xblnr        TYPE xblnr,
+         aubel        TYPE vbeln_va,
+         billno       TYPE text20,
+         fkdat        TYPE fkdat,
+         prctr        TYPE prctr,
+         umskz        TYPE umskz,
+         orgamt       TYPE wrbtr,
+         debit        TYPE wrbtr,
+         credit       TYPE wrbtr,
+         rcvdamt      TYPE wrbtr,
+         osbal        TYPE wrbtr,
+         name1        TYPE char30,
+         spart        TYPE spart,
+         vtext        TYPE char20,
+         zuonr        TYPE char18,
+         rebzg        TYPE rebzg,
+         exnum        TYPE char10,
+         exdat        TYPE datum,
+         cexnum       TYPE char10,
+         cexdat       TYPE datum,
+         ktext        TYPE char20,
+         wrbtr        TYPE wrbtr,
+         doccurr      TYPE waers,
+         gjahr        TYPE gjahr,
+         zfbdt        TYPE datum,
+         zbd1t        TYPE numc3,
+         pono         TYPE text50,
+         advan        TYPE wrbtr,
+         zterm        TYPE dzterm,
+         vtext1       TYPE dzterm_bez,
+         nodue        TYPE wrbtr,
+         crbal        TYPE wrbtr,
+         range1       TYPE wrbtr,
+         range2       TYPE wrbtr,
+         range3       TYPE wrbtr,
+         range4       TYPE wrbtr,
+         range5       TYPE wrbtr,
+         range9       TYPE wrbtr,
+         wrange1      TYPE wrbtr,
+         wrange2      TYPE wrbtr,
+         wrange3      TYPE wrbtr,
+         wrange4      TYPE wrbtr,
+         wrange5      TYPE wrbtr,
+         wrange6      TYPE wrbtr,
+         duedt        TYPE datum,
+         cellcolor    TYPE lvc_t_scol,
+         gkont        TYPE gkont,
+         txt20        TYPE txt20_skat,
+         konzs        TYPE konzs,
+         ktoks        TYPE ktoks,
+         txt30        TYPE txt30_077t,
+         hkont        TYPE hkont,
+         hname        TYPE txt20_skat,
+         auart        TYPE auart,
+         bezei        TYPE bezei20,
+         budat        TYPE budat,         "Posting Date in the Document
+         akont        TYPE akont,
+         sgtxt        TYPE sgtxt,
+         bpkind       TYPE bu_bpkind,     "Vendor Type
+         bu_text40    TYPE bu_text40,
+         xverr        TYPE knb1-xverr,
+         bukrs        TYPE bukrs,
+         vendor_debit TYPE wrbtr, "Added by 2I:GS:23/04/2020
+         mindk        TYPE lfb1-mindk, "Added by 2I:GS:23/04/2020
+         p_method     TYPE lfb1-zwels, "Added by 2I:GS:25/04/2020
+         brsch        TYPE lfb1-brsch,
+         osbal_1      TYPE wrbtr, " Added By Divya
+         advan_1      TYPE wrbtr, " Added By Divya
+         cal_year     TYPE string,
+         matnr        TYPE makt-matnr,
+         maktx        TYPE makt-maktx,
+         stcd4        TYPE stcd4,
+         ZPAY1 TYPE BSEG-ZTERM ,""" ADDED BY VD
+        ZTAG TYPE T052-ZTAG1, """ ADDED BY VD
+        ZFBD TYPE BSEG-ZFBDT, """"ADDED BY VD
+        ZSS TYPE BSEG-ZFBDT, """"ADDED BY VD
+       END OF ty_output.
+
+
+TYPES: BEGIN OF ty_output1,
+         lifnr        TYPE lifnr,
+         name1        TYPE char30,
+         konzs        TYPE konzs,
+         ort01        TYPE ort01,
+         prctr        TYPE prctr,
+         ktext        TYPE char20,
+         hkont        TYPE hkont,
+         hname        TYPE txt20_skat,
+         orgamt       TYPE wrbtr,
+         debit        TYPE wrbtr,
+         credit       TYPE wrbtr,
+         rcvdamt      TYPE wrbtr,
+         osbal        TYPE wrbtr,
+         crbal        TYPE wrbtr,
+         advan        TYPE wrbtr,
+         range1       TYPE wrbtr,
+         range2       TYPE wrbtr,
+         range3       TYPE wrbtr,
+         range4       TYPE wrbtr,
+         range5       TYPE wrbtr,
+         range9       TYPE wrbtr,
+*********Added by 2I:GS:02/05/2020(+)******************************************
+         wrange1      TYPE wrbtr,
+         wrange2      TYPE wrbtr,
+         wrange3      TYPE wrbtr,
+         wrange4      TYPE wrbtr,
+         wrange5      TYPE wrbtr,
+         wrange6      TYPE wrbtr,
+*********Added by 2I:GS:02/05/2020(-)******************************************
+         nodue        TYPE wrbtr,
+         akont        TYPE akont,
+         sgtxt        TYPE sgtxt,
+         bpkind       TYPE bu_bpkind,     "Vendor Type
+         bu_text40    TYPE bu_text40,
+         xverr        TYPE knb1-xverr,
+         cellcolor    TYPE lvc_t_scol,
+         bukrs        TYPE bukrs,
+         zterm        TYPE lfm1-zterm,   "Added by 2I:GS:22/04/2020
+         text1        TYPE t052u-text1,  "Added by 2I:GS:22/04/2020
+         vendor_debit TYPE wrbtr, "Added by 2I:GS:23/04/2020
+         mindk        TYPE lfb1-mindk, "Added by 2I:GS:23/04/2020
+         p_method     TYPE lfb1-zwels, "Added by 2I:GS:25/04/2020
+         brsch        TYPE  lfb1-brsch,
+         osbal_1      TYPE wrbtr, " Added By Divya
+         advan_1      TYPE wrbtr, " Added By Divya
+         gjahr1       TYPE bkpf-gjahr,
+         monat        TYPE bkpf-mOnat,
+         matnr        TYPE makt-matnr,
+         maktx        TYPE makt-maktx,
+         stcd4        TYPE stcd4,
+*         cal_year        TYPE string,
+*        ZPAY TYPE BSEG-ZTERM ,""" ADDED BY VD
+*        ZTAG1 TYPE T052-ZTAG1, """ ADDED BY VD
+*        ZFBDT TYPE BSEG-ZFBDT, """"ADDED BY VD
+       END OF ty_output1.
+
+TYPES : BEGIN OF ty_bsid,
+          bukrs     TYPE bukrs,         "Company Code
+          kunnr     TYPE kunnr,         "Customer Number
+          budat     TYPE budat,         "Posting Date in the Document
+          gjahr     TYPE gjahr,         "Fiscal Year
+          belnr     TYPE belnr_d,       "Accounting Document Number
+          buzei     TYPE buzei,         "Number of Line Item Within Accounting Document
+          sgtxt     TYPE char10,        "Item Text
+          bldat     TYPE bldat,         "Document Date in Document
+          xblnr     TYPE xblnr1,        "Reference Document Number
+          vbeln     TYPE vbeln_vf,      "Billing Document
+          blart     TYPE blart,         "Document Type
+*         ZUONR  TYPE DZUONR,        "Assignment Number
+          augdt     TYPE augdt,         "Clearing Date
+          vbel2     TYPE vbeln_va,      "Sales Document
+          posn2     TYPE posnr_va,      "Sales Document Item
+          zfbdt     TYPE dzfbdt,        "Baseline Date for Due Date Calculation
+          zterm     TYPE dzterm,        "Terms of Payment Key
+          zbd1t     TYPE dzbd1t,
+          zbd2t     TYPE dzbd2t,
+          zbd3t     TYPE dzbd3t,
+          rebzg     TYPE rebzg,
+          rebzt     TYPE rebzt,
+          augbl     TYPE augbl,         "Document Number of the Clearing Document " ADD 14/05/2011
+          umskz     TYPE umskz,
+          gkont     TYPE gkont,
+          hkont     TYPE hkont,
+*          prctr     type prctr,         "Profit Center
+          bschl     TYPE bschl,         "Posting Key
+          drcrk     TYPE shkzg,         "D/C INDICATOR
+          hsl       TYPE vlcur12,       "Value in Local Currency
+          tsl       TYPE vtcur12,       "Value in Transaction Currency
+          rwcur     TYPE rwcur,         "Value in Original Transaction Currency (Document Currency)
+          bpkind    TYPE bu_bpkind,     "Vendor Type
+          bu_text40 TYPE bu_text40,
+        END OF ty_bsid.
+
+TYPES : BEGIN OF ty_bsik,
+          bukrs     TYPE bukrs,         "Company Code
+          lifnr     TYPE lifnr,         "Customer Number
+          budat     TYPE budat,         "Posting Date in the Document
+          gjahr     TYPE gjahr,         "Fiscal Year
+          belnr     TYPE belnr_d,       "Accounting Document Number
+          buzei     TYPE buzei,         "Number of Line Item Within Accounting Document
+          sgtxt     TYPE sgtxt,         "Item Text
+          bldat     TYPE bldat,         "Document Date in Document
+          xblnr     TYPE xblnr1,        "Reference Document Number
+          blart     TYPE blart,         "Document Type
+          augdt     TYPE augdt,         "Clearing Date
+          zfbdt     TYPE dzfbdt,        "Baseline Date for Due Date Calculation
+          zterm     TYPE dzterm,        "Terms of Payment Key
+          zbd1t     TYPE dzbd1t,
+          zbd2t     TYPE dzbd2t,
+          zbd3t     TYPE dzbd3t,
+          rebzg     TYPE rebzg,
+          rebzt     TYPE rebzt,
+          augbl     TYPE augbl,         "Document Number of the Clearing Document " ADD 14/05/2011
+          prctr     TYPE prctr,         "Profit Center
+          bschl     TYPE bschl,         "Posting Key
+          umskz     TYPE umskz,
+          gkont     TYPE gkont,
+          hkont     TYPE hkont,
+          drcrk     TYPE shkzg,         "D/C INDICATOR
+          hsl       TYPE vlcur12,       "Value in Local Currency
+          tsl       TYPE vtcur12,       "Value in Transaction Currency
+          rwcur     TYPE rwcur,         "Value in Original Transaction Currency (Document Currency)
+          bpkind    TYPE bu_bpkind,     "Vendor Type
+          bu_text40 TYPE bu_text40,
+        END OF ty_bsik.
+
+TYPES: BEGIN OF ty_kna1,
+         kunnr TYPE kunnr,
+         name1 TYPE name1_gp,
+         konzs TYPE konzs,
+       END OF ty_kna1.
+
+TYPES: BEGIN OF ty_lfa1,
+         lifnr TYPE lifnr,
+         name1 TYPE name1_gp,
+         konzs TYPE konzs,
+         kunnr TYPE kunnr,
+         ort01 TYPE ort01,
+         stcd4 TYPE stcd4,
+       END OF ty_lfa1.
+
+TYPES: BEGIN OF ty_vbrp,
+         vbeln TYPE vbeln_vf,
+         vgbel TYPE vbrp-vgbel,
+         aubel TYPE vbeln_va,
+         prctr TYPE vbrp-prctr,
+       END OF ty_vbrp.
+
+TYPES: BEGIN OF ty_vbkd,
+         vbeln TYPE vbeln,
+         bstkd TYPE bstkd,
+         bstdk TYPE bstdk,
+       END OF ty_vbkd.
+
+TYPES: BEGIN OF ty_vbrk,
+         vbeln    TYPE vbeln_vf,
+         fkdat    TYPE fkdat,
+         fkart_rl TYPE fkart_rl,
+         fkdat_rl TYPE fkdat_rl,
+         spart    TYPE spart,
+       END OF ty_vbrk.
+
+TYPES: BEGIN OF ty_vbrl,
+         vbeln    TYPE vbeln_vf,
+         vbeln_vf TYPE vbeln_vf,
+       END OF ty_vbrl.
+
+TYPES: BEGIN OF ty_tspat,
+         spart TYPE spart,
+         vtext TYPE vtxtk,
+       END OF ty_tspat.
+
+TYPES: BEGIN OF ty_cepct,
+         prctr TYPE prctr,
+         ktext TYPE ktext,
+       END OF ty_cepct.
+
+TYPES: BEGIN OF ty_tvzbt,
+         zterm TYPE dzterm,
+         vtext TYPE dzterm_bez,
+       END OF ty_tvzbt.
+
+TYPES: BEGIN OF ty_j_1iexcdtl,
+         rdoc2 TYPE j_1irdoc2,
+         exnum TYPE j_1iexcnum,
+         exdat TYPE j_1iexcdat,
+       END OF ty_j_1iexcdtl.
+
+TYPES: BEGIN OF ty_j_1irg23d,
+         vbeln    TYPE vbeln_vl,
+         depexnum TYPE j_1iexcnum,
+         cpudt    TYPE j_1icpudt,
+       END OF ty_j_1irg23d.
+
+TYPES: BEGIN OF ty_bseg,
+         bukrs TYPE bseg-bukrs,
+         belnr TYPE bseg-belnr,
+         gjahr TYPE bseg-gjahr,
+         buzei TYPE bseg-buzei,
+         augbl TYPE bseg-augbl,
+         wrbtr TYPE bseg-wrbtr,
+         zuonr TYPE bseg-zuonr,
+         kunnr TYPE bseg-kunnr,
+         rebzg TYPE bseg-rebzg,
+         umskz TYPE bseg-umskz,
+         netdt TYPE bseg-netdt,
+         koart TYPE bseg-koart,
+       END OF ty_bseg.
+
+
+TYPES: BEGIN OF ty_bseg1,
+         bukrs TYPE bseg-bukrs,
+         belnr TYPE bseg-belnr,
+         gjahr TYPE bseg-gjahr,
+         buzei TYPE bseg-buzei,
+         augbl TYPE bseg-augbl,
+         wrbtr TYPE bseg-wrbtr,
+         zuonr TYPE bseg-zuonr,
+         lifnr TYPE bseg-lifnr,
+         rebzg TYPE bseg-rebzg,
+         umskz TYPE bseg-umskz,
+         netdt TYPE bseg-netdt,
+         koart TYPE bseg-koart,
+       END OF ty_bseg1.
+
+**********************************BOC By Rajan/Lalit Upreti.
+TYPES: BEGIN OF ty_upd,
+         bukrs TYPE bukrs,         "Company Code
+         lifnr TYPE lifnr,         "Customer Number
+         budat TYPE budat,         "Posting Date in the Document
+         gjahr TYPE gjahr,         "Fiscal Year
+         belnr TYPE belnr_d,       "Accounting Document Number
+         prctr TYPE prctr,
+         hsl   TYPE vlcur12,       "Value in Local Currency
+         tsl   TYPE vtcur12,       "Value in Transaction Currency
+       END OF ty_upd.
+
+TYPES:BEGIN OF ty_rev,
+        belnr TYPE belnr_d,
+        awkey TYPE awkey,
+        xblnr TYPE xblnr1,
+      END OF ty_rev.
+
+TYPES:BEGIN OF ty_t052,
+        zterm TYPE t052-zterm,
+        ztag1 TYPE t052-ztag1,
+      END OF ty_t052.
+
+**********************************EOC By Rajan/Lalit Upreti.
+
+*----------------------------------------------------------------------*
+* DATA DECLARATIONS - INTERNAL TABLES & WORK AREAS                     *
+*----------------------------------------------------------------------*
+DATA: gt_output  TYPE TABLE OF ty_output,
+      gs_output  TYPE ty_output,
+
+      gt_upd     TYPE TABLE OF ty_upd,
+      gs_upd     TYPE ty_upd,
+
+      pt_output  TYPE TABLE OF ty_output,
+      ps_output  TYPE ty_output,
+
+      gt_output1 TYPE TABLE OF ty_output1,
+      gs_output1 TYPE ty_output1,
+
+      gt_bsid    TYPE TABLE OF ty_bsid,
+      gs_bsid    TYPE ty_bsid,
+
+      gt_bsik    TYPE TABLE OF ty_bsik,
+      gs_bsik    TYPE ty_bsik,
+
+      gt_knb1    TYPE STANDARD TABLE OF knb1,
+      gs_knb1    TYPE knb1,
+
+      gt_lfb1    TYPE STANDARD TABLE OF lfb1,
+      gs_lfb1    TYPE lfb1,
+
+      gt_kna1    TYPE TABLE OF ty_kna1,
+      gs_kna1    TYPE ty_kna1,
+
+      gt_lfa1    TYPE TABLE OF ty_lfa1,
+      gs_lfa1    TYPE ty_lfa1,
+
+      gt_vbrp    TYPE TABLE OF ty_vbrp,
+      gs_vbrp    TYPE ty_vbrp,
+
+      gt_vbkd    TYPE TABLE OF ty_vbkd,
+      gs_vbkd    TYPE ty_vbkd,
+
+      gt_vbrk    TYPE TABLE OF ty_vbrk,
+      gs_vbrk    TYPE ty_vbrk,
+
+      gt_vbrl    TYPE TABLE OF ty_vbrl,
+      gs_vbrl    TYPE ty_vbrl,
+
+      it_vbrk    TYPE TABLE OF ty_vbrk,
+      wa_vbrk    TYPE ty_vbrk,
+
+      gt_tspat   TYPE TABLE OF ty_tspat,
+      gs_tspat   TYPE ty_tspat,
+
+      gt_cepct   TYPE TABLE OF ty_cepct,
+      gs_cepct   TYPE ty_cepct,
+
+      gt_cepct1  TYPE TABLE OF ty_cepct,
+      gs_cepct1  TYPE ty_cepct,
+
+      gt_tvzbt   TYPE TABLE OF ty_tvzbt,
+      gs_tvzbt   TYPE ty_tvzbt,
+
+      gt_tvzbt1  TYPE TABLE OF ty_tvzbt,
+      gs_tvzbt1  TYPE ty_tvzbt,
+
+      gt_excise  TYPE TABLE OF ty_j_1iexcdtl,
+      gs_excise  TYPE ty_j_1iexcdtl,
+
+      gt_rg23d   TYPE TABLE OF ty_j_1irg23d,
+      gs_rg23d   TYPE ty_j_1irg23d,
+
+      gt_bseg    TYPE TABLE OF ty_bseg,
+      gs_bseg    TYPE ty_bseg,
+
+      gt_rev     TYPE TABLE OF ty_rev,
+      gs_rev     TYPE ty_rev,
+
+      gt_t052s   TYPE STANDARD TABLE OF t052s,
+      gt_t052    TYPE STANDARD TABLE OF t052,
+
+      gt_bseg1   TYPE TABLE OF ty_bseg1,
+      gs_bseg1   TYPE ty_bseg1,
+
+      gt_bseg2   TYPE TABLE OF ty_bseg1,
+      gs_bseg2   TYPE ty_bseg1.
+
+DATA : gt_fcat     TYPE slis_t_fieldcat_alv,
+       gs_fcat     TYPE slis_fieldcat_alv,
+       gs_layout   TYPE slis_layout_alv,
+       g_variant   TYPE disvariant,
+       gx_variant  TYPE disvariant,
+       gt_event    TYPE slis_t_event,
+       gt_list_hdr TYPE slis_t_listheader,
+       gs_list_hdr TYPE slis_listheader,
+       gt_sort     TYPE slis_t_sortinfo_alv,
+       gt_filter   TYPE slis_t_filter_alv,
+       g_save      TYPE c VALUE 'X',
+       gd_repid    LIKE sy-repid, "gx_variant TYPE disvariant,
+       g_exit      TYPE c.
+
+
+DATA: lv_flag TYPE c.
+DATA: lv_gjahr TYPE gjahr.
+
+DATA: lv_fname TYPE rs38l_fnam.
+
+DATA: days0       TYPE string,
+      days1       TYPE string,
+      days2       TYPE string,
+      days3       TYPE string,
+      days4       TYPE string,
+      days5       TYPE string,
+      days6       TYPE string,
+      zdate       TYPE datum,
+      amount      TYPE string,
+      report_type TYPE string.
+*----------------------------------------------------------------------*
+* DATA DECLARATIONS - GLOBAL VARIABLES                                 *
+*----------------------------------------------------------------------*
+
+*----------------------------------------------------------------------*
+* DATA DECLARATIONS - CONSTANTS                                        *
+*----------------------------------------------------------------------*
+CONSTANTS: gc_formname TYPE slis_formname VALUE 'TOP_OF_PAGE'.
+
+*&---------------------------------------------------------------------*
+*&  Include           ZFIR_VEN_AGEING_02
+*&---------------------------------------------------------------------*
+ranges :s_lifnr1 for lfa1-lifnr.
+tables :but000, lfb1.
+*----------------------------------------------------------------------*
+* SELECTION SCREEN DEFINITION                                          *
+*----------------------------------------------------------------------*
+selection-screen begin of block b1 with frame title text-001.
+  select-options: s_bukrs for bsid-bukrs no-extension no intervals.
+  select-options: s_bpkind for but000-bpkind.
+  select-options: s_lifnr for bsik-lifnr,
+                  s_umskz for bsik-umskz,
+                  s_hkont for bsik-hkont.
+
+*DATA : S1 TYPE ZDEC25.
+
+  parameters: p_rldnr like faglflexa-rldnr obligatory default '0L'.
+selection-screen end of block b1.
+
+selection-screen begin of block b2 with frame title text-002.
+  parameters: p_budat type bsid-budat obligatory default sy-datum.
+  selection-screen begin of line.
+    selection-screen comment 1(20) text-004 .
+    selection-screen position 33.
+    parameters: p_days0 like rfpdo1-allgrogr default '000' no-display,
+                p_days1  TYPE n LENGTH 4 DEFAULT '0030' obligatory," ," rfpdo1-F068JAHR obligatory ,"default '0030' obligatory,
+                p_days2 TYPE n LENGTH 4 DEFAULT '0060', " ,"like rfpdo1-F068JAHR ,"default '0060',
+                p_days3 TYPE n LENGTH 4 DEFAULT '0090', ","like rfpdo1-F068JAHR ,"default '0090',
+                p_days4 TYPE n LENGTH 4 DEFAULT '0120'," ,"like rfpdo1-F068JAHR ,"default '0120',
+                p_days5 TYPE n LENGTH 4 DEFAULT '0180'.","like rfpdo1-F068JAHR."default '0180',
+*                p_days6 like rfpdo1-F068JAHR ."default '1095'.
+  selection-screen end of line.
+**********Added by 2I:GS:02/05/2020(+)***********************************************************
+  selection-screen begin of line.
+    selection-screen comment 1(20) text-009 .
+    selection-screen position 33.
+    parameters: p_weeks0 like rfpdo1-allgrogr default '000' no-display,
+                p_weeks1 like rfpdo1-allgrogr default '007' obligatory,
+                p_weeks2 like rfpdo1-allgrogr default '014',
+                p_weeks3 like rfpdo1-allgrogr default '021',
+                p_weeks4 like rfpdo1-allgrogr default '028'.
+  selection-screen end of line.
+
+  selection-screen begin of block b3 with frame title text-005.
+    parameters: r_dd radiobutton group gr1 default 'X' user-command zzz,
+                r_bd radiobutton group gr1.
+  selection-screen end of block b3.
+selection-screen end of block b2.
+
+selection-screen begin of block b5 with frame title text-006.
+  parameters: p_det  radiobutton group rad user-command com default 'X',
+              p_summ radiobutton group rad.
+selection-screen end of block b5.
+
+selection-screen begin of block b6 with frame title text-007.
+  parameters : p_ven as checkbox.
+selection-screen end of block b6.
+
+selection-screen begin of block b7 with frame title text-008.
+  parameters : p_ledger as checkbox modif id mat.
+selection-screen end of block b7.
+
+selection-screen begin of block b8 with frame title text-010.
+  parameters : r1 radiobutton group g1 DEFAULT 'X',
+               r2 radiobutton group g1.
+selection-screen end of block b8.
+
+selection-screen begin of block b4 with frame title text-003.
+  parameters: p_vari like disvariant modif id 999.
+selection-screen end of block b4.
+
+selection-screen begin of block b9 with frame.
+  parameters: print as checkbox.
+selection-screen end of block b9.
+
+*----------------------------------------------------------------------*
+***INCLUDE ZFIR_VEN_AGEING_03.
+*----------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  GET_VARI
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM get_vari .
+  g_variant-report = sy-repid.
+  CALL FUNCTION 'REUSE_ALV_VARIANT_F4'
+    EXPORTING
+      is_variant = g_variant
+      i_save     = g_save
+    IMPORTING
+      e_exit     = g_exit
+      es_variant = gx_variant
+    EXCEPTIONS
+      not_found  = 2
+*     program_error = 2
+      OTHERS     = 3.
+  IF sy-subrc = 2 .
+    MESSAGE ID sy-msgid TYPE 'S'      NUMBER sy-msgno
+            WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ELSE.
+    IF g_exit = space.
+      p_vari = gx_variant-variant.
+    ENDIF.
+  ENDIF.
+*    p_vari = gs_variant-variant.
+*  endif.
+ENDFORM.
+*
+FORM f_initialize_variant .
+
+*    CLEAR gv_variant.
+*    gv_save           = 'X'.
+*    gv_variant-report = gv_repname.
+*    gv_x_variant      = gv_variant.
+*    gx_variant-report = sy-repid.
+  CALL FUNCTION 'REUSE_ALV_VARIANT_DEFAULT_GET'
+    EXPORTING
+      i_save     = g_save
+*      IMPORTING
+*     e_exit     = g_exit
+*     es_variant = gx_variant
+    CHANGING
+      cs_variant = gx_variant
+    EXCEPTIONS
+      not_found  = 2.
+
+  IF sy-subrc = 0.         .
+    p_vari = gx_variant-variant.
+  ENDIF.
+ENDFORM.
+" GET_VARI
+*&---------------------------------------------------------------------*
+*&      Form  CHECK_DAYS_BREAKUP
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM check_days_breakup .
+  IF p_days5 IS NOT INITIAL AND p_days4 IS INITIAL.
+    MESSAGE e000 WITH 'You Can Not Break The Serial' 'Fill The 4th Days'.
+  ENDIF.
+  IF p_days4 IS NOT INITIAL AND p_days3 IS INITIAL.
+    MESSAGE e000 WITH 'You Can Not Break The Serial' 'Fill The 3rd Days'.
+  ENDIF.
+  IF p_days3 IS NOT INITIAL AND p_days2 IS INITIAL.
+    MESSAGE e000 WITH 'You Can Not Break The Serial' 'Fill The 2nd Days'.
+  ENDIF.
+  IF p_days2 IS NOT INITIAL AND p_days1 IS INITIAL.
+    MESSAGE e000 WITH 'You Can Not Break The Serial' 'Fill The 1st Days'.
+  ENDIF.
+
+  IF p_days1 GE p_days2.
+    IF p_days2 IS NOT INITIAL.
+      MESSAGE e000 WITH 'Days Of 2nd Term Should Be Greater Then 1st'.
+    ENDIF.
+  ELSEIF p_days2 GE p_days3 .
+    IF p_days3 IS NOT INITIAL.
+      MESSAGE e000 WITH 'Days Of 3rd Term Should Be Greater Then 2nd'.
+    ENDIF.
+  ELSEIF p_days3 GE p_days4.
+    IF p_days4 IS NOT INITIAL.
+      MESSAGE e000 WITH 'Days Of 4th Term Should Be Greater Then 3rd'.
+    ENDIF.
+  ELSEIF p_days4 GE p_days5.
+    IF p_days5 IS NOT INITIAL.
+      MESSAGE e000 WITH 'Days Of 5th Term Should Be Greater Then 4th'.
+    ENDIF.
+**  elseif p_days5 ge p_days6.
+**    if p_days6 is not initial.
+**      message e000 with 'Days Of 6th Term Should Be Greater Then 5th'.
+**    endif.
+**  elseif p_days6 ge p_days7.
+**    if p_days7 is not initial.
+**      message e000 with 'Days Of 7th Term Should Be Greater Then 6th'.
+**    endif.
+**  elseif p_days7 ge p_days8.
+**    if p_days8 is not initial.
+**      message e000 with 'Days Of 8th Term Should Be Greater Then 7th'.
+**    endif.
+  ENDIF.
+ENDFORM. " CHECK_DAYS_BREAKUP
+*&---------------------------------------------------------------------*
+*&      Form  CHECK_KEY_DATE
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM check_key_date .
+*<<---BOC By Divya
+*  IF p_budat > sy-datum.
+*    MESSAGE w000 WITH 'Key Date Should Not Be' 'Greater Than Current Date'.
+*    CLEAR p_budat.
+*    p_budat = sy-datum.
+*  ENDIF.
+*>>---BOC By Divya
+ENDFORM. " CHECK_KEY_DATE
+*&---------------------------------------------------------------------*
+*&      Form  GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM get_data .
+
+
+  CALL FUNCTION 'SAPGUI_PROGRESS_INDICATOR'
+    EXPORTING
+      text = 'Fetching opened items for Vendor...'.
+  REFRESH gt_lfb1.
+  SELECT * FROM lfb1 INTO TABLE gt_lfb1 WHERE bukrs IN s_bukrs AND lifnr IN s_lifnr." and brsch in s_BRSCH." and mindk in s_mindk.
+
+  " Selecting the opened items of Vendor data
+  SELECT   a~bukrs a~lifnr a~budat a~gjahr a~belnr a~buzei a~sgtxt a~bldat a~xblnr  a~blart a~augdt  a~zfbdt a~zterm a~zbd1t
+           a~zbd2t a~zbd2t a~rebzg a~rebzt a~augbl a~umskz a~gkont a~hkont
+           b~bschl b~drcrk b~hsl b~tsl b~rwcur c~bpkind INTO CORRESPONDING FIELDS OF TABLE gt_bsik
+           FROM bsik AS a  INNER JOIN faglflexa AS b
+           ON a~belnr = b~belnr  AND a~buzei = b~buzei AND a~gjahr = b~ryear AND a~bukrs = b~rbukrs
+           INNER JOIN  but000 AS c
+           ON a~lifnr = c~partner
+           WHERE bukrs IN s_bukrs AND a~budat <= p_budat
+           AND a~lifnr IN s_lifnr AND b~rldnr EQ p_rldnr AND c~bpkind IN s_bpkind AND  a~hkont IN s_hkont AND a~umskz IN s_umskz.
+
+  CALL FUNCTION 'SAPGUI_PROGRESS_INDICATOR'
+    EXPORTING
+      text = 'Fetching cleared items for Vendor... '.
+*  BREAK abap.
+  "Selecting the cleared items of Vendor data
+*  if p_budat < sy-datum.
+
+  SELECT   a~bukrs a~lifnr a~budat a~gjahr a~belnr a~buzei a~sgtxt a~bldat a~xblnr  a~blart a~augdt  a~zfbdt a~zterm a~zbd1t
+           a~zbd2t a~zbd2t a~rebzg a~rebzt a~augbl a~umskz a~gkont a~hkont
+           b~bschl b~drcrk b~hsl b~tsl b~rwcur c~bpkind APPENDING CORRESPONDING FIELDS OF TABLE gt_bsik
+           FROM bsak AS a  INNER JOIN faglflexa AS b
+           ON a~belnr = b~belnr AND a~buzei = b~buzei AND a~gjahr = b~ryear AND a~bukrs = b~rbukrs
+            INNER JOIN  but000 AS c
+         ON a~lifnr = c~partner
+            WHERE bukrs IN s_bukrs AND a~augdt GT p_budat AND a~budat LE p_budat
+           AND a~lifnr IN s_lifnr AND b~rldnr EQ p_rldnr AND c~bpkind IN s_bpkind AND a~hkont IN s_hkont AND a~umskz IN s_umskz.
+*  endif.
+* ***********************************************************************************************BOC by Rajan/Lalit Upreti.
+  LOOP AT gt_bsik INTO DATA(gs_bsk).
+    gs_upd-bukrs  = gs_bsk-bukrs.
+    gs_upd-lifnr  = gs_bsk-lifnr.
+    gs_upd-budat  = gs_bsk-budat.
+    gs_upd-gjahr  = gs_bsk-gjahr.
+    gs_upd-belnr  = gs_bsk-belnr.
+    gs_upd-hsl    = gs_bsk-hsl.
+    gs_upd-tsl    = gs_bsk-tsl.
+    COLLECT gs_upd INTO gt_upd.
+    CLEAR: gs_upd, gs_bsk.
+  ENDLOOP.
+
+  SORT gt_bsik BY bukrs lifnr gjahr belnr.
+  DELETE ADJACENT DUPLICATES FROM gt_bsik COMPARING bukrs lifnr gjahr belnr.
+
+  LOOP AT gt_bsik INTO gs_bsk.
+    READ TABLE gt_upd INTO gs_upd WITH KEY bukrs = gs_bsk-bukrs lifnr = gs_bsk-lifnr budat = gs_bsk-budat gjahr = gs_bsk-gjahr belnr = gs_bsk-belnr.
+    IF sy-subrc EQ 0.
+      IF gs_bsk-hsl <> gs_upd-hsl.
+        gs_bsk-hsl = gs_upd-hsl.
+        gs_bsk-tsl = gs_upd-tsl.
+        MODIFY gt_bsik FROM gs_bsk.
+      ENDIF.
+      CLEAR: gs_bsk, gs_upd.
+    ENDIF.
+  ENDLOOP.
+* ***********************************************************************************************BOC by Rajan/Lalit Upreti.
+  IF gt_bsik IS NOT INITIAL.
+    SELECT DISTINCT lifnr name1 konzs kunnr ort01 stcd4 FROM lfa1 INTO TABLE gt_lfa1
+         FOR ALL ENTRIES IN gt_bsik WHERE lifnr EQ gt_bsik-lifnr.
+
+
+*    select ktext from cepct into table gt_cepct1 for all entries in gt_bsik
+*         where spras = 'E'.
+
+    SELECT zterm vtext FROM tvzbt INTO TABLE gt_tvzbt1
+      FOR ALL ENTRIES IN gt_bsik
+      WHERE zterm = gt_bsik-zterm
+      AND spras = 'E'.
+
+    SELECT bukrs belnr gjahr buzei augbl wrbtr zuonr lifnr rebzg umskz netdt koart FROM bseg INTO TABLE gt_bseg1
+  FOR ALL ENTRIES IN gt_bsik
+  WHERE bukrs = gt_bsik-bukrs
+  AND   belnr = gt_bsik-belnr
+  AND   gjahr = gt_bsik-gjahr
+  AND   augbl = gt_bsik-belnr
+  AND   lifnr = gt_bsik-lifnr.
+*    gt_bseg2 = gt_bseg1.
+*    DELETE gt_bseg2 WHERE koart NE 'K'.
+    DELETE gt_bsik WHERE bschl = '40' OR bschl = '50'.
+  ENDIF.
+************
+
+  REFRESH gt_knb1.
+  IF p_ven = 'X'.
+    CALL FUNCTION 'SAPGUI_PROGRESS_INDICATOR'
+      EXPORTING
+        text = 'Fetching opened items for Customer...'.
+
+    " Selecting the opened items of customer data
+    IF gt_bsik IS NOT INITIAL.
+      SELECT  * FROM lfa1 INTO TABLE @DATA(tp_lfa1) FOR ALL ENTRIES IN @gt_bsik WHERE lifnr =  @gt_bsik-lifnr.
+      IF sy-subrc = 0.
+        SELECT * FROM knb1 INTO TABLE gt_knb1 FOR ALL ENTRIES IN tp_lfa1 WHERE bukrs IN s_bukrs AND kunnr = tp_lfa1-kunnr.
+      ENDIF.
+    ENDIF.
+    IF tp_lfa1 IS NOT INITIAL.
+      SELECT   a~bukrs a~kunnr a~budat a~gjahr a~belnr a~buzei a~sgtxt a~bldat a~xblnr a~vbeln a~blart a~augdt a~vbel2 a~posn2 a~zfbdt a~zterm a~zbd1t
+               a~zbd2t a~zbd2t a~rebzg a~rebzt a~augbl a~umskz a~gkont a~hkont
+               b~bschl b~drcrk b~hsl b~tsl b~rwcur c~bpkind INTO TABLE gt_bsid
+               FROM bsid AS a  INNER JOIN faglflexa AS b
+               ON a~belnr = b~belnr  AND a~buzei = b~buzei AND a~gjahr = b~ryear AND a~bukrs = b~rbukrs
+               INNER JOIN  but000 AS c
+               ON a~kunnr = c~partner
+              FOR ALL ENTRIES IN tp_lfa1
+               WHERE bukrs IN s_bukrs AND a~budat <= p_budat
+               AND a~kunnr = tp_lfa1-kunnr AND b~rldnr EQ p_rldnr AND a~hkont IN s_hkont AND a~umskz IN s_umskz.
+
+      CALL FUNCTION 'SAPGUI_PROGRESS_INDICATOR'
+        EXPORTING
+          text = 'Fetching cleared items for Customer... '.
+
+      "Selecting the cleared items of customer data
+      "" if p_budat < sy-datum.
+
+      SELECT   a~bukrs a~kunnr a~budat a~gjahr a~belnr a~buzei a~sgtxt a~bldat a~xblnr a~vbeln a~blart a~augdt a~vbel2 a~posn2 a~zfbdt a~zterm a~zbd1t
+               a~zbd2t a~zbd2t a~rebzg a~rebzt a~augbl a~umskz a~gkont a~hkont
+               b~bschl b~drcrk b~hsl b~tsl b~rwcur c~bpkind APPENDING  TABLE gt_bsid
+               FROM bsad AS a  INNER JOIN faglflexa AS b
+               ON a~belnr = b~belnr AND a~buzei = b~buzei AND a~gjahr = b~ryear AND a~bukrs = b~rbukrs
+                     INNER JOIN  but000 AS c
+             ON a~kunnr = c~partner
+               FOR ALL ENTRIES IN tp_lfa1
+               WHERE bukrs IN s_bukrs AND a~augdt GT p_budat AND a~budat LE p_budat
+               AND a~kunnr = tp_lfa1-kunnr AND b~rldnr EQ p_rldnr AND a~hkont IN s_hkont AND a~umskz IN s_umskz.
+      ""endif.
+    ENDIF.
+
+
+    IF gt_bsid IS INITIAL.
+**      message text-m01 type 'I'.
+**      leave list-processing .
+    ELSE.
+      CALL FUNCTION 'SAPGUI_PROGRESS_INDICATOR'
+        EXPORTING
+          text = 'Fetching details... '.
+      IF gt_bsid IS NOT INITIAL.
+        SELECT DISTINCT kunnr name1 konzs
+          FROM kna1 INTO TABLE gt_kna1
+          FOR ALL ENTRIES IN gt_bsid
+          WHERE kunnr EQ gt_bsid-kunnr.
+
+        SELECT vbeln vgbel aubel
+          FROM vbrp INTO TABLE gt_vbrp
+          FOR ALL ENTRIES IN gt_bsid
+          WHERE vbeln EQ gt_bsid-vbeln.
+        IF sy-subrc = 0.
+          SELECT vbeln depexnum cpudt
+            FROM j_1irg23d INTO TABLE gt_rg23d
+            FOR ALL ENTRIES IN gt_vbrp
+            WHERE vbeln = gt_vbrp-vgbel.
+
+          SELECT vbeln bstkd bstdk
+            FROM vbkd INTO TABLE gt_vbkd
+            FOR ALL ENTRIES IN gt_vbrp
+            WHERE vbeln = gt_vbrp-aubel.
+        ENDIF.
+
+        SELECT vbeln fkdat fkart_rl fkdat_rl spart
+          FROM vbrk INTO TABLE gt_vbrk
+          FOR ALL ENTRIES IN gt_bsid
+          WHERE vbeln EQ gt_bsid-vbeln.
+        IF sy-subrc = 0.
+          SELECT vbeln vbeln_vf
+            FROM vbrl INTO TABLE gt_vbrl
+            FOR ALL ENTRIES IN gt_vbrk
+            WHERE vbeln_vf = gt_vbrk-vbeln.
+          IF sy-subrc = 0.
+            SELECT vbeln fkdat fkart_rl fkdat_rl spart
+              FROM vbrk INTO TABLE it_vbrk
+              FOR ALL ENTRIES IN gt_vbrl
+              WHERE vbeln EQ gt_vbrl-vbeln.
+          ENDIF.
+        ENDIF.
+
+        SELECT spart vtext
+          FROM tspat INTO TABLE gt_tspat
+          FOR ALL ENTRIES IN gt_vbrk
+          WHERE spart = gt_vbrk-spart
+          AND   spras = sy-langu.
+
+*        select ktext
+*          from cepct into table gt_cepct
+*          for all entries in gt_bsid
+*          where spras = 'E'.
+
+        SELECT zterm vtext
+
+          FROM tvzbt INTO TABLE gt_tvzbt
+          FOR ALL ENTRIES IN gt_bsid
+          WHERE zterm = gt_bsid-zterm
+          AND spras = 'E'.
+
+        SELECT rdoc2 exnum exdat
+          FROM j_1iexcdtl INTO TABLE gt_excise
+          FOR ALL ENTRIES IN gt_bsid
+          WHERE rdoc2 = gt_bsid-vbeln
+          AND   rdoc2 NE ' '.
+
+        SELECT bukrs belnr gjahr buzei augbl
+               wrbtr zuonr kunnr rebzg umskz netdt koart
+          FROM bseg INTO TABLE gt_bseg
+          FOR ALL ENTRIES IN gt_bsid
+          WHERE bukrs = gt_bsid-bukrs
+          AND   belnr = gt_bsid-belnr
+          AND   gjahr = gt_bsid-gjahr
+          AND   augbl = gt_bsid-belnr
+          AND   kunnr = gt_bsid-kunnr.
+
+*        gt_bseg2 = gt_bseg.
+*        DELETE gt_bseg2 WHERE koart NE 'K'.
+        DELETE gt_bsid WHERE bschl = '40' OR bschl = '50'.
+      ENDIF.
+    ENDIF.
+
+  ENDIF.
+
+  IF gt_bsid IS NOT INITIAL.
+    SELECT bukrs belnr gjahr buzei augbl
+           wrbtr zuonr kunnr rebzg umskz netdt koart
+      FROM bseg INTO TABLE gt_bseg2
+      FOR ALL ENTRIES IN gt_bsid
+      WHERE bukrs = gt_bsid-bukrs
+      AND   augbl = gt_bsid-belnr
+      AND   gjahr = gt_bsid-gjahr
+      AND koart = 'K'.
+    IF gt_bseg2 IS NOT INITIAL.
+      DELETE gt_bseg2 WHERE umskz = space.
+    ENDIF.
+  ENDIF.
+  IF gt_bsik IS NOT INITIAL.
+    SELECT bukrs belnr gjahr buzei augbl
+           wrbtr zuonr kunnr rebzg umskz netdt koart
+      FROM bseg APPENDING TABLE gt_bseg2
+      FOR ALL ENTRIES IN gt_bsik
+      WHERE bukrs = gt_bsik-bukrs
+      AND   augbl = gt_bsik-belnr
+      AND   gjahr = gt_bsik-gjahr
+      AND koart = 'K'.
+    IF gt_bseg2 IS NOT INITIAL.
+      DELETE gt_bseg2 WHERE umskz = space.
+    ENDIF.
+  ENDIF.
+ENDFORM. " GET_DATA
+*&---------------------------------------------------------------------*
+*&      Form  FILL_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM fill_data .
+  DATA: lv_tab_indx     TYPE i,
+        lv_percentage   TYPE num,
+        lv_stat_tx(100) TYPE c,
+        lv_tabix        TYPE sy-tabix.
+
+  DATA: lv_tab_indx1     TYPE i,
+        lv_percentage1   TYPE num,
+        lv_stat_tx1(100) TYPE c,
+        lv_tabix1        TYPE sy-tabix.
+
+  DATA : belnr TYPE  bkpf-belnr,
+         bukrs TYPE  bkpf-bukrs,
+         buzei TYPE  bseg-buzei,
+         gjahr TYPE  bkpf-gjahr,
+         gkont TYPE  bseg-hkont.
+
+  DATA: lt_bsid TYPE TABLE OF ty_bsid,
+        ls_bsid TYPE ty_bsid.
+
+  DATA: lt_bsik TYPE TABLE OF ty_bsik,
+        ls_bsik TYPE ty_bsik.
+  DATA:lv_day TYPE i.
+
+
+  CALL FUNCTION 'SAPGUI_PROGRESS_INDICATOR'
+    EXPORTING
+      text = 'Manipulating data for Vendor... '.
+
+  LOOP AT gt_bsik INTO gs_bsik.
+    READ TABLE lt_bsik INTO ls_bsik WITH KEY lifnr = gs_bsik-lifnr
+                                             belnr = gs_bsik-augbl.
+    IF sy-subrc = 0.
+      DELETE gt_bsik.
+    ENDIF.
+    CLEAR: gs_bsik, ls_bsik.
+  ENDLOOP.
+
+
+  REFRESH lt_bsik.
+  lt_bsik = gt_bsik.
+  SORT gt_bsik BY lifnr belnr buzei augbl.
+  SORT gt_bsik BY lifnr bldat belnr.
+  DESCRIBE TABLE gt_bsik LINES lv_tab_indx1.
+
+  LOOP AT gt_bsik INTO gs_bsik.
+    lv_tabix1 = lv_tabix1 + 1.
+    CLEAR lv_stat_tx1.
+    lv_percentage1 = ( lv_tabix1 / lv_tab_indx1 ) * 100.
+    lv_stat_tx1(3) = lv_percentage1.
+
+    CONCATENATE lv_stat_tx1 '%' 'Prepairing for display for Vendor...'
+           INTO lv_stat_tx1 SEPARATED BY space.
+
+    CALL FUNCTION 'SAPGUI_PROGRESS_INDICATOR'
+      EXPORTING
+        percentage = lv_percentage1
+        text       = lv_stat_tx1.
+
+    gs_output-lifnr  = gs_bsik-lifnr.
+    gs_output-bukrs  = gs_bsik-bukrs.
+    READ TABLE gt_lfb1 INTO gs_lfb1 WITH KEY lifnr = gs_output-lifnr.
+    IF sy-subrc = 0.
+      gs_output-akont = gs_lfb1-akont.
+      gs_output-xverr = gs_lfb1-xverr.
+      gs_output-mindk = gs_lfb1-mindk.
+    ENDIF.
+
+    gs_output-bpkind  = gs_bsik-bpkind.
+    SELECT SINGLE businesspartnertypedesc INTO gs_output-bu_text40 FROM bupa_type_text WHERE language EQ 'E' AND businesspartnertype EQ gs_bsik-bpkind.
+
+    gs_output-sgtxt   = gs_bsik-sgtxt.
+    gs_output-belnr   = gs_bsik-belnr.
+    gs_output-gjahr   = gs_bsik-gjahr.
+    gs_output-bldat   = gs_bsik-bldat.
+    gs_output-umskz   = gs_bsik-umskz.
+    gs_output-xblnr   = gs_bsik-xblnr.
+    gs_output-wrbtr   = gs_bsik-tsl.
+    gs_output-doccurr = gs_bsik-rwcur.
+    gs_output-zfbdt   = gs_bsik-zfbdt.
+    gs_output-zbd1t   = gs_bsik-zbd1t.
+    gs_output-zterm   = gs_bsik-zterm.
+    gs_output-blart   = gs_bsik-blart.
+    gs_output-budat   = gs_bsik-budat.
+
+
+
+
+    SELECT SINGLE * INTO @DATA(wa_bkpf5) FROM bkpf WHERE
+                    bukrs EQ @gs_bsik-bukrs AND
+                    belnr EQ @gs_bsik-belnr AND
+                    gjahr EQ @gs_bsik-gjahr.
+
+    IF sy-subrc EQ 0 AND ( gs_bsik-blart EQ 'RE' OR gs_bsik-blart EQ 'ZE' ) .
+      CLEAR lv_gjahr.
+      lv_gjahr = substring( off = strlen( wa_bkpf5-awkey ) - 4 len = 4 val = wa_bkpf5-awkey ).
+      SELECT SINGLE * INTO @DATA(wa_rseg5) FROM rseg WHERE
+                      belnr EQ @wa_bkpf5-awkey(10) AND
+                      gjahr = @lv_gjahr.
+*                      gjahr eq @wa_bkpf5-awkey+10(4).
+
+
+
+      IF sy-subrc EQ 0.
+        gs_output-matnr = wa_rseg5-matnr.
+        SELECT SINGLE maktx INTO gs_output-maktx FROM makt WHERE matnr EQ gs_output-matnr.
+      ENDIF.
+    ELSE.
+      gs_output-matnr = ''.
+      gs_output-maktx = ''.
+    ENDIF.
+
+    CLEAR :belnr ,bukrs,buzei,gjahr,gkont.
+
+    belnr   = gs_bsik-belnr.
+    bukrs   = gs_bsik-bukrs.
+    buzei   = gs_bsik-buzei.
+    gjahr   = gs_bsik-gjahr.
+
+    CALL FUNCTION 'GET_GKONT'
+      EXPORTING
+        belnr           = belnr
+        bukrs           = bukrs
+        buzei           = buzei
+        gjahr           = gjahr
+        gknkz           = '3'
+      IMPORTING
+        gkont           = gkont
+*       KOART           =
+*       GHKON           =
+      EXCEPTIONS
+        belnr_not_found = 1
+        buzei_not_found = 2
+        gknkz_not_found = 3
+        OTHERS          = 4.
+    IF sy-subrc <> 0.
+* Implement suitable error handling here
+    ENDIF.
+
+    gs_output-gkont = gkont.
+
+    IF gs_output-gkont IS NOT INITIAL.
+      SELECT SINGLE * FROM skat INTO @DATA(wa_skat1) WHERE spras = 'E' AND ktopl = 'CDBG' AND saknr = @gs_output-gkont .
+      IF sy-subrc = 0.
+        gs_output-txt20 = wa_skat1-txt20.
+      ENDIF.
+    ENDIF.
+    gs_output-hkont = gs_bsik-hkont.
+    SELECT SINGLE * FROM skat INTO @DATA(p_sakt1) WHERE spras = 'E' AND ktopl = 'CDBG' AND saknr = @gs_output-hkont .
+    IF sy-subrc = 0.
+      gs_output-hname = p_sakt1-txt20.
+    ENDIF.
+    SELECT SINGLE * FROM ska1 INTO @DATA(wa_ska1) WHERE ktopl = 'CDBG' AND saknr = @gs_output-hkont .
+    IF sy-subrc = 0.
+      gs_output-ktoks = wa_ska1-ktoks.
+      SELECT SINGLE * FROM t077z INTO @DATA(w_t077z) WHERE ktopl = 'CDBG' AND ktoks = @gs_output-ktoks AND spras = 'E'.
+      IF sy-subrc = 0.
+        gs_output-txt30 = w_t077z-txt30.
+      ENDIF.
+    ENDIF.
+    CLEAR :wa_ska1,w_t077z.
+
+    IF gs_bsid-drcrk = 'S'.
+      gs_output-debit = gs_bsik-hsl.
+    ENDIF.
+    IF gs_bsid-drcrk = 'H'.
+      gs_output-credit = gs_bsik-hsl.
+    ENDIF.
+    gs_output-osbal = gs_bsik-hsl.
+
+    READ TABLE gt_lfa1 INTO gs_lfa1 WITH KEY lifnr = gs_bsik-lifnr.
+    IF sy-subrc  = 0.
+      gs_output-name1 = gs_lfa1-name1.
+      gs_output-konzs = gs_lfa1-konzs.
+      gs_output-ort01 = gs_lfa1-ort01.
+      gs_output-stcd4 = gs_lfa1-stcd4.
+    ENDIF.
+
+    READ TABLE gt_bseg1 INTO gs_bseg1 WITH KEY bukrs = gs_bsik-bukrs
+                                               belnr = gs_bsik-belnr
+                                               gjahr = gs_bsik-gjahr
+                                               augbl = gs_bsik-belnr
+                                               lifnr = gs_bsik-lifnr.
+    IF sy-subrc = 0.
+      gs_output-orgamt = gs_bseg1-wrbtr.
+      gs_output-zuonr = gs_bseg1-zuonr.
+      gs_output-rebzg = gs_bseg1-rebzg.
+    ENDIF.
+
+    IF gs_output-orgamt IS INITIAL.
+      gs_output-orgamt = gs_output-osbal.
+    ELSE.
+      gs_output-rcvdamt = gs_output-orgamt - gs_output-osbal.
+    ENDIF.
+*    read table gt_cepct1 into gs_cepct1 with key prctr = gs_bsik-prctr.
+*    if sy-subrc = 0.
+*      gs_output-ktext = gs_cepct1-ktext.
+*    endif.
+
+    READ TABLE gt_tvzbt1 INTO gs_tvzbt1 WITH KEY zterm = gs_bsik-zterm.
+    IF sy-subrc = 0.
+      gs_output-vtext1 = gs_tvzbt1-vtext.
+    ENDIF.
+
+    CLEAR faede.
+    MOVE-CORRESPONDING gs_bsik TO faede.
+    faede-koart = 'D'.
+    faede-shkzg = gs_bsik-drcrk.
+
+**    if gs_output-cexdat is not initial.
+**      clear faede-zfbdt.
+**      faede-zfbdt = gs_output-cexdat.
+**    endif.
+
+    CALL FUNCTION 'DETERMINE_DUE_DATE'
+      EXPORTING
+        i_faede                    = faede
+      IMPORTING
+        e_faede                    = faede
+      EXCEPTIONS
+        account_type_not_supported = 1
+        OTHERS                     = 2.
+    IF sy-subrc <> 0.
+*       message id sy-msgid type sy-msgty number sy-msgno
+*               with sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    ENDIF.
+*    gs_output-duedt = faede-netdt.
+*    ***    *****************************************************************************Added by Rajan/Lalit Upreti
+    DATA: lv_zterm TYPE bseg-zterm,
+          lv_ztag1 TYPE t052-ztag1,
+          lv_vtext TYPE tvzbt-vtext.
+    CLEAR: lv_zterm, lv_ztag1,lv_vtext.
+    IF gs_bsik-bldat IS NOT INITIAL.
+      SELECT SINGLE zterm INTO lv_zterm FROM bseg WHERE bukrs = gs_bsik-bukrs AND lifnr = gs_bsik-lifnr AND gjahr = gs_bsik-gjahr AND belnr = gs_bsik-belnr.
+      SELECT SINGLE ztag1 FROM t052 INTO lv_ztag1 WHERE zterm = lv_zterm.
+      IF sy-subrc EQ 0.
+        gs_output-duedt = gs_bsik-zfbdt.. "gs_bsik-bldat + lv_ztag1.
+      ELSE.
+        SELECT * FROM t052s INTO TABLE gt_t052s WHERE zterm = gs_bsik-zterm.
+        SELECT zterm ztag1 FROM t052 INTO TABLE gt_t052 FOR ALL ENTRIES IN gt_t052s WHERE zterm = gt_t052s-ratzt AND ztag1 NE ' '.
+        READ TABLE gt_t052 INTO DATA(gs_t052) INDEX 1.
+        gs_output-duedt = gs_bsik-zfbdt.. "gs_bsik-bldat + gs_t052-ztag1.
+      ENDIF.
+
+      IF lv_zterm IS INITIAL.
+        lv_zterm = gs_t052-zterm.
+      ENDIF.
+      IF lv_zterm IS INITIAL.
+        lv_zterm = gs_t052-zterm.
+      ENDIF.
+      SELECT SINGLE text1 FROM t052u INTO lv_vtext WHERE zterm = lv_zterm.
+      IF sy-subrc EQ 0.
+        gs_output-vtext1 = lv_vtext.
+      ENDIF.
+      IF gs_output-duedt IS INITIAL.
+        gs_output-duedt = gs_bsik-zfbdt.. "gs_bsik-bldat.
+      ENDIF.
+    ENDIF.
+*** *****************************************************************************Added by Rajan/Lalit Upreti
+
+    IF r_dd = 'X'.
+      READ TABLE gt_bseg2 INTO DATA(gs_bseg2) WITH KEY bukrs = gs_bsik-bukrs
+                                           augbl = gs_bsik-belnr
+                                           gjahr = gs_bsik-gjahr.
+
+      IF sy-subrc = 0.
+
+        IF  gs_bseg2-umskz NE space.
+          IF gs_bseg2-netdt IS NOT INITIAL.
+            gs_output-duedt = gs_bseg2-netdt.
+          ENDIF.
+        ENDIF.
+
+      ENDIF.
+      PERFORM calculate_days USING gs_output-duedt.
+      IF  gs_bseg2-umskz NE space.
+        IF gs_bseg2-netdt IS NOT INITIAL.
+          gs_output-duedt = gs_bseg2-netdt.
+        ENDIF.
+      ENDIF.
+    ELSE.
+      PERFORM calculate_days USING gs_output-bldat.
+    ENDIF.
+    PERFORM cell_color.
+
+    IF lv_flag NE 'X'.  "Only IF Condition is Added by 2I:GS:23/04/2020
+      IF gs_output-blart EQ 'RE' OR gs_output-blart EQ 'KR'.
+        IF gs_output-osbal GT 0.
+          gs_output-duedt = gs_bsik-bldat.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+
+*********Added by 2I:GS:23/04/2020(+)**********************************************************************
+    IF gs_output-blart = 'KG' OR gs_output-blart = 'RE'.
+      gs_output-vendor_debit = gs_output-crbal.
+      gs_output-crbal = ' '.
+    ENDIF.
+*********Added by 2I:GS:23/04/2020(-)**********************************************************************
+*READ TABLE gt_lfa1 INTO DATA(wa_lfa1) with key  lifnr = gs_bsik-lifnr.
+*IF sy-subrc = 0.
+*gs_output = wa_lfa1-brsch.
+*ENDIF.
+
+*    READ TABLE gt_bseg2 INTO gs_bseg2 WITH KEY bukrs = gs_bsik-bukrs
+*                                         belnr = gs_bsik-belnr
+*                                         gjahr = gs_bsik-gjahr.
+*
+*    IF sy-subrc = 0.
+*      IF  gs_bseg1-umskz NE space.
+*        IF gs_bseg1-netdt IS NOT INITIAL.
+*          gs_output-duedt = gs_bseg1-netdt.
+*        ENDIF.
+*      ENDIF.
+*    ENDIF.
+    IF r_dd = 'X'.
+      IF  gs_bseg2-umskz NE space.
+        IF gs_bseg2-netdt IS NOT INITIAL.
+          gs_output-duedt = gs_bseg2-netdt.
+        ENDIF.
+      ENDIF.
+      IF  gs_output-duedt <= p_budat.
+        gs_output-osbal_1 = gs_output-osbal - gs_output-nodue.
+      ELSE.
+        gs_output-nodue = gs_output-osbal.
+      ENDIF.
+      IF gs_output-nodue IS NOT INITIAL.
+        gs_output-range1 =  ''.
+        gs_output-range2 =  ''.
+        gs_output-range3 =  ''.
+        gs_output-range4 =  ''.
+        gs_output-range5 =  ''.
+      ENDIF.
+    ENDIF.
+    IF gs_output-blart = 'RV'.
+      READ TABLE gt_kna1 INTO gs_kna1 WITH KEY kunnr = gs_bsid-kunnr.
+      IF sy-subrc  = 0.
+        SELECT SINGLE * FROM bseg INTO @DATA(ls_bseg) WHERE bukrs = @gs_bsid-bukrs
+                                           AND  belnr = @gs_bsid-belnr
+                                           AND  gjahr = @gs_bsid-gjahr.
+        IF ls_bseg-zbd1t IS NOT INITIAL.
+          lv_day = ls_bseg-zbd1t.
+          CALL FUNCTION 'BKK_ADD_WORKINGDAY'
+            EXPORTING
+              i_date = ls_bseg-zfbdt
+              i_days = lv_day
+*             I_CALENDAR1       =
+*             I_CALENDAR2       =
+            IMPORTING
+              e_date = gs_output-duedt
+*             E_RETURN          =
+            .
+        ELSE.
+          gs_output-duedt = ls_bseg-zfbdt.
+        ENDIF.
+*          gs_output-duedt = lv_netdt.
+      ENDIF.
+    ENDIF.
+
+    """"""" ADDED BY VD """"""""""""""""'
+
+*    SELECT SINGLE ZTERM FROM BSEG INTO @DATA(ZT)
+*      WHERE BELNR = @gs_output-belnr.
+*      IF ZT IS NOT INITIAL.
+*        gs_output-ZPAY1 = ZT.
+*      ENDIF.
+
+*IF gs_output-ZTERM IS NOT INITIAL.
+*
+*      SELECT SINGLE ZTAG1 FROM T052 INTO @DATA(ZTG)
+*        WHERE ZTERM = @gs_output-ZTERM.
+*
+*        IF ZTG IS NOT INITIAL.
+*          gs_output-ZTAG = ZTG.
+*        ENDIF.
+*
+*
+*
+*        SELECT SINGLE ZFBDT FROM BSEG INTO @DATA(BSE)
+*          WHERE BELNR = @gs_output-belnr.
+*
+*          IF BSE IS NOT INITIAL.
+*            gs_output-ZFBD = BSE.
+*          ENDIF.
+*
+*        gs_output-ZSS = gs_output-DUEDT + gs_output-ZTAG.
+*
+*ENDIF.
+    " If payment term is maintained
+    IF gs_output-zterm IS NOT INITIAL.
+
+      " Get ZTAG1 from payment terms table
+      SELECT SINGLE ztag1
+        INTO @DATA(ztg)
+        FROM t052
+        WHERE zterm = @gs_output-zterm.
+
+      IF ztg IS NOT INITIAL.
+        gs_output-ztag = ztg.
+      ENDIF.
+
+      " Get Baseline Date (ZFBDT) from BSEG
+      SELECT SINGLE zfbdt
+        INTO @DATA(zfbdt)
+        FROM bseg
+        WHERE belnr = @gs_output-belnr.
+
+      IF zfbdt IS NOT INITIAL.
+        gs_output-zfbd = zfbdt.
+      ENDIF.
+
+      " Calculate Actual Due Date
+      gs_output-zss = gs_output-duedt + ztg.
+
+    ELSE.
+
+      " If no payment term is maintained, just copy DUEDT as Actual Due Date
+      gs_output-zss = gs_output-duedt.
+
+    ENDIF.
+
+    SELECT SINGLE * FROM zfi_ageing INTO @DATA(ls_fi_ageing) WHERE bukrs = @gs_output-bukrs AND belnr = @gs_output-belnr.
+    IF sy-subrc = 0.
+      CLEAR gs_output-zfbdt.
+      gs_output-zfbdt = ls_fi_ageing-zfbdt.
+      IF ls_fi_ageing-zss IS NOT INITIAL.
+        CLEAR gs_output-zss.
+        gs_output-zss = ls_fi_ageing-zss.
+      ENDIF.
+      CLEAR ls_fi_ageing.
+    ENDIF.
+
+    """""""""""""
+
+    APPEND gs_output TO gt_output.
+    CLEAR: gs_output,gs_bseg2.
+  ENDLOOP.
+* *************************************************************************BOC by Rajan
+  LOOP AT gt_output INTO DATA(ls_ven) WHERE blart EQ 'RK'.
+    SELECT bseg~belnr bseg~awkey bkpf~xblnr INTO TABLE gt_rev FROM bseg INNER JOIN bkpf ON bseg~belnr = bkpf~belnr WHERE  bkpf~xblnr = ls_ven-xblnr
+                                                          AND bseg~bukrs = ls_ven-bukrs AND bseg~lifnr = ls_ven-lifnr AND bseg~koart = 'K'.
+
+    CLEAR ls_ven-crbal.
+    READ TABLE gt_rev INTO gs_rev INDEX 2.
+    READ TABLE gt_output INTO DATA(ls_ven1) WITH KEY belnr = gs_rev-belnr xblnr = gs_rev-xblnr.
+    IF sy-subrc EQ 0.
+      CLEAR: ls_ven-range1,ls_ven-range2,ls_ven-range3,ls_ven-range4,ls_ven-range5,ls_ven-range9, ls_ven-crbal.
+      IF ls_ven1-range1 IS NOT INITIAL.
+        ls_ven-range1 = ls_ven-osbal.
+      ELSEIF ls_ven1-range2 IS NOT INITIAL.
+        ls_ven-range2 = ls_ven-osbal.
+      ELSEIF ls_ven1-range3 IS NOT INITIAL.
+        ls_ven-range3 = ls_ven-osbal.
+      ELSEIF ls_ven1-range4 IS NOT INITIAL.
+        ls_ven-range4 = ls_ven-osbal.
+      ELSEIF ls_ven1-range5 IS NOT INITIAL.
+        ls_ven-range5 = ls_ven-osbal.
+      ELSEIF ls_ven1-range9 IS NOT INITIAL.
+        ls_ven-range9 = ls_ven-osbal.
+      ENDIF.
+    ENDIF.
+    MODIFY gt_output FROM ls_ven.
+    CLEAR: ls_ven, ls_ven1, gs_rev.
+  ENDLOOP.
+* * ****************************************************************************EOC by Rajan
+
+*****************
+
+  IF p_ven = 'X'.
+
+    CALL FUNCTION 'SAPGUI_PROGRESS_INDICATOR'
+      EXPORTING
+        text = 'Manipulating data for Customer... '.
+    REFRESH lt_bsid.
+    lt_bsid = gt_bsid.
+    SORT gt_bsid BY kunnr belnr buzei augbl.
+
+    LOOP AT gt_bsid INTO gs_bsid.
+      READ TABLE lt_bsid INTO ls_bsid WITH KEY kunnr = gs_bsid-kunnr
+                                               belnr = gs_bsid-augbl.
+      IF sy-subrc = 0.
+        DELETE gt_bsid.
+      ENDIF.
+      CLEAR: gs_bsid, ls_bsid.
+    ENDLOOP.
+
+    SORT gt_bsid BY kunnr bldat belnr.
+
+    DESCRIBE TABLE gt_bsid LINES lv_tab_indx.
+    CLEAR lv_tabix.
+    LOOP AT gt_bsid INTO gs_bsid.
+      lv_tabix = lv_tabix + 1.
+      CLEAR lv_stat_tx.
+      lv_percentage = ( lv_tabix / lv_tab_indx ) * 100.
+      lv_stat_tx(3) = lv_percentage.
+
+      CONCATENATE lv_stat_tx '%' 'Prepairing for display for Customer...'
+             INTO lv_stat_tx SEPARATED BY space.
+
+      CALL FUNCTION 'SAPGUI_PROGRESS_INDICATOR'
+        EXPORTING
+          percentage = lv_percentage
+          text       = lv_stat_tx.
+
+      gs_output-lifnr  = gs_bsid-kunnr.
+      gs_output-bukrs  = gs_bsid-bukrs.
+      READ TABLE gt_knb1 INTO gs_knb1 WITH KEY kunnr =  gs_output-lifnr.
+      IF sy-subrc = 0.
+        gs_output-akont = gs_knb1-akont.
+        gs_output-xverr = gs_knb1-xverr.
+      ENDIF.
+      gs_output-bpkind  = gs_bsid-bpkind.
+      SELECT SINGLE businesspartnertypedesc INTO gs_output-bu_text40 FROM bupa_type_text WHERE language EQ 'E' AND businesspartnertype EQ gs_bsid-bpkind.
+      gs_output-sgtxt  = gs_bsid-sgtxt.
+      gs_output-umskz  = gs_bsid-umskz.
+      gs_output-belnr  = gs_bsid-belnr.
+      gs_output-gjahr  = gs_bsid-gjahr.
+      gs_output-bldat  = gs_bsid-bldat.
+      gs_output-xblnr  = gs_bsid-xblnr.
+      gs_output-billno = gs_bsid-vbeln.
+      gs_output-wrbtr = gs_bsid-tsl.
+      gs_output-doccurr = gs_bsid-rwcur.
+*      gs_output-prctr  = gs_bsid-prctr.
+      gs_output-zfbdt  = gs_bsid-zfbdt.
+      gs_output-zbd1t  = gs_bsid-zbd1t.
+      gs_output-zterm = gs_bsid-zterm.
+      gs_output-blart = gs_bsid-blart.
+      gs_output-budat = gs_bsid-budat.
+
+      CLEAR :belnr ,bukrs,buzei,gjahr,gkont.
+
+      belnr  = gs_bsid-belnr.
+      bukrs = gs_bsid-bukrs.
+      buzei = gs_bsid-buzei.
+      gjahr = gs_bsid-gjahr.
+      CALL FUNCTION 'GET_GKONT'
+        EXPORTING
+          belnr           = belnr
+          bukrs           = bukrs
+          buzei           = buzei
+          gjahr           = gjahr
+          gknkz           = '3'
+        IMPORTING
+          gkont           = gkont
+*         KOART           =
+*         GHKON           =
+        EXCEPTIONS
+          belnr_not_found = 1
+          buzei_not_found = 2
+          gknkz_not_found = 3
+          OTHERS          = 4.
+      IF sy-subrc <> 0.
+* Implement suitable error handling here
+      ENDIF.
+
+      gs_output-gkont = gkont.
+      IF gs_output-gkont IS NOT INITIAL.
+        SELECT SINGLE * FROM skat INTO @DATA(wa_skat) WHERE spras = 'E' AND ktopl = 'CDBG' AND saknr = @gs_output-gkont .
+        IF sy-subrc = 0.
+          gs_output-txt20 = wa_skat-txt20.
+        ENDIF.
+      ENDIF.
+
+      gs_output-hkont = gs_bsid-hkont.
+      SELECT SINGLE * FROM skat INTO @DATA(p_sakt) WHERE spras = 'E' AND ktopl = 'CDBG' AND saknr = @gs_output-hkont .
+      IF sy-subrc = 0.
+        gs_output-hname = p_sakt-txt20.
+      ENDIF.
+      CLEAR :wa_ska1,w_t077z.
+      SELECT SINGLE * FROM ska1 INTO wa_ska1 WHERE ktopl = 'CDBG' AND saknr = gs_output-hkont .
+      IF sy-subrc = 0.
+        gs_output-ktoks = wa_ska1-ktoks.
+        SELECT SINGLE * FROM t077z INTO w_t077z WHERE ktopl = 'CDBG' AND ktoks = gs_output-ktoks AND spras = 'E'.
+        IF sy-subrc = 0.
+          gs_output-txt30 = w_t077z-txt30.
+        ENDIF.
+      ENDIF.
+      CLEAR :wa_ska1,wa_skat,w_t077z,p_sakt.
+      IF gs_bsid-drcrk = 'S'.
+        gs_output-debit = gs_bsid-hsl.
+      ENDIF.
+      IF gs_bsid-drcrk = 'H'.
+        gs_output-credit = gs_bsid-hsl.
+      ENDIF.
+      gs_output-osbal = gs_bsid-hsl.
+
+      READ TABLE gt_kna1 INTO gs_kna1 WITH KEY kunnr = gs_bsid-kunnr.
+      IF sy-subrc  = 0.
+        gs_output-name1 = gs_kna1-name1.
+        gs_output-konzs = gs_kna1-konzs.
+      ENDIF.
+
+      READ TABLE gt_vbrp INTO gs_vbrp WITH KEY vbeln = gs_bsid-vbeln.
+      IF sy-subrc = 0.
+        gs_output-aubel = gs_vbrp-aubel.
+        SELECT SINGLE * FROM vbak INTO @DATA(q_vbrk) WHERE vbeln = @gs_output-aubel.
+        IF sy-subrc = 0.
+          gs_output-auart = q_vbrk-auart.
+          SELECT SINGLE * FROM tvakt INTO @DATA(w_tvakt) WHERE auart = @gs_output-auart AND spras = 'E'.
+          IF sy-subrc = 0.
+            gs_output-bezei = w_tvakt-bezei.
+          ENDIF.
+        ENDIF.
+        READ TABLE gt_vbkd INTO gs_vbkd WITH KEY vbeln = gs_vbrp-aubel.
+        IF sy-subrc = 0.
+          CALL FUNCTION 'CONVERSION_EXIT_PDATE_OUTPUT'
+            EXPORTING
+              input  = gs_vbkd-bstdk
+            IMPORTING
+              output = gs_output-pono.
+          IF gs_output-pono IS NOT INITIAL.
+            CONCATENATE gs_vbkd-bstkd 'DTD' gs_output-pono INTO gs_output-pono
+                                                           SEPARATED BY space.
+          ENDIF.
+        ENDIF.
+      ENDIF.
+
+      READ TABLE gt_vbrk INTO gs_vbrk WITH KEY vbeln = gs_bsid-vbeln.
+      IF sy-subrc = 0.
+        gs_output-fkdat = gs_vbrk-fkdat.
+        gs_output-spart = gs_vbrk-spart.
+        IF gs_vbrk-fkart_rl = 'LR'.
+          READ TABLE gt_vbrl INTO gs_vbrl WITH KEY vbeln_vf = gs_vbrk-vbeln.
+          IF sy-subrc = 0.
+            gs_output-cexnum = gs_vbrl-vbeln.
+            READ TABLE it_vbrk INTO wa_vbrk WITH KEY vbeln = gs_vbrl-vbeln.
+            IF sy-subrc = 0.
+              gs_output-cexdat = wa_vbrk-fkdat_rl.
+            ENDIF.
+          ENDIF.
+        ENDIF.
+
+        READ TABLE gt_tspat INTO gs_tspat WITH KEY spart = gs_vbrk-spart.
+        IF sy-subrc = 0.
+          gs_output-vtext = gs_tspat-vtext.
+        ENDIF.
+      ENDIF.
+
+      READ TABLE gt_bseg INTO gs_bseg WITH KEY bukrs = gs_bsid-bukrs
+                                               belnr = gs_bsid-belnr
+                                               gjahr = gs_bsid-gjahr
+                                               augbl = gs_bsid-belnr
+                                               kunnr = gs_bsid-kunnr.
+      IF sy-subrc = 0.
+        gs_output-orgamt = gs_bseg-wrbtr.
+        gs_output-zuonr = gs_bseg-zuonr.
+        gs_output-rebzg = gs_bseg-rebzg.
+      ENDIF.
+
+      IF gs_output-orgamt IS INITIAL.
+        gs_output-orgamt = gs_output-osbal.
+      ELSE.
+        gs_output-rcvdamt = gs_output-orgamt - gs_output-osbal.
+      ENDIF.
+
+*      read table gt_cepct into gs_cepct with key prctr = gs_bsid-prctr.
+*      if sy-subrc = 0.
+*        gs_output-ktext = gs_cepct-ktext.
+*      endif.
+
+      READ TABLE gt_tvzbt INTO gs_tvzbt WITH KEY zterm = gs_bsid-zterm.
+      IF sy-subrc = 0.
+        gs_output-vtext1 = gs_tvzbt-vtext.
+      ENDIF.
+
+      CLEAR faede.
+      MOVE-CORRESPONDING gs_bsid TO faede.
+      faede-koart = 'K'.
+      faede-shkzg = gs_bsid-drcrk.
+
+      IF gs_output-cexdat IS NOT INITIAL.
+        CLEAR faede-zfbdt.
+        faede-zfbdt = gs_output-cexdat.
+      ENDIF.
+
+      CALL FUNCTION 'DETERMINE_DUE_DATE'
+        EXPORTING
+          i_faede                    = faede
+        IMPORTING
+          e_faede                    = faede
+        EXCEPTIONS
+          account_type_not_supported = 1
+          OTHERS                     = 2.
+      IF sy-subrc <> 0.
+*       message id sy-msgid type sy-msgty number sy-msgno
+*               with sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+      ENDIF.
+
+      gs_output-duedt = faede-netdt.
+**      **    *****************************************************************************Added by Rajan/Lalit Upreti
+      IF gs_bsik-bldat IS NOT INITIAL.
+        CLEAR: lv_zterm, lv_ztag1,lv_vtext.
+        SELECT SINGLE zterm INTO lv_zterm FROM bseg WHERE bukrs = gs_bsik-bukrs AND lifnr = gs_bsik-lifnr AND gjahr = gs_bsik-gjahr AND belnr = gs_bsik-belnr.
+        SELECT SINGLE ztag1 FROM t052 INTO lv_ztag1 WHERE zterm = lv_zterm.
+        IF sy-subrc EQ 0.
+          gs_output-duedt = gs_bsik-bldat + lv_ztag1.
+        ELSE.
+          SELECT * FROM t052s INTO TABLE gt_t052s WHERE zterm = gs_bsik-zterm.
+          SELECT zterm ztag1 FROM t052 INTO TABLE gt_t052 FOR ALL ENTRIES IN gt_t052s WHERE zterm = gt_t052s-ratzt AND ztag1 NE ' '.
+          READ TABLE gt_t052 INTO gs_t052 INDEX 1.
+          gs_output-duedt = gs_bsik-bldat + gs_t052-ztag1.
+        ENDIF.
+        SELECT SINGLE vtext FROM tvzbt INTO lv_vtext WHERE zterm = lv_zterm AND spras = 'E'.
+        IF sy-subrc EQ 0.
+          gs_output-vtext1 = lv_vtext.
+        ENDIF.
+
+        IF gs_output-duedt IS INITIAL.
+          gs_output-duedt = gs_bsik-zfbdt  ."gs_bsik-bldat.
+        ENDIF.
+      ENDIF.
+*** *****************************************************************************Added by Rajan/Lalit Upreti
+
+
+      IF r_dd = 'X'.
+
+        READ TABLE gt_bseg2 INTO gs_bseg2 WITH KEY bukrs = gs_bsid-bukrs
+                                             augbl = gs_bsid-belnr
+                                             gjahr = gs_bsid-gjahr.
+
+        IF sy-subrc = 0.
+          IF  gs_bseg2-umskz NE space.
+            IF gs_bseg2-netdt IS NOT INITIAL.
+              gs_output-duedt = gs_bseg2-netdt.
+            ENDIF.
+          ENDIF.
+        ENDIF.
+        PERFORM calculate_days1 USING gs_output-duedt.
+        IF  gs_bseg2-umskz NE space.
+          IF gs_bseg2-netdt IS NOT INITIAL.
+            gs_output-duedt = gs_bseg2-netdt.
+          ENDIF.
+        ENDIF.
+      ELSE.
+        PERFORM calculate_days1 USING gs_output-bldat.
+      ENDIF.
+
+      PERFORM cell_color.
+      gs_output-osbal_1 = gs_output-osbal - gs_output-nodue." Added By Divya
+      IF r_dd = 'X'.
+        IF  gs_bseg2-umskz NE space.
+          IF gs_bseg2-netdt IS NOT INITIAL.
+            gs_output-duedt = gs_bseg2-netdt.
+          ENDIF.
+        ENDIF.
+        IF  gs_output-duedt <= p_budat.
+          gs_output-osbal_1 = gs_output-osbal - gs_output-nodue.
+        ELSE.
+          gs_output-nodue = gs_output-osbal.
+        ENDIF.
+      ENDIF.
+      IF gs_output-blart = 'RV'.
+        READ TABLE gt_kna1 INTO gs_kna1 WITH KEY kunnr = gs_bsid-kunnr.
+        IF sy-subrc  = 0.
+          SELECT SINGLE * FROM bseg INTO ls_bseg WHERE bukrs = gs_bsid-bukrs
+                                             AND  belnr = gs_bsid-belnr
+                                             AND  gjahr = gs_bsid-gjahr.
+          IF ls_bseg-zbd1t IS NOT INITIAL.
+            lv_day = ls_bseg-zbd1t.
+            CALL FUNCTION 'BKK_ADD_WORKINGDAY'
+              EXPORTING
+                i_date = ls_bseg-zfbdt
+                i_days = lv_day
+*               I_CALENDAR1       =
+*               I_CALENDAR2       =
+              IMPORTING
+                e_date = gs_output-duedt
+*               E_RETURN          =
+              .
+          ELSE.
+            gs_output-duedt = ls_bseg-zfbdt.
+          ENDIF.
+*          gs_output-duedt = lv_netdt.
+        ENDIF.
+      ENDIF.
+      SELECT SINGLE * FROM zfi_ageing INTO @ls_fi_ageing WHERE bukrs = @gs_output-bukrs AND belnr = @gs_output-belnr.
+      IF sy-subrc = 0.
+        CLEAR gs_output-zfbdt.
+        gs_output-zfbdt = ls_fi_ageing-zfbdt.
+        CLEAR ls_fi_ageing.
+      ENDIF.
+      APPEND gs_output TO gt_output.
+      CLEAR: gs_output,gs_bseg2,ls_bseg.
+    ENDLOOP.
+
+  ENDIF.
+
+  IF p_summ = 'X'.
+
+    REFRESH pt_output.
+
+    pt_output = gt_output.
+    IF p_ledger NE 'X'.
+      SORT pt_output BY bukrs lifnr.
+      DELETE ADJACENT DUPLICATES FROM pt_output COMPARING bukrs lifnr.
+      CALL FUNCTION 'SAPGUI_PROGRESS_INDICATOR'
+        EXPORTING
+          text = 'Prepare Summary... '.
+
+************Added by 2I:GS:22/04/2020(+)*****************************************************************************************************
+      SELECT lifnr, zterm FROM lfm1 INTO TABLE @DATA(gt_lfm1) FOR ALL ENTRIES IN @pt_output WHERE lifnr = @pt_output-lifnr.
+      IF gt_lfm1 IS NOT INITIAL.
+        SELECT zterm, text1 FROM t052u INTO TABLE @DATA(gt_t052u) FOR ALL ENTRIES IN @gt_lfm1 WHERE zterm = @gt_lfm1-zterm AND spras = 'E'.
+      ENDIF.
+************Added by 2I:GS:22/04/2020(-)*****************************************************************************************************
+
+      LOOP AT pt_output INTO ps_output.
+        gs_output1-xverr    = ps_output-xverr.
+        gs_output1-bpkind   = ps_output-bpkind.
+        gs_output1-bu_text40 = ps_output-bu_text40.
+        gs_output1-lifnr = ps_output-lifnr.
+        gs_output1-ort01 = ps_output-ort01.
+*        gs_output1-prctr = ps_output-prctr.
+*        gs_output1-ktext = ps_output-ktext.
+        gs_output1-name1 = ps_output-name1.
+        gs_output1-konzs = ps_output-konzs.
+        gs_output1-akont = ps_output-akont.
+        gs_output1-bukrs = ps_output-bukrs.
+*        gs_output1-brsch = ps_output-brsch.
+        CLEAR gs_output.
+        LOOP AT gt_output INTO gs_output WHERE lifnr = gs_output1-lifnr AND bukrs = gs_output1-bukrs.
+
+          gs_output1-orgamt = gs_output1-orgamt + gs_output-orgamt.
+          gs_output1-debit = gs_output1-debit + gs_output-debit.
+          gs_output1-credit = gs_output1-credit + gs_output-credit.
+          gs_output1-rcvdamt = gs_output1-rcvdamt + gs_output-rcvdamt.
+          gs_output1-osbal = gs_output1-osbal + gs_output-osbal.
+          gs_output1-advan = gs_output1-advan + gs_output-advan.
+          gs_output1-advan_1 = gs_output1-advan + gs_output-advan. " Added By Divya
+          gs_output1-crbal = gs_output1-crbal + gs_output-crbal.
+          gs_output1-range1 = gs_output1-range1 + gs_output-range1.
+          gs_output1-range2 = gs_output1-range2 + gs_output-range2.
+          gs_output1-range3 = gs_output1-range3 + gs_output-range3.
+          gs_output1-range4 = gs_output1-range4 + gs_output-range4.
+          gs_output1-range5 = gs_output1-range5 + gs_output-range5.
+**          gs_output1-range6 = gs_output1-range6 + gs_output-range6.
+**          gs_output1-range7 = gs_output1-range7 + gs_output-range7.
+**          gs_output1-range8 = gs_output1-range8 + gs_output-range8.
+          gs_output1-range9 = gs_output1-range9 + gs_output-range9.
+          gs_output1-nodue = gs_output1-nodue + gs_output-nodue.
+          gs_output1-vendor_debit = gs_output1-vendor_debit + gs_output-vendor_debit.  "Added by 2I:GS:23/04/2020
+
+*************Added by 2I:GS:02/05/2020(+)**************************************************************************
+          gs_output1-wrange1 = gs_output1-wrange1 + gs_output-wrange1.
+          gs_output1-wrange2 = gs_output1-wrange2 + gs_output-wrange2.
+          gs_output1-wrange3 = gs_output1-wrange3 + gs_output-wrange3.
+          gs_output1-wrange4 = gs_output1-wrange4 + gs_output-wrange4.
+          gs_output1-wrange6 = gs_output1-wrange6 + gs_output-wrange6.
+*************Added by 2I:GS:02/05/2020(-)**************************************************************************
+
+        ENDLOOP.
+
+************Added by 2I:GS:22/04/2020(+)*****************************************
+        READ TABLE gt_lfm1 INTO DATA(gs_lfm1) WITH KEY lifnr = ps_output-lifnr.
+        IF sy-subrc = 0.
+          gs_output1-zterm = gs_lfm1-zterm.
+          READ TABLE gt_t052u INTO DATA(gs_t052u) WITH KEY zterm = gs_lfm1-zterm.
+          IF sy-subrc = 0.
+            gs_output1-text1 = gs_t052u-text1.
+          ENDIF.
+        ENDIF.
+
+        gs_output1-mindk = ps_output-mindk.  "Added by 2I:GS:23/04/2020
+        gs_output1-stcd4 = ps_output-stcd4.  "Added by MIG
+        gs_output1-p_method = ps_output-p_method. "Added by 2I:GS:25/04/2020
+
+************Added by 2I:GS:22/04/2020(-)*****************************************
+        gs_output1-osbal_1 = gs_output1-osbal - gs_output1-nodue." Added By Divya
+
+        """""""""""""""""""" ADDED BY VD """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""'
+*IF gs_output1-ZTERM IS NOT INITIAL.
+*
+*  " Get ZTAG1 from payment terms table
+*  SELECT SINGLE ZTAG1
+*    INTO @DATA(ztg1)
+*    FROM T052
+*    WHERE ZTERM = @gs_output1-ZTERM.
+*
+*  IF ztg1 IS NOT INITIAL.
+*    gs_output1-ZTAG1 = ztg1.
+*  ENDIF.
+*
+*  " Get Baseline Date (ZFBDT) from BSEG
+*  SELECT SINGLE ZFBDT
+*    INTO @DATA(zfbdt2)
+*    FROM BSEG
+*    WHERE BELNR = @gs_output-belnr.
+*
+*  IF zfbdt2 IS NOT INITIAL.
+*    gs_output1-ZFBDT = zfbdt2.
+*  ENDIF.
+
+        " Calculate Actual Due Date
+*  gs_output-ZSS = gs_output-DUEDT + ztg1.
+
+*ELSE.
+*
+*  " If no payment term is maintained, just copy DUEDT as Actual Due Date
+*  gs_output1-ZSS = gs_output-DUEDT.
+
+*ENDIF.
+
+        """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+        APPEND gs_output1 TO gt_output1.
+        CLEAR: gs_output1,ps_output.
+
+      ENDLOOP.
+    ELSEIF p_ledger = 'X'.
+
+      SORT pt_output BY bukrs lifnr hkont.
+      DELETE ADJACENT DUPLICATES FROM pt_output COMPARING bukrs lifnr hkont.
+      CALL FUNCTION 'SAPGUI_PROGRESS_INDICATOR'
+        EXPORTING
+          text = 'Prepare Summary With Ledger... '.
+
+      LOOP AT pt_output INTO ps_output.
+        gs_output1-xverr = ps_output-xverr.
+        gs_output1-bpkind = ps_output-bpkind.
+        gs_output1-lifnr = ps_output-lifnr.
+*        gs_output1-prctr = ps_output-prctr.
+*        gs_output1-ktext = ps_output-ktext.
+        gs_output1-name1 = ps_output-name1.
+        gs_output1-konzs = ps_output-konzs.
+        gs_output1-hkont = ps_output-hkont.
+        gs_output1-hname = ps_output-hname.
+        gs_output1-akont = ps_output-akont.
+        gs_output1-bukrs = ps_output-bukrs.
+*        gs_output1-brsch = ps_output-brsch.
+        CLEAR gs_output.
+        LOOP AT gt_output INTO gs_output WHERE lifnr = gs_output1-lifnr AND hkont = gs_output1-hkont AND bukrs = gs_output1-bukrs.
+          gs_output1-orgamt = gs_output1-orgamt + gs_output-orgamt.
+          gs_output1-debit = gs_output1-debit + gs_output-debit.
+          gs_output1-credit = gs_output1-credit + gs_output-credit.
+          gs_output1-rcvdamt = gs_output1-rcvdamt + gs_output-rcvdamt.
+          gs_output1-osbal = gs_output1-osbal + gs_output-osbal.
+          gs_output1-advan = gs_output1-advan + gs_output-advan.
+          gs_output1-advan_1 = gs_output1-advan + gs_output-advan. " Added By Divya
+          gs_output1-crbal = gs_output1-crbal + gs_output-crbal.
+          gs_output1-range1 = gs_output1-range1 + gs_output-range1.
+          gs_output1-range2 = gs_output1-range2 + gs_output-range2.
+          gs_output1-range3 = gs_output1-range3 + gs_output-range3.
+          gs_output1-range4 = gs_output1-range4 + gs_output-range4.
+          gs_output1-range5 = gs_output1-range5 + gs_output-range5.
+**          gs_output1-range6 = gs_output1-range6 + gs_output-range6.
+**          gs_output1-range7 = gs_output1-range7 + gs_output-range7.
+**          gs_output1-range8 = gs_output1-range8 + gs_output-range8.
+          gs_output1-range9 = gs_output1-range9 + gs_output-range9.
+          gs_output1-nodue = gs_output1-nodue + gs_output-nodue.
+
+*************Added by 2I:GS:02/05/2020(+)**************************************************************************
+          gs_output1-wrange1 = gs_output1-wrange1 + gs_output-wrange1.
+          gs_output1-wrange2 = gs_output1-wrange2 + gs_output-wrange2.
+          gs_output1-wrange3 = gs_output1-wrange3 + gs_output-wrange3.
+          gs_output1-wrange4 = gs_output1-wrange4 + gs_output-wrange4.
+          gs_output1-wrange6 = gs_output1-wrange6 + gs_output-wrange6.
+*************Added by 2I:GS:02/05/2020(-)**************************************************************************
+
+        ENDLOOP.
+
+        gs_output1-mindk = ps_output-mindk.  "Added by 2I:GS:23/04/2020
+        gs_output1-stcd4 = ps_output-stcd4.  "Added by MIG
+        gs_output1-p_method = ps_output-p_method. "Added by 2I:GS:25/04/2020
+        gs_output1-osbal_1 = gs_output1-osbal - gs_output1-nodue." Added By Divya
+        APPEND gs_output1 TO gt_output1.
+        CLEAR: gs_output1,ps_output.
+
+      ENDLOOP.
+
+    ENDIF.
+  ENDIF.
+ENDFORM. " FILL_DATA
+*&---------------------------------------------------------------------*
+*&      Form  BUILD_EVENT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM build_event .
+*  data: ls_event type slis_alv_event.
+*
+*  refresh gt_event.
+*
+*  call function 'REUSE_ALV_EVENTS_GET'
+*    exporting
+*      i_list_type     = 0
+*    importing
+*      et_events       = gt_event
+*    exceptions
+*      list_type_wrong = 1
+*      others          = 2.
+*  if sy-subrc <> 0.
+*    message id sy-msgid type sy-msgty number sy-msgno
+*            with sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+*  endif.
+*
+*  read table gt_event into ls_event
+*                      with key name = slis_ev_top_of_page.
+*  if sy-subrc = 0.
+*    move gc_formname to ls_event-form.
+*    append ls_event to gt_event.
+*  endif.
+ENDFORM. " BUILD_EVENT
+*---------------------------------------------------------------------*
+*       FORM TOP_OF_PAGE                                              *
+*---------------------------------------------------------------------*
+*       ........                                                      *
+*---------------------------------------------------------------------*
+FORM top_of_page.
+  CLEAR: gt_list_hdr[].
+  "Title
+  gs_list_hdr-typ = 'H'.
+  CONCATENATE 'Vendor Ageing Report For Company :' s_bukrs-low 'to' s_bukrs-high
+              INTO gs_list_hdr-info SEPARATED BY space.
+  APPEND gs_list_hdr TO gt_list_hdr.
+  CLEAR gs_list_hdr.
+
+  gs_list_hdr-typ = 'S'.
+  gs_list_hdr-key = 'User'.
+  gs_list_hdr-info = sy-uname.
+  APPEND gs_list_hdr TO gt_list_hdr.
+  CLEAR gs_list_hdr.
+
+  CALL FUNCTION 'REUSE_ALV_COMMENTARY_WRITE'
+    EXPORTING
+      it_list_commentary = gt_list_hdr[].
+ENDFORM. "TOP_OF_PAGE
+*&---------------------------------------------------------------------*
+*&      Form  BUILD_LAYOUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM build_layout .
+  "Layout
+  gs_layout-zebra = 'X'.
+  gs_layout-colwidth_optimize = 'X'.
+  gs_layout-info_fieldname = 'COLOR'.
+  gs_layout-coltab_fieldname = 'CELLCOLOR'.
+ENDFORM. " BUILD_LAYOUT
+*&---------------------------------------------------------------------*
+*&      Form  BUILD_FCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM build_fcat .
+  REFRESH gt_fcat.
+  DATA: lv_days TYPE rfpdo1-allgrogr.
+  DATA: gv_days TYPE rfpdo1-allgrogr.
+  IF  p_det = 'X'.
+    gs_fcat-fieldname = 'BUKRS'.
+    gs_fcat-seltext_l = 'CCode'.
+    gs_fcat-ddictxt = 'L'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+
+
+
+    gs_fcat-fieldname = 'BUDAT'.
+    gs_fcat-seltext_l = 'Post Date'.
+    gs_fcat-ddictxt = 'L'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'BPKIND'.
+    gs_fcat-seltext_l = 'BP Type'.
+    gs_fcat-ddictxt = 'L'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'BU_TEXT40'.
+    gs_fcat-seltext_l = 'BP Type desc'.
+    gs_fcat-ddictxt = 'L'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'LIFNR'.
+    gs_fcat-seltext_l = 'A/c Code'.
+    gs_fcat-ddictxt = 'L'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'XVERR'.
+    gs_fcat-seltext_l = 'Ind:C/V'.
+    gs_fcat-ddictxt = 'L'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'BLDAT'.
+    gs_fcat-seltext_l = 'Doc. Date'.
+    gs_fcat-ddictxt = 'L'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'BELNR'.
+    gs_fcat-seltext_l = 'A/c Doc. No.'.
+    gs_fcat-ddictxt = 'L'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'BLART'.
+    gs_fcat-seltext_l = 'D.Type'.
+    gs_fcat-ddictxt = 'L'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'XBLNR'.
+    gs_fcat-seltext_l = 'Ref.No.'.
+    gs_fcat-ddictxt = 'L'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+*    gs_fcat-fieldname = 'AUBEL'.
+*    gs_fcat-seltext_l = 'SO No.'.
+*    gs_fcat-ddictxt = 'L'.
+*    append gs_fcat to gt_fcat.
+*    clear  gs_fcat.
+*
+*    gs_fcat-fieldname = 'AUART'.
+*    gs_fcat-seltext_l = 'SO Type'.
+*    gs_fcat-ddictxt = 'L'.
+*    append gs_fcat to gt_fcat.
+*    clear  gs_fcat.
+*
+*    gs_fcat-fieldname = 'BEZEI'.
+*    gs_fcat-seltext_l = 'SO Type Desc.'.
+*    gs_fcat-ddictxt = 'L'.
+*    append gs_fcat to gt_fcat.
+*    clear  gs_fcat.
+
+    gs_fcat-fieldname = 'BILLNO'.
+    gs_fcat-seltext_l = 'Bill No.'.
+    gs_fcat-ddictxt = 'L'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'FKDAT'.
+    gs_fcat-seltext_l = 'Bill Date'.
+    gs_fcat-ddictxt = 'L'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'MATNR'.
+    gs_fcat-seltext_l = 'Material'.
+    gs_fcat-ddictxt = 'L'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'MAKTX'.
+    gs_fcat-seltext_l = 'Material Description'.
+    gs_fcat-ddictxt = 'L'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+*    gs_fcat-fieldname = 'PRCTR'.
+*    gs_fcat-seltext_l = 'Plant'.
+*    gs_fcat-ddictxt = 'L'.
+*    append gs_fcat to gt_fcat.
+*    clear  gs_fcat.
+
+    gs_fcat-fieldname = 'UMSKZ'.
+    gs_fcat-seltext_l = 'SG/L'.
+    gs_fcat-ddictxt = 'L'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'ORGAMT'.
+    gs_fcat-seltext_l = 'Original Amt'.
+    gs_fcat-ddictxt = 'L'.
+    gs_fcat-decimals_out = '2'.
+    gs_fcat-no_zero = 'X'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'DEBIT'.
+    gs_fcat-seltext_l = 'DR Amt'.
+    gs_fcat-ddictxt = 'L'.
+    gs_fcat-decimals_out = '2'.
+    gs_fcat-no_zero = 'X'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'CREDIT'.
+    gs_fcat-seltext_l = 'CR Amt'.
+    gs_fcat-ddictxt = 'L'.
+    gs_fcat-decimals_out = '2'.
+    gs_fcat-no_zero = 'X'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'RCVDAMT'.
+    gs_fcat-seltext_l = 'Recd Amt'.
+    gs_fcat-ddictxt = 'L'.
+    gs_fcat-decimals_out = '2'.
+    gs_fcat-no_zero = 'X'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'OSBAL'.
+    gs_fcat-seltext_l = 'Net Amt O/S'.
+    gs_fcat-ddictxt = 'L'.
+    gs_fcat-decimals_out = '2'.
+    gs_fcat-no_zero = 'X'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'NAME1'.
+    gs_fcat-seltext_l = 'Vendor Name'.
+    gs_fcat-ddictxt = 'L'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'ORT01'.
+    gs_fcat-seltext_l = 'City'.
+    gs_fcat-ddictxt = 'L'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'SPART'.
+    gs_fcat-seltext_l = 'Div'.
+    gs_fcat-ddictxt = 'L'.
+
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'VTEXT'.
+    gs_fcat-seltext_l = 'Div Name'.
+    gs_fcat-ddictxt = 'L'.
+
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'ZUONR'.
+    gs_fcat-seltext_l = 'Assignment No'.
+    gs_fcat-ddictxt = 'L'.
+
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'REBZG'.
+    gs_fcat-seltext_l = 'Ref. No.'.
+    gs_fcat-ddictxt = 'L'.
+
+*    append gs_fcat to gt_fcat.
+*    clear  gs_fcat.
+*    gs_fcat-fieldname = 'KTEXT'.
+*    gs_fcat-seltext_l = 'Plant Name'.
+*    gs_fcat-ddictxt = 'L'.
+
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'WRBTR'.
+    gs_fcat-seltext_l = 'Amt in DC'.
+    gs_fcat-ddictxt = 'L'.
+    gs_fcat-decimals_out = '2'.
+    gs_fcat-no_zero = 'X'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'DOCCURR'.
+    gs_fcat-seltext_l = 'Curr'.
+    gs_fcat-ddictxt = 'L'.
+
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'GJAHR'.
+    gs_fcat-seltext_l = 'F.Year'.
+    gs_fcat-ddictxt = 'L'.
+
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'ZFBDT'.
+    gs_fcat-seltext_l = 'Bline Date'.
+    gs_fcat-ddictxt = 'L'.
+
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'ZBD1T'.
+    gs_fcat-seltext_l = 'Cr Period'.
+    gs_fcat-ddictxt = 'L'.
+
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'PONO'.
+    gs_fcat-seltext_l = 'PO No.'.
+    gs_fcat-ddictxt = 'L'.
+
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'ADVAN'.
+    gs_fcat-seltext_l = 'Adv/ Sec'.
+    gs_fcat-ddictxt = 'L'.
+    gs_fcat-decimals_out = '2'.
+    gs_fcat-no_zero = 'X'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'ZTERM'.
+    gs_fcat-seltext_l = 'P.Term'.
+    gs_fcat-ddictxt = 'L'.
+
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'VTEXT1'.
+    gs_fcat-seltext_l = 'Description Payment Terms'.
+    gs_fcat-ddictxt = 'L'.
+
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'NODUE'.
+    gs_fcat-seltext_l = 'Not Due'.
+    gs_fcat-ddictxt = 'L'.
+    gs_fcat-decimals_out = '2'.
+    gs_fcat-no_zero = 'X'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'CRBAL'.
+    gs_fcat-seltext_l = 'Unadjusted Dr/Cr'.
+    gs_fcat-ddictxt = 'L'.
+    gs_fcat-decimals_out = '2'.
+    gs_fcat-no_zero = 'X'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+*********Added by 2I:GS:23/04/2020(+)**********************************
+    gs_fcat-fieldname = 'VENDOR_DEBIT'.
+    gs_fcat-seltext_l = 'Vendor Dr'.
+    gs_fcat-ddictxt = 'L'.
+    gs_fcat-decimals_out = '2'.
+    gs_fcat-no_zero = 'X'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'MINDK'.
+    gs_fcat-seltext_l = 'MSME'.
+    gs_fcat-ddictxt = 'L'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'STCD4'.
+    gs_fcat-seltext_l = 'MSME No.'.
+    gs_fcat-ddictxt = 'L'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+
+    gs_fcat-fieldname = 'P_METHOD'.
+    gs_fcat-seltext_l = 'P/Method'.
+    gs_fcat-ddictxt = 'L'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+*********Added by 2I:GS:23/04/2020(-)**********************************
+
+    gs_fcat-fieldname = 'DUEDT'.
+    gs_fcat-seltext_l = 'Due Date'.
+    gs_fcat-ddictxt = 'L'.
+
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'ZSS'.  """"" ADDED BY VD
+    gs_fcat-seltext_l = 'ACT Due date'.
+    gs_fcat-ddictxt = 'L'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'GKONT'.
+    gs_fcat-seltext_l = 'Offset A/c '.
+    gs_fcat-ddictxt = 'L'.
+
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'TXT20'.
+    gs_fcat-seltext_l = 'Offset Name'.
+    gs_fcat-ddictxt = 'L'.
+
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'KONZS'.
+    gs_fcat-seltext_l = 'Grp Key'.
+    gs_fcat-ddictxt = 'L'.
+
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'KTOKS'.
+    gs_fcat-seltext_l = 'G/L A/c Group'.
+    gs_fcat-ddictxt = 'L'.
+
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+
+    gs_fcat-fieldname = 'TXT30'.
+    gs_fcat-seltext_l = 'G/L A/c Group Name'.
+    gs_fcat-ddictxt = 'L'.
+
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'HKONT'.
+    gs_fcat-seltext_l = 'G/L A/c'.
+    gs_fcat-ddictxt = 'L'.
+
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'HNAME'.
+    gs_fcat-seltext_l = 'G/L Name'.
+    gs_fcat-ddictxt = 'L'.
+
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+
+    gs_fcat-fieldname = 'AKONT'.
+    gs_fcat-seltext_l = 'Recon. A/c'.
+    gs_fcat-ddictxt = 'L'.
+
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'SGTXT'.
+    gs_fcat-seltext_l = 'Text'.
+    gs_fcat-ddictxt = 'L'.
+
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+
+    gs_fcat-fieldname = 'RANGE1'.
+    CONCATENATE p_days0 'To' p_days1 'Days' INTO gs_fcat-seltext_l
+                                            SEPARATED BY space.
+    gs_fcat-ddictxt = 'L'.
+    gs_fcat-decimals_out = '2'.
+    gs_fcat-no_zero = 'X'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+    lv_days = p_days1.
+
+    IF p_days2 IS NOT INITIAL.
+      CLEAR lv_days.
+      lv_days = p_days1 + 1.
+      gs_fcat-fieldname = 'RANGE2'.
+      CONCATENATE lv_days 'To' p_days2 'Days' INTO gs_fcat-seltext_l
+                                              SEPARATED BY space.
+      gs_fcat-ddictxt = 'L'.
+      gs_fcat-decimals_out = '2'.
+      gs_fcat-no_zero = 'X'.
+      APPEND gs_fcat TO gt_fcat.
+      CLEAR  gs_fcat.
+      lv_days = p_days2.
+    ENDIF.
+
+    IF p_days3 IS NOT INITIAL.
+      CLEAR lv_days.
+      lv_days = p_days2 + 1.
+      gs_fcat-fieldname = 'RANGE3'.
+      CONCATENATE lv_days 'To' p_days3 'Days' INTO gs_fcat-seltext_l
+                                              SEPARATED BY space.
+      gs_fcat-ddictxt = 'L'.
+      gs_fcat-decimals_out = '2'.
+      gs_fcat-no_zero = 'X'.
+      APPEND gs_fcat TO gt_fcat.
+      CLEAR  gs_fcat.
+      lv_days = p_days3.
+    ENDIF.
+
+    IF p_days4 IS NOT INITIAL.
+      CLEAR lv_days.
+      lv_days = p_days3 + 1.
+      gs_fcat-fieldname = 'RANGE4'.
+      CONCATENATE lv_days 'To' p_days4 'Days' INTO gs_fcat-seltext_l
+                                              SEPARATED BY space.
+      gs_fcat-ddictxt = 'L'.
+      gs_fcat-decimals_out = '2'.
+      gs_fcat-no_zero = 'X'.
+      APPEND gs_fcat TO gt_fcat.
+      CLEAR  gs_fcat.
+      lv_days = p_days4.
+    ENDIF.
+
+    IF p_days5 IS NOT INITIAL.
+      CLEAR lv_days.
+      lv_days = p_days4 + 1.
+      gs_fcat-fieldname = 'RANGE5'.
+      CONCATENATE lv_days 'To' p_days5 'Days' INTO gs_fcat-seltext_l
+                                              SEPARATED BY space.
+      gs_fcat-ddictxt = 'L'.
+      gs_fcat-decimals_out = '2'.
+      gs_fcat-no_zero = 'X'.
+      APPEND gs_fcat TO gt_fcat.
+      CLEAR  gs_fcat.
+      lv_days = p_days5.
+    ENDIF.
+
+**    if p_days6 is not initial.
+**      clear lv_days.
+**      lv_days = p_days5 + 1.
+**      gs_fcat-fieldname = 'RANGE6'.
+**      concatenate lv_days 'To' p_days6 'Days' into gs_fcat-seltext_l
+**                                              separated by space.
+**      gs_fcat-ddictxt = 'L'.
+**      append gs_fcat to gt_fcat.
+**      clear  gs_fcat.
+**      lv_days = p_days6.
+**    endif.
+**
+**    if p_days7 is not initial.
+**      clear lv_days.
+**      lv_days = p_days6 + 1.
+**      gs_fcat-fieldname = 'RANGE7'.
+**      concatenate lv_days 'To' p_days7 'Days' into gs_fcat-seltext_l
+**                                              separated by space.
+**      gs_fcat-ddictxt = 'L'.
+**      append gs_fcat to gt_fcat.
+**      clear  gs_fcat.
+**      lv_days = p_days7.
+**    endif.
+**
+**    if p_days8 is not initial.
+**      clear lv_days.
+**      lv_days = p_days7 + 1.
+**      gs_fcat-fieldname = 'RANGE8'.
+**      concatenate lv_days 'To' p_days8 'Days' into gs_fcat-seltext_l
+**                                              separated by space.
+**      gs_fcat-ddictxt = 'L'.
+**      append gs_fcat to gt_fcat.
+**      clear  gs_fcat.
+**      lv_days = p_days8.
+**    endif.
+
+    gs_fcat-fieldname = 'RANGE9'.
+    CONCATENATE 'More Than' lv_days 'Days' INTO gs_fcat-seltext_l
+                                           SEPARATED BY space.
+    gs_fcat-ddictxt = 'L'.
+    gs_fcat-decimals_out = '2'.
+    gs_fcat-no_zero = 'X'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+*******Added by 2I:GS:02/05/2020(+)********************************
+
+    gs_fcat-fieldname = 'WRANGE1'.
+    CONCATENATE p_weeks0 'To' p_weeks1 'Days' INTO gs_fcat-seltext_l
+                                            SEPARATED BY space.
+    gs_fcat-ddictxt = 'L'.
+    gs_fcat-decimals_out = '2'.
+    gs_fcat-no_zero = 'X'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+    gv_days = p_weeks1.
+
+    IF p_weeks2 IS NOT INITIAL.
+      CLEAR gv_days.
+      gv_days = p_weeks1 + 1.
+      gs_fcat-fieldname = 'WRANGE2'.
+      CONCATENATE gv_days 'To' p_weeks2 'Days' INTO gs_fcat-seltext_l
+                                              SEPARATED BY space.
+      gs_fcat-ddictxt = 'L'.
+      gs_fcat-decimals_out = '2'.
+      gs_fcat-no_zero = 'X'.
+      APPEND gs_fcat TO gt_fcat.
+      CLEAR  gs_fcat.
+      gv_days = p_weeks2.
+    ENDIF.
+
+    IF p_weeks3 IS NOT INITIAL.
+      CLEAR gv_days.
+      gv_days = p_weeks2 + 1.
+      gs_fcat-fieldname = 'WRANGE3'.
+      CONCATENATE gv_days 'To' p_weeks3 'Days' INTO gs_fcat-seltext_l
+                                              SEPARATED BY space.
+      gs_fcat-ddictxt = 'L'.
+      gs_fcat-decimals_out = '2'.
+      gs_fcat-no_zero = 'X'.
+      APPEND gs_fcat TO gt_fcat.
+      CLEAR  gs_fcat.
+      gv_days = p_weeks3.
+    ENDIF.
+
+    IF p_weeks4 IS NOT INITIAL.
+      CLEAR gv_days.
+      gv_days = p_weeks3 + 1.
+      gs_fcat-fieldname = 'WRANGE4'.
+      CONCATENATE gv_days 'To' p_weeks4 'Days' INTO gs_fcat-seltext_l
+                                              SEPARATED BY space.
+      gs_fcat-ddictxt = 'L'.
+      gs_fcat-decimals_out = '2'.
+      gs_fcat-no_zero = 'X'.
+      APPEND gs_fcat TO gt_fcat.
+      CLEAR  gs_fcat.
+      gv_days = p_weeks4.
+    ENDIF.
+
+    gs_fcat-fieldname = 'WRANGE6'.
+    CONCATENATE 'More Than' gv_days 'Days' INTO gs_fcat-seltext_l
+                                           SEPARATED BY space.
+    gs_fcat-ddictxt = 'L'.
+    gs_fcat-decimals_out = '2'.
+    gs_fcat-no_zero = 'X'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR:  gs_fcat, gv_days.
+
+*******Added by 2I:GS:02/05/2020(-)********************************
+
+
+  ELSEIF p_summ = 'X'.
+
+    gs_fcat-fieldname = 'BUKRS'.
+    gs_fcat-seltext_l = 'CCode'.
+    gs_fcat-ddictxt = 'L'.
+
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'BPKIND'.
+    gs_fcat-seltext_l = 'BP Type'.
+    gs_fcat-ddictxt = 'L'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'BU_TEXT40'.
+    gs_fcat-seltext_l = 'BP Type desc'.
+    gs_fcat-ddictxt = 'L'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'LIFNR'.
+    gs_fcat-seltext_l = 'Code'.
+    gs_fcat-ddictxt = 'L'.
+    gs_fcat-hotspot = 'X'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'NAME1'.
+    gs_fcat-seltext_l = 'Vendor Name'.
+    gs_fcat-ddictxt = 'L'.
+
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'ORT01'.
+    gs_fcat-seltext_l = 'City'.
+    gs_fcat-ddictxt = 'L'.
+
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+
+    gs_fcat-fieldname = 'XVERR'.
+    gs_fcat-seltext_l = 'Ind:C/V'.
+    gs_fcat-ddictxt = 'L'.
+
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'KONZS'.
+    gs_fcat-seltext_l = 'Grp Key'.
+    gs_fcat-ddictxt = 'L'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+*    gs_fcat-fieldname = 'PRCTR'.
+*    gs_fcat-seltext_l = 'Plant'.
+*    gs_fcat-ddictxt = 'L'.
+*    append gs_fcat to gt_fcat.
+*    clear  gs_fcat.
+
+*    gs_fcat-fieldname = 'KTEXT'.
+*    gs_fcat-seltext_l = 'Plant Name'.
+*    gs_fcat-ddictxt = 'L'.
+*    append gs_fcat to gt_fcat.
+*    clear  gs_fcat.
+
+********Added by 2I:GS:22/04/2020(+)*****************************************************
+    gs_fcat-fieldname = 'ZTERM'.
+    gs_fcat-seltext_l = 'P.Terms'.
+    gs_fcat-ddictxt = 'L'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'TEXT1'.
+    gs_fcat-seltext_l = 'Payment Term Name'.
+    gs_fcat-ddictxt = 'L'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'P_METHOD'.
+    gs_fcat-seltext_l = 'PayM'.
+    gs_fcat-ddictxt = 'L'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+********Added by 2I:GS:22/04/2020(-)*****************************************************
+
+
+    IF p_ledger = 'X'.
+      gs_fcat-fieldname = 'HKONT'.
+      gs_fcat-seltext_l = 'G/L A/c'.
+      gs_fcat-ddictxt = 'L'.
+
+      APPEND gs_fcat TO gt_fcat.
+      CLEAR  gs_fcat.
+
+      gs_fcat-fieldname = 'HNAME'.
+      gs_fcat-seltext_l = 'G/L A/c Name'.
+      gs_fcat-ddictxt = 'L'.
+
+      APPEND gs_fcat TO gt_fcat.
+      CLEAR  gs_fcat.
+
+    ENDIF.
+
+    gs_fcat-fieldname = 'ORGAMT'.
+    gs_fcat-seltext_l = 'Original Amt'.
+    gs_fcat-ddictxt = 'L'.
+    gs_fcat-decimals_out = '2'.
+    gs_fcat-no_zero = 'X'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'DEBIT'.
+    gs_fcat-seltext_l = 'Debit Amt'.
+    gs_fcat-ddictxt = 'L'.
+    gs_fcat-decimals_out = '2'.
+    gs_fcat-no_zero = 'X'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'CREDIT'.
+    gs_fcat-seltext_l = 'Credit Amt'.
+    gs_fcat-ddictxt = 'L'.
+    gs_fcat-decimals_out = '2'.
+    gs_fcat-no_zero = 'X'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'RCVDAMT'.
+    gs_fcat-seltext_l = 'Recd Amt'.
+    gs_fcat-ddictxt = 'L'.
+    gs_fcat-decimals_out = '2'.
+    gs_fcat-no_zero = 'X'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'OSBAL'.
+    gs_fcat-seltext_l = 'Net Amt O/s'.
+    gs_fcat-ddictxt = 'L'.
+    gs_fcat-decimals_out = '2'.
+    gs_fcat-no_zero = 'X'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'ADVAN'.
+    gs_fcat-seltext_l = 'Adv/ Sec'.
+    gs_fcat-ddictxt = 'L'.
+    gs_fcat-decimals_out = '2'.
+    gs_fcat-no_zero = 'X'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+
+    gs_fcat-fieldname = 'CRBAL'.
+    gs_fcat-seltext_l = 'Unadjusted Dr'.
+    gs_fcat-ddictxt = 'L'.
+    gs_fcat-decimals_out = '2'.
+    gs_fcat-no_zero = 'X'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+*********Added by 2I:GS:23/04/2020(+)**********************************************
+    gs_fcat-fieldname = 'VENDOR_DEBIT'.
+    gs_fcat-seltext_l = 'Vendor Dr'.
+    gs_fcat-ddictxt = 'L'.
+    gs_fcat-decimals_out = '2'.
+    gs_fcat-no_zero = 'X'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'MINDK'.
+    gs_fcat-seltext_l = 'MSME'.
+    gs_fcat-ddictxt = 'L'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'STCD4'.
+    gs_fcat-seltext_l = 'MSME No.'.
+    gs_fcat-ddictxt = 'L'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+*********Added by 2I:GS:23/04/2020(-)**********************************************
+
+
+    gs_fcat-fieldname = 'AKONT'.
+    gs_fcat-seltext_l = 'Recon A/c'.
+    gs_fcat-ddictxt = 'L'.
+
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+
+    gs_fcat-fieldname = 'RANGE1'.
+    CONCATENATE p_days0 'To' p_days1 'Days' INTO gs_fcat-seltext_l
+                                            SEPARATED BY space.
+    CONCATENATE p_days0 'To' p_days1 'Days' INTO days0 SEPARATED BY space.
+    gs_fcat-ddictxt = 'L'.
+    gs_fcat-decimals_out = '2'.
+    gs_fcat-no_zero = 'X'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+    lv_days = p_days1.
+
+    IF p_days2 IS NOT INITIAL.
+      CLEAR lv_days.
+      lv_days = p_days1 + 1.
+      gs_fcat-fieldname = 'RANGE2'.
+      CONCATENATE lv_days 'To' p_days2 'Days' INTO gs_fcat-seltext_l
+                                              SEPARATED BY space.
+      CONCATENATE lv_days 'To' p_days2 'Days' INTO days1 SEPARATED BY space.
+      gs_fcat-ddictxt = 'L'.
+      gs_fcat-decimals_out = '2'.
+      gs_fcat-no_zero = 'X'.
+      APPEND gs_fcat TO gt_fcat.
+      CLEAR  gs_fcat.
+      lv_days = p_days2.
+    ENDIF.
+
+    IF p_days3 IS NOT INITIAL.
+      CLEAR lv_days.
+      lv_days = p_days2 + 1.
+      gs_fcat-fieldname = 'RANGE3'.
+      CONCATENATE lv_days 'To' p_days3 'Days' INTO gs_fcat-seltext_l
+                                              SEPARATED BY space.
+      CONCATENATE lv_days 'To' p_days3 'Days' INTO days2 SEPARATED BY space.
+      gs_fcat-ddictxt = 'L'.
+      gs_fcat-decimals_out = '2'.
+      gs_fcat-no_zero = 'X'.
+      APPEND gs_fcat TO gt_fcat.
+      CLEAR  gs_fcat.
+      lv_days = p_days3.
+    ENDIF.
+
+    IF p_days4 IS NOT INITIAL.
+      CLEAR lv_days.
+      lv_days = p_days3 + 1.
+      gs_fcat-fieldname = 'RANGE4'.
+      CONCATENATE lv_days 'To' p_days4 'Days' INTO gs_fcat-seltext_l
+                                              SEPARATED BY space.
+      CONCATENATE lv_days 'To' p_days4 'Days' INTO days3 SEPARATED BY space.
+      gs_fcat-ddictxt = 'L'.
+      gs_fcat-decimals_out = '2'.
+      gs_fcat-no_zero = 'X'.
+      APPEND gs_fcat TO gt_fcat.
+      CLEAR  gs_fcat.
+      lv_days = p_days4.
+    ENDIF.
+
+    IF p_days5 IS NOT INITIAL.
+      CLEAR lv_days.
+      lv_days = p_days4 + 1.
+      gs_fcat-fieldname = 'RANGE5'.
+      CONCATENATE lv_days 'To' p_days5 'Days' INTO gs_fcat-seltext_l
+                                              SEPARATED BY space.
+      CONCATENATE lv_days 'To' p_days5 'Days' INTO days4 SEPARATED BY space.
+      gs_fcat-ddictxt = 'L'.
+      gs_fcat-decimals_out = '2'.
+      gs_fcat-no_zero = 'X'.
+      APPEND gs_fcat TO gt_fcat.
+      CLEAR  gs_fcat.
+      lv_days = p_days5.
+    ENDIF.
+
+**    if p_days6 is not initial.
+**      clear lv_days.
+**      lv_days = p_days5 + 1.
+**      gs_fcat-fieldname = 'RANGE6'.
+**      concatenate lv_days 'To' p_days6 'Days' into gs_fcat-seltext_l
+**                                              separated by space.
+**      gs_fcat-ddictxt = 'L'.
+**      append gs_fcat to gt_fcat.
+**      clear  gs_fcat.
+**      lv_days = p_days6.
+**    endif.
+**
+**    if p_days7 is not initial.
+**      clear lv_days.
+**      lv_days = p_days6 + 1.
+**      gs_fcat-fieldname = 'RANGE7'.
+**      concatenate lv_days 'To' p_days7 'Days' into gs_fcat-seltext_l
+**                                              separated by space.
+**      gs_fcat-ddictxt = 'L'.
+**      append gs_fcat to gt_fcat.
+**      clear  gs_fcat.
+**      lv_days = p_days7.
+**    endif.
+**
+**    if p_days8 is not initial.
+**      clear lv_days.
+**      lv_days = p_days7 + 1.
+**      gs_fcat-fieldname = 'RANGE8'.
+**      concatenate lv_days 'To' p_days8 'Days' into gs_fcat-seltext_l
+**                                              separated by space.
+**      gs_fcat-ddictxt = 'L'.
+**      append gs_fcat to gt_fcat.
+**      clear  gs_fcat.
+**      lv_days = p_days8.
+**    endif.
+
+    gs_fcat-fieldname = 'RANGE9'.
+    CONCATENATE 'More Than' lv_days 'Days' INTO gs_fcat-seltext_l
+                                           SEPARATED BY space.
+    CONCATENATE 'More Than' lv_days 'Days' INTO days5 SEPARATED BY space.
+    gs_fcat-ddictxt = 'L'.
+    gs_fcat-decimals_out = '2'.
+    gs_fcat-no_zero = 'X'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'NODUE'.
+    gs_fcat-seltext_l = 'Not Due'.
+    gs_fcat-ddictxt = 'L'.
+    gs_fcat-decimals_out = '2'.
+    gs_fcat-no_zero = 'X'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+
+*    gs_fcat-fieldname = 'ZSS'.  """"" ADDED BY VD
+*    gs_fcat-seltext_l = 'ACT Due date'.
+*    gs_fcat-ddictxt = 'L'.
+*    APPEND gs_fcat TO gt_fcat.
+*    CLEAR  gs_fcat.
+
+    gs_fcat-fieldname = 'WRANGE1'.
+    CONCATENATE p_weeks0 'To' p_weeks1 'Days' INTO gs_fcat-seltext_l
+                                            SEPARATED BY space.
+    gs_fcat-ddictxt = 'L'.
+    gs_fcat-decimals_out = '2'.
+    gs_fcat-no_zero = 'X'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+    gv_days = p_weeks1.
+
+    IF p_weeks2 IS NOT INITIAL.
+      CLEAR gv_days.
+      gv_days = p_weeks1 + 1.
+      gs_fcat-fieldname = 'WRANGE2'.
+      CONCATENATE gv_days 'To' p_weeks2 'Days' INTO gs_fcat-seltext_l
+                                              SEPARATED BY space.
+      gs_fcat-ddictxt = 'L'.
+      gs_fcat-decimals_out = '2'.
+      gs_fcat-no_zero = 'X'.
+      APPEND gs_fcat TO gt_fcat.
+      CLEAR  gs_fcat.
+      gv_days = p_weeks2.
+    ENDIF.
+
+    IF p_weeks3 IS NOT INITIAL.
+      CLEAR gv_days.
+      gv_days = p_weeks2 + 1.
+      gs_fcat-fieldname = 'WRANGE3'.
+      CONCATENATE gv_days 'To' p_weeks3 'Days' INTO gs_fcat-seltext_l
+                                              SEPARATED BY space.
+      gs_fcat-ddictxt = 'L'.
+      gs_fcat-decimals_out = '2'.
+      gs_fcat-no_zero = 'X'.
+      APPEND gs_fcat TO gt_fcat.
+      CLEAR  gs_fcat.
+      gv_days = p_weeks3.
+    ENDIF.
+
+    IF p_weeks4 IS NOT INITIAL.
+      CLEAR gv_days.
+      gv_days = p_weeks3 + 1.
+      gs_fcat-fieldname = 'WRANGE4'.
+      CONCATENATE gv_days 'To' p_weeks4 'Days' INTO gs_fcat-seltext_l
+                                              SEPARATED BY space.
+      gs_fcat-ddictxt = 'L'.
+      gs_fcat-decimals_out = '2'.
+      gs_fcat-no_zero = 'X'.
+      APPEND gs_fcat TO gt_fcat.
+      CLEAR  gs_fcat.
+      gv_days = p_weeks4.
+    ENDIF.
+    gs_fcat-fieldname = 'WRANGE6'.
+    CONCATENATE 'More Than' gv_days 'Days' INTO gs_fcat-seltext_l
+                                           SEPARATED BY space.
+    gs_fcat-ddictxt = 'L'.
+    gs_fcat-decimals_out = '2'.
+    gs_fcat-no_zero = 'X'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR:  gs_fcat, gv_days.
+  ENDIF.
+  gs_fcat-fieldname = 'OSBAL_1'.
+  gs_fcat-seltext_l = 'Total Due'.
+  gs_fcat-ddictxt = 'L'.
+  gs_fcat-decimals_out = '2'.
+  gs_fcat-no_zero = 'X'.
+  APPEND gs_fcat TO gt_fcat.
+  CLEAR  gs_fcat.
+  IF p_summ NE 'X'.
+    gs_fcat-fieldname = 'CAL_YEAR'.
+    gs_fcat-seltext_l = 'Month & Year'.
+    gs_fcat-ddictxt = 'L'.
+    APPEND gs_fcat TO gt_fcat.
+    CLEAR  gs_fcat.
+  ENDIF.
+ENDFORM. " BUILD_FCAT
+*&---------------------------------------------------------------------*
+*&      Form  BUILD_SORT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM build_sort .
+
+ENDFORM. " BUILD_SORT
+*&---------------------------------------------------------------------*
+*&      Form  BUILD_FILTER
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM build_filter .
+
+ENDFORM. " BUILD_FILTER
+*&---------------------------------------------------------------------*
+*&      Form  DISPLAY_ALV
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM display_alv .
+  DATA : lv_records TYPE i,
+         lv_day     TYPE i.
+
+  IF  p_det = 'X'.
+    "Variant
+    gd_repid = sy-repid.
+    g_variant-variant = p_vari.
+*    gs_variant-report = sy-repid.
+
+    DESCRIBE TABLE gt_output LINES lv_records.
+    MESSAGE s004 WITH 'Total' lv_records 'Records Loaded'.
+
+    LOOP AT gt_output ASSIGNING FIELD-SYMBOL(<lfs_output>).
+      IF <lfs_output>-blart = 'RV'.
+        READ TABLE gt_kna1 INTO gs_kna1 WITH KEY kunnr = <lfs_output>-lifnr.
+        IF sy-subrc  = 0.
+          IF <lfs_output>-zbd1t IS NOT INITIAL.
+            lv_day = <lfs_output>-zbd1t.
+            CALL FUNCTION 'BKK_ADD_WORKINGDAY'
+              EXPORTING
+                i_date = <lfs_output>-zfbdt
+                i_days = lv_day
+*               I_CALENDAR1       =
+*               I_CALENDAR2       =
+              IMPORTING
+                e_date = <lfs_output>-duedt
+*               E_RETURN          =
+              .
+          ELSE.
+            <lfs_output>-duedt = <lfs_output>-zfbdt.
+          ENDIF.
+*          gs_output-duedt = lv_netdt.
+        ELSE.
+          <lfs_output>-duedt = <lfs_output>-zfbdt.
+        ENDIF.
+      ENDIF.
+      <lfs_output>-cal_year = <lfs_output>-duedt+4(2) &&  |-| && <lfs_output>-duedt+0(4).
+
+    ENDLOOP.
+    IF 1 = 2.
+      IF r2 = 'X'.
+        LOOP AT gt_output INTO gs_output.
+          gs_output-orgamt /= 100000.
+          gs_output-debit /= 100000.
+          gs_output-credit /= 100000.
+          gs_output-rcvdamt /= 100000.
+          gs_output-advan /= 100000.
+          gs_output-osbal /= 100000. "commented by neelam
+          gs_output-wrbtr /= 100000.
+          gs_output-crbal /= 100000.
+          gs_output-nodue /= 100000.
+          gs_output-vendor_debit /= 100000.
+          gs_output-range1 /= 100000.
+          gs_output-range2 /= 100000.
+          gs_output-range3 /= 100000.
+          gs_output-range4 /= 100000.
+          gs_output-range5 /= 100000.
+          gs_output-range9 /= 100000.
+          gs_output-wrange1 /= 100000.
+          gs_output-wrange2 /= 100000.
+          gs_output-wrange3 /= 100000.
+          gs_output-wrange4 /= 100000.
+          gs_output-wrange6 /= 100000.
+          gs_output-osbal_1 /= 100000.
+          MODIFY gt_output FROM gs_output.
+        ENDLOOP.
+      ENDIF.
+    ENDIF.
+    CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+      EXPORTING
+        i_callback_program      = gd_repid " sy-repid
+        i_callback_user_command = 'USER_COMMAND'
+*       i_background_id         = 'ALV_BACKGROUND'
+        is_layout               = gs_layout
+        it_fieldcat             = gt_fcat[]
+        it_sort                 = gt_sort[]
+        it_filter               = gt_filter[]
+        it_events               = gt_event[]
+*       i_default               = 'X'
+        i_save                  = 'X'
+        is_variant              = g_variant
+        i_callback_top_of_page  = 'FORM_TOP_OF_PAGE' " Added By Divya
+      TABLES
+        t_outtab                = gt_output
+      EXCEPTIONS
+        program_error           = 1
+        OTHERS                  = 2.
+    IF sy-subrc <> 0.
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+              WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    ENDIF.
+
+  ELSEIF p_summ = 'X'.
+*    gs_variant-report = sy-repid.
+    gd_repid = sy-repid.
+    g_variant-variant = p_vari.
+    DESCRIBE TABLE gt_output1 LINES lv_records.
+    MESSAGE s004 WITH 'Total' lv_records 'Records Loaded'.
+*    LOOP AT gt_output1 ASSIGNING FIELD-SYMBOL(<lfs_output1>).
+*      <lfs_output1>-cal_year = <lfs_output1>-duedt+0(4) &&  |'-'| && <lfs_output1>-duedt+4(2).
+*    ENDLOOP.
+
+    IF 1 = 2.
+      IF r2 = 'X'.
+        LOOP AT gt_output1 INTO gs_output1.
+          gs_output1-orgamt /= 100000.
+          gs_output1-debit /= 100000.
+          gs_output1-credit /= 100000.
+          gs_output1-rcvdamt /= 100000.
+          gs_output1-advan /= 100000.
+******************        gs_output1-osbal /= 100000.
+          gs_output1-crbal /= 100000.
+          gs_output1-nodue /= 100000.
+          gs_output1-vendor_debit /= 100000.
+          gs_output1-range1 /= 100000.
+          gs_output1-range2 /= 100000.
+          gs_output1-range3 /= 100000.
+          gs_output1-range4 /= 100000.
+          gs_output1-range5 /= 100000.
+          gs_output1-range9 /= 100000.
+          gs_output1-osbal_1 /= 100000.
+          gs_output1-wrange1 /= 100000.
+          gs_output1-wrange2 /= 100000.
+          gs_output1-wrange3 /= 100000.
+          gs_output1-wrange4 /= 100000.
+          gs_output1-wrange6 /= 100000.
+          MODIFY gt_output1 FROM gs_output1.
+        ENDLOOP.
+      ENDIF.
+    ENDIF.
+    IF print = abap_true.
+      IF r1 = 'X'.
+        amount = 'Amount in Rs.'.
+      ELSEIF r2 = 'X'.
+        amount = 'Amount in Lacs.'.
+        report_type = 'Report in Lacs.'.
+      ENDIF.
+      zdate = p_budat.
+      "smartforms
+      CALL FUNCTION 'SSF_FUNCTION_MODULE_NAME'
+        EXPORTING
+          formname           = 'ZVENDOR_AGEING_SF'
+*         VARIANT            = ' '
+*         DIRECT_CALL        = ' '
+        IMPORTING
+          fm_name            = lv_fname
+        EXCEPTIONS
+          no_form            = 1
+          no_function_module = 2
+          OTHERS             = 3.
+      IF sy-subrc <> 0.
+* Implement suitable error handling here
+      ENDIF.
+
+      CALL FUNCTION lv_fname
+        EXPORTING
+          days0            = days0
+          days1            = days1
+          days2            = days2
+          days3            = days3
+          days4            = days4
+          days5            = days5
+          days6            = days6
+          zdate            = zdate
+          amount           = amount
+          report_type      = report_type
+        TABLES
+          it_final         = gt_output1
+        EXCEPTIONS
+          formatting_error = 1
+          internal_error   = 2
+          send_error       = 3
+          user_canceled    = 4
+          OTHERS           = 5.
+      IF sy-subrc <> 0.
+* Implement suitable error handling here
+      ENDIF.
+
+    ELSE.
+
+      CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+        EXPORTING
+          i_callback_program      = gd_repid
+          i_callback_user_command = 'USER_COMMAND'
+*         i_background_id         = 'ALV_BACKGROUND'
+          is_layout               = gs_layout
+          it_fieldcat             = gt_fcat[]
+          it_sort                 = gt_sort[]
+          it_filter               = gt_filter[]
+          it_events               = gt_event[]
+          i_callback_top_of_page  = 'FORM_TOP_OF_PAGE' " Added By Divya
+*         i_default               = 'X'
+          i_save                  = 'X'
+          is_variant              = g_variant
+        TABLES
+          t_outtab                = gt_output1
+        EXCEPTIONS
+          program_error           = 1
+          OTHERS                  = 2.
+      IF sy-subrc <> 0.
+        MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+                WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+      ENDIF.
+
+    ENDIF.
+
+  ENDIF.
+
+ENDFORM. " DISPLAY_ALV
+*&---------------------------------------------------------------------*
+*&      Form  USER_COMMAND
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->R_UCOMM      text
+*      -->RS_SELFIELD  text
+*----------------------------------------------------------------------*
+FORM user_command USING r_ucomm LIKE sy-ucomm
+                        rs_selfield TYPE slis_selfield.
+  TYPE-POOLS : rsds.
+  DATA:lt_seltab TYPE TABLE OF rsparams,
+       ls_seltab LIKE LINE OF lt_seltab.
+  IF p_summ EQ 'X'.
+    READ TABLE gt_output1 INTO gs_output1 INDEX rs_selfield-tabindex.
+  ELSE.
+    READ TABLE gt_output INTO gs_output INDEX rs_selfield-tabindex.
+  ENDIF.
+  CASE rs_selfield-fieldname.
+    WHEN 'BELNR'.
+      SET PARAMETER ID 'BLN' FIELD gs_output-belnr.
+      SET PARAMETER ID 'GJR' FIELD gs_output-gjahr.
+      SET PARAMETER ID 'BUK' FIELD gs_output-bukrs.
+      CALL TRANSACTION 'FB03' AND SKIP FIRST SCREEN.
+    WHEN 'BILLNO'.
+      SET PARAMETER ID 'VF'  FIELD gs_output-billno.
+      CALL TRANSACTION 'VF03' AND SKIP FIRST SCREEN.
+    WHEN 'LIFNR'.
+      IF p_summ EQ 'X'.
+        ls_seltab-selname = 'BUKRS'.
+        ls_seltab-kind = 'S'.
+        ls_seltab-sign = 'I'.
+        ls_seltab-option = 'EQ'.
+        ls_seltab-low = gs_output1-bukrs.
+        APPEND ls_seltab TO lt_seltab.
+        CLEAR : ls_seltab.
+
+        ls_seltab-selname = 'KD_LIFNR'.
+        ls_seltab-kind = 'S'.
+        ls_seltab-sign = 'I'.
+        ls_seltab-option = 'EQ'.
+        ls_seltab-low = gs_output1-lifnr.
+        APPEND ls_seltab TO lt_seltab.
+        CLEAR : ls_seltab.
+      ELSE.
+        ls_seltab-selname = 'BUKRS'.
+        ls_seltab-kind = 'S'.
+        ls_seltab-sign = 'I'.
+        ls_seltab-option = 'EQ'.
+        ls_seltab-low = gs_output-bukrs.
+        APPEND ls_seltab TO lt_seltab.
+        CLEAR : ls_seltab.
+
+        ls_seltab-selname = 'KD_LIFNR'.
+        ls_seltab-kind = 'S'.
+        ls_seltab-sign = 'I'.
+        ls_seltab-option = 'EQ'.
+        ls_seltab-low = gs_output-lifnr.
+        APPEND ls_seltab TO lt_seltab.
+        CLEAR : ls_seltab.
+      ENDIF.
+
+      ls_seltab-selname = 'PA_STIDA'.
+      ls_seltab-kind = 'S'.
+      ls_seltab-sign = 'I'.
+      ls_seltab-option = 'EQ'.
+      ls_seltab-low = p_budat.
+      APPEND ls_seltab TO lt_seltab.
+      CLEAR : ls_seltab.
+
+      IF p_ven = 'X'.
+        ls_seltab-selname = 'X_APAR'.
+        ls_seltab-kind = 'S'.
+        ls_seltab-sign = 'I'.
+        ls_seltab-option = 'EQ'.
+        ls_seltab-low = 'X'.
+        APPEND ls_seltab TO lt_seltab.
+        CLEAR : ls_seltab.
+      ENDIF.
+
+      SET PARAMETER ID 'LIF' FIELD gs_output-lifnr.
+      SET PARAMETER ID 'BUK' FIELD gs_output-bukrs.
+      SUBMIT rfitemap
+    WITH SELECTION-TABLE lt_seltab USING SELECTION-SCREEN 'CDBG' AND RETURN.
+
+    WHEN OTHERS.
+  ENDCASE.
+  CLEAR gs_output.
+ENDFORM. "USER_COMMAND
+*&---------------------------------------------------------------------*
+*&      Form  CALCULATE_DAYS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM calculate_days USING p_date.
+  DATA: lv_diff  TYPE p,
+        lv_early TYPE c.
+
+**********Added by 2I:GS:23/04/2020(+)****************************************************************
+  DATA: lv_begin  TYPE datum,
+        lv_end    TYPE datum,
+        lv_cal    TYPE p0001-begda,
+        lv_middle TYPE p0001-begda,
+        lv_days   TYPE t5a4a-dlydy,
+        lv_month  TYPE t5a4a-dlymo,
+        lv_year   TYPE t5a4a-dlyyr.
+
+  DATA: lv_hdays TYPE t5a4a-dlydy,
+        lv_wdays TYPE t5a4a-dlydy.
+
+  DATA: lv_week TYPE scal-week,
+        lv_mon  TYPE sy-datum,
+        lv_sun  TYPE sy-datum.
+
+  DATA: lv_wdiff  TYPE p,
+        lv_wearly TYPE c.
+
+  DATA: gv_diff  TYPE p,
+        gv_early TYPE c.
+
+  CLEAR: lv_begin, lv_end, lv_month, lv_year, lv_cal, lv_wdays, lv_hdays.
+
+  IF r_dd = 'X'.
+    SELECT SINGLE * FROM t052 INTO @DATA(ls_t052) WHERE zterm = @gs_output-zterm.
+    IF ls_t052 IS NOT INITIAL.
+      lv_days = ls_t052-ztag1.
+    ENDIF.
+
+    READ TABLE gt_lfb1 INTO DATA(ls_lfb1) WITH KEY lifnr = gs_output-lifnr
+                                                   bukrs = gs_output-bukrs.
+    IF sy-subrc = 0.
+      gs_output-p_method = ls_lfb1-zwels.  "Payment method
+      CALL FUNCTION 'HR_JP_MONTH_BEGIN_END_DATE'
+        EXPORTING
+          iv_date             = gs_output-bldat "p_date
+        IMPORTING
+          ev_month_begin_date = lv_begin
+          ev_month_end_date   = lv_end.
+    ENDIF.
+
+    CLEAR:lv_hdays.
+*  if ls_t052-ZLSCH = 'M'.
+    IF ls_lfb1-zwels = 'M'.
+
+********Half month logic(+)*********************************************
+      lv_hdays = lv_days - 15.
+********Half month logic(-)*********************************************
+
+      CALL FUNCTION 'RP_CALC_DATE_IN_INTERVAL'
+        EXPORTING
+          date      = lv_end
+          days      = lv_hdays "lv_Days "'45'
+          months    = lv_month
+          signum    = '+'
+          years     = lv_year
+        IMPORTING
+          calc_date = lv_cal.
+*    endif.
+
+      CALL FUNCTION '/SDF/CMO_DATETIME_DIFFERENCE'
+        EXPORTING
+          date1            = lv_cal "p_budat "p_date
+          date2            = p_budat "lv_cal "lv_end "p_budat
+        IMPORTING
+          datediff         = lv_diff
+          earliest         = lv_early
+        EXCEPTIONS
+          invalid_datetime = 1
+          OTHERS           = 2.
+      IF sy-subrc <> 0.
+        MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+                WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+
+      ENDIF.
+
+      gs_output-duedt = lv_cal.
+      lv_flag = 'X'.
+      CLEAR: lv_hdays.
+**********Weekly(+)********************************************************
+    ELSEIF ls_lfb1-zwels = 'W'.
+      CALL FUNCTION 'GET_WEEK_INFO_BASED_ON_DATE'
+        EXPORTING
+          date   = gs_output-bldat "SY-DATUM
+        IMPORTING
+          week   = lv_week
+          monday = lv_mon
+          sunday = lv_sun.
+
+********Half month logic(+)*********************************************
+      CALL FUNCTION '/SDF/CMO_DATETIME_DIFFERENCE'
+        EXPORTING
+          date1            = lv_sun
+          date2            = gs_output-bldat
+        IMPORTING
+          datediff         = lv_wdiff
+          earliest         = lv_wearly
+        EXCEPTIONS
+          invalid_datetime = 1
+          OTHERS           = 2.
+      IF sy-subrc <> 0.
+        MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+                WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+
+      ENDIF.
+      lv_wdays = lv_wdiff / 2.
+      lv_hdays = lv_days - lv_wdays. "( lv_wdiff / 2 ).
+********Half month logic(-)*********************************************
+
+      CALL FUNCTION 'RP_CALC_DATE_IN_INTERVAL'
+        EXPORTING
+          date      = lv_sun
+          days      = lv_hdays "lv_days "ls_t052-ZTAG1  "'45'
+          months    = lv_month
+          signum    = '+'
+          years     = lv_year
+        IMPORTING
+          calc_date = lv_cal.
+*    endif.
+
+      CALL FUNCTION '/SDF/CMO_DATETIME_DIFFERENCE'
+        EXPORTING
+          date1            = lv_cal "p_budat "p_date
+          date2            = p_budat "lv_cal "lv_end "p_budat
+        IMPORTING
+          datediff         = lv_diff
+          earliest         = lv_early
+        EXCEPTIONS
+          invalid_datetime = 1
+          OTHERS           = 2.
+      IF sy-subrc <> 0.
+        MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+                WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+
+      ENDIF.
+
+      gs_output-duedt = lv_cal.
+      lv_flag = 'X'.
+      CLEAR: lv_hdays, lv_wdays.
+**********Weekly(-)********************************************************
+
+**********Fornigntly(+)****************************************************
+    ELSEIF ls_lfb1-zwels = 'F'.
+
+      CALL FUNCTION 'RP_CALC_DATE_IN_INTERVAL'
+        EXPORTING
+          date      = lv_begin
+          days      = '14' "'45'
+          months    = lv_month
+          signum    = '+'
+          years     = lv_year
+        IMPORTING
+          calc_date = lv_middle.
+
+      IF gs_output-bldat LE lv_middle.
+
+********Half month logic(+)*********************************************
+        lv_hdays = lv_days - 7.
+********Half month logic(-)*********************************************
+
+        CALL FUNCTION 'RP_CALC_DATE_IN_INTERVAL'
+          EXPORTING
+            date      = lv_middle
+            days      = lv_hdays "lv_days "ls_t052-ZTAG1  "'45'
+            months    = lv_month
+            signum    = '+'
+            years     = lv_year
+          IMPORTING
+            calc_date = lv_cal.
+
+        CALL FUNCTION '/SDF/CMO_DATETIME_DIFFERENCE'
+          EXPORTING
+            date1            = lv_cal "p_budat "p_date
+            date2            = p_budat "lv_cal "lv_end "p_budat
+          IMPORTING
+            datediff         = lv_diff
+            earliest         = lv_early
+          EXCEPTIONS
+            invalid_datetime = 1
+            OTHERS           = 2.
+        IF sy-subrc <> 0.
+          MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+                  WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+
+        ENDIF.
+
+        gs_output-duedt = lv_cal.
+        lv_flag = 'X'.
+        CLEAR: lv_hdays.
+      ELSE.
+
+********Half month logic(+)*********************************************
+        lv_hdays = lv_days - 7.
+********Half month logic(-)*********************************************
+
+        CALL FUNCTION 'RP_CALC_DATE_IN_INTERVAL'
+          EXPORTING
+            date      = lv_end
+            days      = lv_hdays "lv_days "ls_t052-ZTAG1  "'45'
+            months    = lv_month
+            signum    = '+'
+            years     = lv_year
+          IMPORTING
+            calc_date = lv_cal.
+
+        CALL FUNCTION '/SDF/CMO_DATETIME_DIFFERENCE'
+          EXPORTING
+            date1            = lv_cal "p_budat "p_date
+            date2            = p_budat "lv_cal "lv_end "p_budat
+          IMPORTING
+            datediff         = lv_diff
+            earliest         = lv_early
+          EXCEPTIONS
+            invalid_datetime = 1
+            OTHERS           = 2.
+        IF sy-subrc <> 0.
+          MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+                  WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+
+        ENDIF.
+
+        gs_output-duedt = lv_cal.
+        lv_flag = 'X'.
+        CLEAR: lv_hdays.
+      ENDIF.
+
+
+**********Fornigntly(-)****************************************************
+    ELSE.
+      CALL FUNCTION '/SDF/CMO_DATETIME_DIFFERENCE'
+        EXPORTING
+          date1            = p_date
+          date2            = p_budat
+        IMPORTING
+          datediff         = lv_diff
+          earliest         = lv_early
+        EXCEPTIONS
+          invalid_datetime = 1
+          OTHERS           = 2.
+      IF sy-subrc <> 0.
+        MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+                WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+      ENDIF.
+
+    ENDIF.
+
+  ELSE.
+**********Added by 2I:GS:23/04/2020(-)****************************************************************
+
+    CALL FUNCTION '/SDF/CMO_DATETIME_DIFFERENCE'
+      EXPORTING
+        date1            = p_date
+        date2            = p_budat
+      IMPORTING
+        datediff         = lv_diff
+        earliest         = lv_early
+      EXCEPTIONS
+        invalid_datetime = 1
+        OTHERS           = 2.
+    IF sy-subrc <> 0.
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+              WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    ENDIF.
+
+  ENDIF. """""""""""""
+
+  IF gs_output-osbal > 0.
+    IF gs_output-umskz IS NOT INITIAL.
+      gs_output-advan = gs_output-osbal.
+      gs_output-advan_1 = gs_output-osbal."Added By Divya
+    ELSE.
+*      if  gs_output-blart = 'RK' or gs_output-blart = 'RE'.
+      IF gs_output-blart  NE ' '.
+        gs_output-crbal = gs_output-osbal.
+      ENDIF.
+    ENDIF.
+  ENDIF.
+
+
+  IF lv_early = 1 OR lv_early = 0.
+*    if  gs_output-blart = 'RK' or gs_output-blart = 'RE'.
+    IF gs_output-blart  NE ' '.
+***      IF gs_output-osbal > 0.
+      IF lv_diff GE p_days0 AND lv_diff LE p_days1.
+        gs_output-range1 = gs_output-osbal.
+      ELSEIF lv_diff GT p_days1 AND lv_diff LE p_days2.
+        gs_output-range2 = gs_output-osbal.
+      ELSEIF lv_diff GT p_days2 AND lv_diff LE p_days3.
+        gs_output-range3 = gs_output-osbal.
+      ELSEIF lv_diff GT p_days3 AND lv_diff LE p_days4.
+        gs_output-range4 = gs_output-osbal.
+      ELSEIF lv_diff GT p_days4 AND lv_diff LE p_days5.
+        gs_output-range5 = gs_output-osbal.
+      ELSEIF lv_diff GT p_days5 ."and lv_diff le p_days6.
+        gs_output-range9 = gs_output-osbal.
+**      elseif lv_diff gt p_days6 and lv_diff le p_days7.
+**        gs_output-range7 = gs_output-osbal.
+**      elseif lv_diff gt p_days7 and lv_diff le p_days8.
+**        gs_output-range8 = gs_output-osbal.
+**      elseif lv_diff gt p_days8.
+**        gs_output-range9 = gs_output-osbal.
+      ENDIF.
+
+*    else.
+*******      ELSEIF gs_output-osbal < 0.
+      IF lv_diff GE p_days0 AND lv_diff LE p_days1.
+        gs_output-range1 = gs_output-osbal.
+      ELSEIF lv_diff GT p_days1 AND lv_diff LE p_days2.
+        gs_output-range2 = gs_output-osbal.
+      ELSEIF lv_diff GT p_days2 AND lv_diff LE p_days3.
+        gs_output-range3 = gs_output-osbal.
+      ELSEIF lv_diff GT p_days3 AND lv_diff LE p_days4.
+        gs_output-range4 = gs_output-osbal.
+      ELSEIF lv_diff GT p_days4 AND lv_diff LE p_days5.
+        gs_output-range5 = gs_output-osbal.
+      ELSEIF lv_diff GT p_days5 ."and lv_diff le p_days6.
+        gs_output-range9 = gs_output-osbal.
+**      elseif lv_diff gt p_days6 and lv_diff le p_days7.
+**        gs_output-range7 = gs_output-osbal.
+**      elseif lv_diff gt p_days7 and lv_diff le p_days8.
+**        gs_output-range8 = gs_output-osbal.
+**      elseif lv_diff gt p_days8.
+**        gs_output-range9 = gs_output-osbal.
+      ENDIF.
+    ENDIF.
+******    ENDIF.
+  ELSEIF lv_early = 2.
+    IF gs_output-blart = 'RK'.
+      IF gs_output-osbal > 0.
+        gs_output-nodue = gs_output-osbal.
+      ENDIF.
+    ELSE.
+      IF gs_output-osbal < 0.
+        gs_output-nodue = gs_output-osbal.
+      ELSE.
+        IF lv_diff GE p_days0 AND lv_diff LE p_days1.
+          gs_output-range1 = gs_output-osbal.
+        ELSEIF lv_diff GT p_days1 AND lv_diff LE p_days2.
+          gs_output-range2 = gs_output-osbal.
+        ELSEIF lv_diff GT p_days2 AND lv_diff LE p_days3.
+          gs_output-range3 = gs_output-osbal.
+        ELSEIF lv_diff GT p_days3 AND lv_diff LE p_days4.
+          gs_output-range4 = gs_output-osbal.
+        ELSEIF lv_diff GT p_days4 AND lv_diff LE p_days5.
+          gs_output-range5 = gs_output-osbal.
+        ELSEIF lv_diff GT p_days5 ."and lv_diff le p_days6.
+          gs_output-range9 = gs_output-osbal.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+  ENDIF.
+
+**********"For Weekly Calculation Added by 2I:GS:02/05/2020(+)********************************
+  CLEAR: gv_diff, gv_early.
+  IF gs_output-nodue IS NOT INITIAL.
+    CALL FUNCTION '/SDF/CMO_DATETIME_DIFFERENCE'
+      EXPORTING
+        date1            = gs_output-duedt
+        date2            = p_budat
+      IMPORTING
+        datediff         = gv_diff
+        earliest         = gv_early
+      EXCEPTIONS
+        invalid_datetime = 1
+        OTHERS           = 2.
+
+    IF gv_diff GE p_weeks0 AND gv_diff LE p_weeks1.
+      gs_output-wrange1 = gs_output-nodue.
+    ELSEIF gv_diff GT p_weeks1 AND gv_diff LE p_weeks2.
+      gs_output-wrange2 = gs_output-nodue.
+    ELSEIF gv_diff GT p_weeks2 AND gv_diff LE p_weeks3.
+      gs_output-wrange3 = gs_output-nodue.
+    ELSEIF gv_diff GT p_weeks3 AND gv_diff LE p_weeks4.
+      gs_output-wrange4 = gs_output-nodue.
+*        elseif gv_diff gt p_weeks4 and gv_diff le p_weeks5.
+*          gs_output-wrange5 = gs_output-nodue.
+    ELSEIF gv_diff GT p_weeks4 .
+      gs_output-wrange6 = gs_output-nodue.
+    ENDIF.
+  ENDIF.
+**********"For Weekly Calculation Added by 2I:GS:02/05/2020(-)********************************
+
+ENDFORM. " CALCULATE_DAYS
+*&---------------------------------------------------------------------*
+*&      Form  CELL_COLOR
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM cell_color .
+  DATA: ls_cellcolor TYPE lvc_s_scol.
+
+  ls_cellcolor-fname = 'BILLNO'.
+  ls_cellcolor-color-col = 5.
+  APPEND ls_cellcolor TO gs_output-cellcolor.
+
+  ls_cellcolor-fname = 'BELNR'.
+  ls_cellcolor-color-col = 7.
+  APPEND ls_cellcolor TO gs_output-cellcolor.
+ENDFORM. " CELL_COLOR
+*&---------------------------------------------------------------------*
+*&      Form  RESTRICT_PRCTR
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM restrict_prctr .
+**  data: l_opt_list type sscr_opt_list,
+**        l_ass      type sscr_ass,
+**        l_restrict type sscr_restrict.
+**
+**  clear l_opt_list.
+**  l_opt_list-name = 'S_PRCTR'.
+**  l_opt_list-options-eq = 'X'.
+**  append l_opt_list to l_restrict-opt_list_tab.
+**
+**  clear l_ass.
+**  l_ass-kind = 'S'.
+**  l_ass-name = 'S_PRCTR'.
+**  l_ass-sg_main = 'I'.
+**  l_ass-op_main = 'S_PRCTR'.
+**  append l_ass to l_restrict-ass_tab.
+**
+**  call function 'SELECT_OPTIONS_RESTRICT'
+**    exporting
+**      restriction = l_trict
+**    exceptions
+**      others      = 1.
+ENDFORM. " RESTRICT_PRCTR
+"-------------------------------------------------------------------*
+FORM check_variant .
+  g_variant-variant = p_vari.
+  g_variant-report  = sy-repid.
+  CALL FUNCTION 'LVC_VARIANT_EXISTENCE_CHECK' "Check for display variant
+    EXPORTING
+      i_save        = space            "Variants Can be Saved
+    CHANGING
+      cs_variant    = g_variant        "Variant information
+    EXCEPTIONS
+      wrong_input   = 1                "Inconsistent input parameters
+      not_found     = 2                "Variant not found
+      program_error = 3                "Program Errors
+    .                                       "  LVC_VARIANT_EXISTENCE_CHECK
+  IF sy-subrc = 2.
+    MESSAGE 'Display Variant Not Found, Displaying Default Variant'
+                                                              TYPE 'S'.
+  ENDIF.
+  CALL FUNCTION 'REUSE_ALV_VARIANT_DEFAULT_GET'
+    EXPORTING
+      i_save     = g_save
+    CHANGING
+      cs_variant = gx_variant
+    EXCEPTIONS
+      not_found  = 2.
+  IF sy-subrc = 0.
+    p_vari = gx_variant-variant.
+  ENDIF.
+ENDFORM.
+
+FORM form_top_of_page .
+
+  DATA: plant_name TYPE t001w-name1,
+*        comp_code  type t001k-bukrs,
+        i_heading  TYPE slis_t_listheader.
+  DATA : wa_heading LIKE LINE OF i_heading .
+
+  SELECT SINGLE butxt FROM t001 INTO plant_name WHERE bukrs IN s_bukrs.
+*  select single bukrs from t001k into comp_code where bwkey in werks.
+
+  wa_heading-typ = 'H'.
+  wa_heading-info = 'Vendor Ageing Report'.
+  APPEND wa_heading TO i_heading.
+
+  wa_heading-typ = 'S' .
+  wa_heading-key = 'Company Code: '.
+  CONCATENATE s_bukrs-low '-' plant_name INTO wa_heading-info SEPARATED BY space.
+  APPEND wa_heading TO i_heading .
+
+  wa_heading-typ = 'S' .
+  wa_heading-key = 'Date: '.
+  wa_heading-info = |{ p_budat DATE = USER }|.
+  APPEND wa_heading TO i_heading .
+
+  CALL FUNCTION 'REUSE_ALV_COMMENTARY_WRITE'
+    EXPORTING
+      it_list_commentary = i_heading
+*     I_LOGO             =
+*     I_END_OF_LIST_GRID =
+*     I_ALV_FORM         =
+    .
+
+ENDFORM .                    "FORM_TOP_OF_PAGE
