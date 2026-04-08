@@ -1,0 +1,284 @@
+REPORT ZBP_EXTERNALVENDOR NO STANDARD PAGE HEADING LINE-SIZE 255.
+
+TABLES: SSCRFIELDS.
+
+TYPES: BEGIN OF TY_BP,
+         BUSINESSPARTNERNO  TYPE LIFNR,
+         GROUPING           TYPE BU_GROUP,
+         ROLE               TYPE C LENGTH 20,
+         NAME1              TYPE CHAR40,
+         SORT1              TYPE CHAR40,
+         STREET             TYPE STRAS,
+         POSTALCODE         TYPE PSTLZ,
+         CITY               TYPE ORT01,
+         COUNTRY            TYPE CHAR10,
+         REGION             TYPE REGIO,
+         CCODE              TYPE CHAR10,
+         RECONCILIATIONACCT TYPE CHAR15,
+       END OF TY_BP.
+
+TYPES: BEGIN OF TY_MESSAGE,
+         BUSINESSPARTNERNO TYPE LIFNR,
+         TYPE              TYPE C,
+         REMARKS           TYPE STRING,
+       END OF TY_MESSAGE.
+
+DATA: GT_FILE  TYPE TABLE OF TY_BP,
+      GS_FILE  TYPE TY_BP,
+      IT_FINAL TYPE TABLE OF TY_MESSAGE,
+      WA_FINAL TYPE TY_MESSAGE,
+      IT_RAW   TYPE TRUXS_T_TEXT_DATA,
+      BDCDATA  TYPE TABLE OF BDCDATA WITH HEADER LINE,
+      MESSTAB  TYPE TABLE OF BDCMSGCOLL,
+      WA_MSG   TYPE BDCMSGCOLL.
+
+DATA :WA_MESSAGE  TYPE BDCMSGCOLL,
+      MESSTAB1    TYPE TABLE OF BDCMSGCOLL,
+      WA_MESSAGE1 TYPE BDCMSGCOLL.
+DATA : IT_FCAT TYPE SLIS_T_FIELDCAT_ALV.
+DATA : W_FCAT LIKE LINE OF IT_FCAT.
+DATA : IS_LAYOUT TYPE SLIS_LAYOUT_ALV.
+DATA: COUNTX TYPE I.
+
+SELECTION-SCREEN BEGIN OF BLOCK B1 WITH FRAME TITLE TEXT-001.
+  PARAMETERS: P_FILE TYPE RLGRAP-FILENAME.
+SELECTION-SCREEN END OF BLOCK B1.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR P_FILE.
+  CALL FUNCTION 'F4_FILENAME'
+    EXPORTING
+      FIELD_NAME = 'P_FILE'
+    IMPORTING
+      FILE_NAME  = P_FILE.
+
+START-OF-SELECTION.
+  CALL FUNCTION 'TEXT_CONVERT_XLS_TO_SAP'
+    EXPORTING
+      I_FIELD_SEPERATOR    = ABAP_TRUE
+      I_LINE_HEADER        = ABAP_TRUE
+      I_TAB_RAW_DATA       = IT_RAW
+      I_FILENAME           = P_FILE
+    TABLES
+      I_TAB_CONVERTED_DATA = GT_FILE
+    EXCEPTIONS
+      CONVERSION_FAILED    = 1
+      OTHERS               = 2.
+
+  IF SY-SUBRC <> 0.
+    MESSAGE ID SY-MSGID TYPE SY-MSGTY NUMBER SY-MSGNO
+            WITH SY-MSGV1 SY-MSGV2 SY-MSGV3 SY-MSGV4.
+  ENDIF.
+
+  SORT GT_FILE BY BUSINESSPARTNERNO.
+
+  DATA: LT_WHT        TYPE STANDARD TABLE OF TY_BP,
+        LS_WHT        TYPE TY_BP,
+        LV_KUNNR_PREV TYPE KUNNR,
+        LV_INDEX(2)   TYPE N VALUE '01',
+        LV_DAT        TYPE CHAR10,
+        LV_DAT2       TYPE CHAR10.
+
+  CLEAR: LV_KUNNR_PREV.
+
+  LOOP AT GT_FILE INTO GS_FILE.
+
+    PERFORM BDC_DYNPRO      USING 'SAPLBUS_LOCATOR' '3000'.
+    PERFORM BDC_FIELD       USING 'BDC_OKCODE'
+                                  '=SCREEN_1000_CRE_ORGA'.
+    PERFORM BDC_FIELD       USING 'BDC_CURSOR'
+                                  'BUS_LOCA_SRCH01-SEARCH_TYPE'.
+    PERFORM BDC_FIELD       USING 'BUS_LOCA_SRCH01-SEARCH_TYPE'
+                                  '1'.
+    PERFORM BDC_FIELD       USING 'BUS_LOCA_SRCH01-SEARCH_ID'
+                                  '1'.
+    PERFORM BDC_FIELD       USING 'BUS_JOEL_SEARCH-PARTNER_NUMBER'
+                                  'NPBAMTST01'.
+    PERFORM BDC_FIELD       USING 'BUS_LOCA_SRCH01-MAXHIT'
+                                  '100'.
+    PERFORM BDC_DYNPRO      USING 'SAPLBUS_LOCATOR' '3000'.
+    PERFORM BDC_FIELD       USING 'BDC_OKCODE'
+                                  '=SCREEN_1110_CHG_ROLE'.
+    PERFORM BDC_FIELD       USING 'BUS_JOEL_MAIN-CREATION_NUMBER'
+                                  gs_file-BUSINESSPARTNERNO." 'NPBAMTST04'.
+    PERFORM BDC_FIELD       USING 'BUS_JOEL_MAIN-CREATION_GROUP'
+                                  gs_file-GROUPING." 'ZEMP'.
+    PERFORM BDC_FIELD       USING 'BDC_CURSOR'
+                                  'BUS_JOEL_MAIN-PARTNER_ROLE'.
+    PERFORM BDC_FIELD       USING 'BUS_JOEL_MAIN-PARTNER_ROLE'
+                                  gs_file-ROLE." 'FLVN00'.
+    PERFORM BDC_FIELD       USING 'BUS_JOEL_MAIN-PARTNER_TIMEDEP'
+                                  '000001'.
+    PERFORM BDC_DYNPRO      USING 'SAPLSPO1' '0600'.
+    PERFORM BDC_FIELD       USING 'BDC_OKCODE'
+                                  '=OPT1'.
+    PERFORM BDC_DYNPRO      USING 'SAPLBUS_LOCATOR' '3000'.
+    PERFORM BDC_FIELD       USING 'BDC_OKCODE'
+                                  '=SCREEN_1000_MAIN_P02'.
+    PERFORM BDC_FIELD       USING 'BUS_JOEL_MAIN-CREATION_NUMBER'
+                                  gs_file-BUSINESSPARTNERNO."'NPBAMTST04'.
+    PERFORM BDC_FIELD       USING 'BUS_JOEL_MAIN-CREATION_GROUP'
+                                  gs_file-GROUPING."'ZEMP'.
+    PERFORM BDC_FIELD       USING 'BUS_JOEL_MAIN-PARTNER_ROLE'
+                                   gs_file-ROLE."'FLVN00'.
+    PERFORM BDC_FIELD       USING 'BUS_JOEL_MAIN-PARTNER_TIMEDEP'
+                                  '000001'.
+    PERFORM BDC_FIELD       USING 'BUT000-NAME_ORG1'
+                                  gs_file-NAME1." 'AJAY SHARMA'.
+    PERFORM BDC_FIELD       USING 'BUS000FLDS-BU_SORT1_TXT'
+                                  gs_file-SORT1."'AJAY SHARMA'.
+    PERFORM BDC_FIELD       USING 'BDC_CURSOR'
+                                  'ADDR1_DATA-LANGU'.
+    PERFORM BDC_FIELD       USING 'ADDR1_DATA-STREET'
+                                  gs_file-STREET."'AMRITSAR'.
+    PERFORM BDC_FIELD       USING 'ADDR1_DATA-POST_CODE1'
+                                  gs_file-POSTALCODE."'999999'.
+    PERFORM BDC_FIELD       USING 'ADDR1_DATA-CITY1'
+                                  gs_file-CITY."'AMRITSAR'.
+    PERFORM BDC_FIELD       USING 'ADDR1_DATA-COUNTRY'
+                                  gs_file-COUNTRY."'IN'.
+    PERFORM BDC_FIELD       USING 'ADDR1_DATA-REGION'
+                                  gs_file-REGION."'03'.
+    PERFORM BDC_FIELD       USING 'ADDR1_DATA-LANGU'
+                                  'EN'.
+    PERFORM BDC_DYNPRO      USING 'SAPLBUS_LOCATOR' '3000'.
+    PERFORM BDC_FIELD       USING 'BDC_OKCODE'
+                                  '=BUS_MAIN_ENTER'.
+    PERFORM BDC_FIELD       USING 'BUS_JOEL_MAIN-CREATION_NUMBER'
+                                  gs_file-BUSINESSPARTNERNO."'NPBAMTST04'.
+    PERFORM BDC_FIELD       USING 'BUS_JOEL_MAIN-CREATION_GROUP'
+                                  gs_file-GROUPING."'ZEMP'.
+    PERFORM BDC_FIELD       USING 'BUS_JOEL_MAIN-PARTNER_ROLE'
+                                   gs_file-ROLE."'FLVN00'.
+    PERFORM BDC_FIELD       USING 'BUS_JOEL_MAIN-PARTNER_TIMEDEP'
+                                  '000001'.
+    PERFORM BDC_FIELD       USING 'BDC_CURSOR'
+                                  'BS001-BUKRS'.
+    PERFORM BDC_FIELD       USING 'BS001-BUKRS'
+                                  gs_file-ccode."'5000'.
+    PERFORM BDC_DYNPRO      USING 'SAPLBUS_LOCATOR' '3000'.
+    PERFORM BDC_FIELD       USING 'BDC_OKCODE'
+                                  '=BUS_MAIN_ENTER'.
+    PERFORM BDC_FIELD       USING 'BUS_JOEL_MAIN-CREATION_NUMBER'
+                                  gs_file-BUSINESSPARTNERNO."'NPBAMTST04'.
+    PERFORM BDC_FIELD       USING 'BUS_JOEL_MAIN-CREATION_GROUP'
+                                   gs_file-GROUPING."'ZEMP'.
+    PERFORM BDC_FIELD       USING 'BUS_JOEL_MAIN-PARTNER_ROLE'
+                                   gs_file-ROLE."'FLVN00'.
+    PERFORM BDC_FIELD       USING 'BUS_JOEL_MAIN-PARTNER_TIMEDEP'
+                                  '000001'.
+    PERFORM BDC_FIELD       USING 'BDC_CURSOR'
+                                  'GS_LFB1-AKONT'.
+    PERFORM BDC_FIELD       USING 'GS_LFB1-AKONT'
+                                  gs_file-RECONCILIATIONACCT."'121012'.
+    PERFORM BDC_DYNPRO      USING 'SAPLBUS_LOCATOR' '3000'.
+    PERFORM BDC_FIELD       USING 'BDC_OKCODE'
+                                  '=BUS_MAIN_SAVE'.
+    PERFORM BDC_FIELD       USING 'BUS_JOEL_MAIN-CREATION_NUMBER'
+                                  gs_file-BUSINESSPARTNERNO."'NPBAMTST04'.
+    PERFORM BDC_FIELD       USING 'BUS_JOEL_MAIN-CREATION_GROUP'
+                                  gs_file-GROUPING."'ZEMP'.
+    PERFORM BDC_FIELD       USING 'BUS_JOEL_MAIN-PARTNER_ROLE'
+                                   gs_file-ROLE."'FLVN00'.
+    PERFORM BDC_FIELD       USING 'BUS_JOEL_MAIN-PARTNER_TIMEDEP'
+                                  '000001'.
+    PERFORM BDC_FIELD       USING 'BDC_CURSOR'
+                                  'GS_LFB1-AKONT'.
+    PERFORM BDC_FIELD       USING 'GS_LFB1-AKONT'
+                                  gs_file-RECONCILIATIONACCT."'121012'.
+
+    DATA(OPTIONS) = VALUE CTU_PARAMS( DISMODE = 'E' ).
+    CALL TRANSACTION 'BP' USING BDCDATA OPTIONS FROM OPTIONS MESSAGES INTO MESSTAB.
+
+    IF MESSTAB IS NOT INITIAL.
+      LOOP AT MESSTAB INTO WA_MESSAGE.
+        IF WA_MESSAGE-MSGTYP NE 'S'.
+          CLEAR WA_MESSAGE1.
+          WA_MESSAGE1 = WA_MESSAGE.
+
+          CALL FUNCTION 'MESSAGE_TEXT_BUILD'
+            EXPORTING
+              MSGID               = WA_MESSAGE-MSGID
+              MSGNR               = WA_MESSAGE-MSGNR
+              MSGV1               = WA_MESSAGE-MSGV1
+              MSGV2               = WA_MESSAGE-MSGV2
+              MSGV3               = WA_MESSAGE-MSGV3
+              MSGV4               = WA_MESSAGE-MSGV4
+            IMPORTING
+              MESSAGE_TEXT_OUTPUT = WA_MESSAGE1-MSGV1.
+
+          WA_FINAL-BUSINESSPARTNERNO = GS_FILE-BUSINESSPARTNERNO.
+          WA_FINAL-TYPE = WA_MESSAGE-MSGTYP.
+          WA_FINAL-REMARKS = WA_MESSAGE1-MSGV1.
+          APPEND WA_FINAL TO IT_FINAL.
+        ENDIF.
+      ENDLOOP.
+
+      WA_FINAL-BUSINESSPARTNERNO = GS_FILE-BUSINESSPARTNERNO.
+      WA_FINAL-TYPE = 'S'.
+      WA_FINAL-REMARKS = 'Data Uploaded Successfully'.
+      APPEND WA_FINAL TO IT_FINAL.
+    ENDIF.
+
+    REFRESH: BDCDATA, MESSTAB.
+    CLEAR: LV_INDEX, WA_FINAL, WA_MESSAGE1, WA_MESSAGE, LV_DAT, LV_DAT2.
+*  ENDAT.
+
+  ENDLOOP.
+
+
+  IF IT_FINAL IS NOT INITIAL.
+
+    PERFORM SET_FCAT CHANGING IT_FCAT.
+    CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+      EXPORTING
+        IT_FIELDCAT = IT_FCAT
+        I_DEFAULT   = 'X'
+        I_SAVE      = 'U'
+        IS_LAYOUT   = IS_LAYOUT
+      TABLES
+        T_OUTTAB    = IT_FINAL[].
+    IF SY-SUBRC <> 0.
+
+    ENDIF.
+
+    REFRESH : IT_FINAL.
+*  ELSE.
+*
+  ENDIF.
+*----------------------------------------------------------------------*
+*        Start new screen                                              *
+*----------------------------------------------------------------------*
+FORM BDC_DYNPRO USING PROGRAM DYNPRO.
+  CLEAR BDCDATA.
+  BDCDATA-PROGRAM  = PROGRAM.
+  BDCDATA-DYNPRO   = DYNPRO.
+  BDCDATA-DYNBEGIN = 'X'.
+  APPEND BDCDATA.
+ENDFORM.
+
+*----------------------------------------------------------------------*
+*        Insert field                                                  *
+*----------------------------------------------------------------------*
+FORM BDC_FIELD USING FNAM FVAL.
+  IF FVAL <> SPACE."NODATA.
+    CLEAR BDCDATA.
+    BDCDATA-FNAM = FNAM.
+    BDCDATA-FVAL = FVAL.
+    APPEND BDCDATA.
+  ENDIF.
+ENDFORM.
+FORM F_BUILD_FCAT USING P_FNAME TYPE DD03P-FIELDNAME P_OUTPUTLEN TYPE  DD03P-OUTPUTLEN  P_SELTEXT TYPE DD03P-SCRTEXT_L CHANGING P_IT_FCAT TYPE SLIS_T_FIELDCAT_ALV.
+  CLEAR W_FCAT.
+  W_FCAT-FIELDNAME = P_FNAME.
+  W_FCAT-SELTEXT_L = P_SELTEXT.
+  W_FCAT-OUTPUTLEN = P_OUTPUTLEN.
+  APPEND W_FCAT TO P_IT_FCAT.
+ENDFORM.
+FORM SET_FCAT  CHANGING P_IT_FCAT TYPE SLIS_T_FIELDCAT_ALV.
+
+  PERFORM F_BUILD_FCAT USING 'BUSINESSPARTNERNO' '20' 'Vendor' CHANGING P_IT_FCAT.
+  PERFORM F_BUILD_FCAT USING 'TYPE' '4' 'Type' CHANGING P_IT_FCAT.
+  PERFORM F_BUILD_FCAT USING 'REMARKS' '300' 'Remarks' CHANGING P_IT_FCAT.
+
+
+ENDFORM.
