@@ -1,0 +1,1539 @@
+*&---------------------------------------------------------------------*
+*& Report ZSD_DISPATCH_MAIL_TRIGGERING1
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+REPORT zsd_dispatch_mail_triggering1.
+
+INCLUDE zsd_dispatch_mail_sign_top11.
+DATA : job_output_info TYPE  ssfcrescl .
+*data(gv_program_name) =  sy-repid.
+DATA(gv_program_name) =  'ZSD_DISPATCH_MAIL_TRIGGERING1'.
+TABLES : zsd_cust_email .
+
+DATA : lv_plantx TYPE werks_d ..
+DATA: lv_q TYPE i,
+      lv_i TYPE i VALUE 0,
+      lv_j TYPE i VALUE 0.
+DATA: gv_tcno TYPE ztcno.
+
+INITIALIZATION.
+
+START-OF-SELECTION.
+
+  SELECT * FROM zmmgatentry INTO TABLE @DATA(it_gate_out)
+   WHERE out_date EQ @sy-datum. ">= '20250701' .
+*   WHERE out_date >= '20250701' ."EQ @sy-datum.
+
+  IF it_gate_out[] IS NOT INITIAL.
+    SELECT * FROM zmmgatentryitm INTO TABLE @DATA(it_gatentryitm)
+                                 FOR ALL ENTRIES IN @it_gate_out
+                                 WHERE gateentryno = @it_gate_out-gateentryno AND
+    gyear       = @it_gate_out-gyear.
+  ENDIF.
+  IF it_gatentryitm[] IS NOT INITIAL .
+    SELECT * FROM vbrk
+                  INTO TABLE @gt_goods
+                  FOR ALL ENTRIES IN @it_gatentryitm
+                  WHERE vbeln = @it_gatentryitm-vbeln_inv AND
+                        fkart IN ('ZSCR','ZPRI','ZTRD','ZMTO','ZMTS','ZTRA','ZRLT')  AND
+    kunag IN ( SELECT cust_id FROM zsd_cust_email ).
+  ENDIF .
+
+  IF gt_goods IS NOT INITIAL.
+    SELECT * FROM kna1 INTO TABLE @gt_kna11
+                       FOR ALL ENTRIES IN @gt_goods
+    WHERE kunnr EQ @gt_goods-kunag.
+
+    SELECT * FROM vbfa
+             INTO TABLE @DATA(it_vbfa)
+              FOR ALL ENTRIES IN @gt_goods
+               WHERE vbeln = @gt_goods-vbeln
+    AND vbtyp_v IN ( 'E' , 'C' , 'G' ).
+    IF it_vbfa IS NOT INITIAL.
+
+      SELECT  *
+                     FROM vbpa
+                     INTO TABLE @DATA(it_vbpa)
+                     FOR ALL ENTRIES IN @it_vbfa
+                     WHERE vbeln = @it_vbfa-vbelv
+      AND parvw = 'AG'.
+
+      IF it_vbpa IS NOT INITIAL.
+        SELECT * FROM kna1 INTO TABLE @gt_kna1
+                     FOR ALL ENTRIES IN @it_vbpa
+        WHERE kunnr EQ @it_vbpa-kunnr.
+      ENDIF.
+    ENDIF.
+
+    DATA : pdff TYPE REF TO cl_rspo_pdf_merge . " lo_pdf_helper .
+
+    LOOP AT gt_goods INTO ls.
+      CREATE OBJECT pdff. """ lo_pdf_helper
+      p_vbeln1 = ls-vbeln.
+      SELECT SINGLE * FROM zsd_cus_mail_his INTO @DATA(lv_check)
+      WHERE vbeln EQ @p_vbeln1 .
+      IF sy-subrc NE 0 .
+        CLEAR: wa_text,lv_bukrs.
+        EXPORT gv_program_name  TO MEMORY ID 'GV_PROGRAM_NAME' .
+        FREE MEMORY ID 'I_OBJBIN' .
+        SUBMIT zsd_tax_inv WITH gw_vbeln EQ p_vbeln1 AND RETURN.
+
+        IMPORT job_output_info-otfdata[]       FROM MEMORY ID 'I_OBJBIN' .
+*********************************************************************************
+        " Added for Digital Signature
+
+        CLEAR: page_str,page_cntr,lv_q,lv_i.
+        REFRESH: gw_return-otfdata, gw_return1-otfdata, gw_tmp-otfdata.
+        SELECT SINGLE * FROM zbank_detail INTO @DATA(ls_bank) WHERE kunnr = @ls-kunag
+        AND ( valid_from_dat LE @ls-fkdat AND  valid_to_dat GE @ls-fkdat ).
+        gw_return1-otfdata = job_output_info-otfdata.
+        gw_tmp-otfdata = gw_return1-otfdata.
+        DELETE gw_tmp-otfdata WHERE tdprintcom <> 'EP'.
+        DESCRIBE TABLE gw_tmp-otfdata LINES ep_cntr.
+        lv_q = ep_cntr / 1.
+        lv_i = lv_q.
+
+        IF ls_bank IS NOT INITIAL.
+
+          WHILE lv_i LE ep_cntr.
+            lv_j = lv_i - 1.
+            page_cntr =  lv_j.
+            CONDENSE page_cntr.
+            IF page_str IS INITIAL.
+              page_str = page_cntr.
+              page_cntr = lv_i.
+              CONDENSE page_cntr.
+              CONCATENATE page_str page_cntr INTO page_str SEPARATED BY ','.
+            ELSE.
+              CONCATENATE page_str page_cntr INTO page_str SEPARATED BY ','.
+              page_cntr = lv_i.
+              CONDENSE page_cntr.
+              CONCATENATE page_str page_cntr INTO page_str SEPARATED BY ','.
+            ENDIF.
+            lv_i = lv_i + lv_q.
+          ENDWHILE.
+        ELSE.
+          WHILE lv_i LE ep_cntr.
+            page_cntr = page_cntr + lv_q.
+            CONDENSE page_cntr.
+            IF page_str IS INITIAL.
+              page_str = page_cntr.
+            ELSE.
+              CONCATENATE page_str page_cntr INTO page_str SEPARATED BY ','.
+            ENDIF.
+            lv_i = lv_i + lv_q.
+          ENDWHILE.
+        ENDIF.
+        APPEND LINES OF gw_return1-otfdata TO gw_return-otfdata.
+        "check if Digital Signature exists only then go for next step
+        REFRESH lt_audit.
+        SELECT * INTO TABLE  lt_audit FROM zdsign_audit WHERE vbeln = p_vbeln1.
+        IF lt_audit IS NOT INITIAL.
+          "Put digital Signature
+          PERFORM display_otf_base64 USING 'I'.
+        ELSE.
+          CALL FUNCTION 'CONVERT_OTF'
+            EXPORTING
+              format                = 'PDF'
+              max_linewidth         = 132
+            IMPORTING
+              bin_filesize          = v_len_in
+              bin_file              = i_xstring
+            TABLES
+              otf                   = gw_return1-otfdata[]
+              lines                 = gt_lines
+            EXCEPTIONS
+              err_max_linewidth     = 1
+              err_format            = 2
+              err_conv_not_possible = 3
+              OTHERS                = 4.
+
+          CLEAR:i_invbin[].
+          FREE:i_invbin[].
+          IF sy-subrc IS INITIAL.
+*            CLEAR add_document.
+            CLEAR merged_document.
+            pdff->add_document( i_xstring ).
+          ENDIF.
+          CALL FUNCTION 'SCMS_XSTRING_TO_BINARY'
+            EXPORTING
+              buffer     = i_xstring
+            TABLES
+              binary_tab = i_invbin[].
+          pdff->merge_documents(
+            IMPORTING
+              merged_document = merged_document
+          ).
+          CLEAR i_xstring.
+        ENDIF.
+
+******************************* Call Packing list program **************************
+        DATA : p_vbl TYPE vbeln .
+        DATA: gw_control  TYPE ssfctrlop.
+        gw_control-no_dialog = 'X'.
+        gw_control-preview   = 'X'.
+        gw_control-no_open   = 'X'.
+        gw_control-no_close  = 'X'.
+        gw_control-getotf  = 'X'.
+        SELECT SINGLE vgbel FROM vbrp INTO @DATA(lv_del) WHERE vbeln = @p_vbeln1 .
+        p_vbl = lv_del .
+        CLEAR : lv_del .
+        FREE MEMORY ID 'ZVBELN' .
+        EXPORT p_vbl = p_vbl TO MEMORY ID 'ZVBELN' .
+        DATA : v_screen  TYPE c.
+        DATA : returncode  TYPE sy-subrc.
+        DATA: lv_ds TYPE c.
+        lv_ds = 'X'.
+        EXPORT lv_ds = lv_ds TO MEMORY ID 'DSIGN'.
+        CALL FUNCTION 'SSF_OPEN'
+          EXPORTING
+            control_parameters = gw_control
+          EXCEPTIONS
+            formatting_error   = 1
+            internal_error     = 2
+            send_error         = 3
+            user_canceled      = 4
+            OTHERS             = 5.
+        PERFORM entry IN PROGRAM zsd_picklist_rep USING v_screen returncode .
+        CLEAR: page_str,page_cntr,lv_q,lv_i.
+        REFRESH: gw_return-otfdata,gw_return1-otfdata, i_otf[].
+        IMPORT gw_return1-otfdata = gw_return1-otfdata FROM MEMORY ID 'OTFDATA'.
+        i_otf[] = gw_return1-otfdata[].
+        "&*-------- Converting O T F
+        CALL FUNCTION 'CONVERT_OTF'
+          EXPORTING
+            format                = 'PDF'
+            max_linewidth         = 132
+          IMPORTING
+            bin_filesize          = v_len_in
+            bin_file              = i_xstring
+          TABLES
+            otf                   = i_otf[]
+            lines                 = gt_lines
+          EXCEPTIONS
+            err_max_linewidth     = 1
+            err_format            = 2
+            err_conv_not_possible = 3
+            OTHERS                = 4.
+
+        CLEAR:i_pkgbin[].
+        FREE:i_pkgbin[].
+
+        IF sy-subrc IS INITIAL.
+          pdff->add_document( i_xstring ).
+        ENDIF.
+        CALL FUNCTION 'SCMS_XSTRING_TO_BINARY'
+          EXPORTING
+            buffer     = i_xstring
+          TABLES
+            binary_tab = i_pkgbin[].
+        pdff->merge_documents(
+          IMPORTING
+            merged_document = merged_document
+        ).
+        CLEAR i_xstring.
+***********************************************************************************
+        """"""" TC 2001 ....
+        REFRESH job_output_info-otfdata[].
+        CLEAR job_output_info.
+        DATA : fm_name  TYPE rs38l_fnam,
+               formname TYPE tdsfname,
+               tc_no    LIKE ztcheader, details           TYPE STANDARD TABLE OF ztc_detail . .
+
+        SELECT SINGLE * FROM vbrp INTO @DATA(lv_vbrpp) WHERE vbeln = @p_vbeln1 .
+        CLEAR : gv_tcno .
+        IF lv_vbrpp-werks = '2001' .
+          SELECT a~vbeln,
+                 b~tc_no
+                 FROM vbrp AS a
+                 LEFT OUTER JOIN ztcheader AS b
+                 ON b~vbeln = a~vbeln
+                 INTO TABLE  @DATA(i_ztc)
+          WHERE a~vbeln = @p_vbeln1 .
+          SORT i_ztc BY tc_no .
+          DELETE ADJACENT DUPLICATES FROM i_ztc COMPARING tc_no .
+          LOOP AT   i_ztc INTO DATA(w_ztc) .
+            SELECT SINGLE * INTO tc_no FROM ztcheader WHERE tc_no = w_ztc-tc_no.
+            CLEAR gv_tcno.
+            gv_tcno = w_ztc-tc_no.
+            SELECT * FROM ztc_detail INTO TABLE details WHERE tc_no = w_ztc-tc_no.
+            IF sy-subrc EQ 0.
+
+              DATA : i_result TYPE char1 .
+              CLEAR : i_result  .
+
+              DATA: it_spec TYPE STANDARD TABLE OF zppspec .
+              DATA: w_spec TYPE zppspec .
+
+              IF tc_no-tc_prntot = 'I'.
+                i_result =  '1'.
+              ELSEIF tc_no-tc_prntot = 'N'.
+                i_result = '2'.
+              ENDIF .
+
+*              DATA: gw_control  TYPE ssfctrlop .
+
+              gw_control-no_dialog = 'X'.          gw_control-preview   = 'X'.
+              gw_control-no_open   = 'X'.          gw_control-no_close  = 'X'.
+              gw_control-getotf  = 'X'.
+              IF w_ztc-tc_no NE '999999' AND w_ztc-tc_no NE ''.  " M Deepak 28.08.24
+                CALL FUNCTION 'SSF_OPEN'
+                  EXPORTING
+                    control_parameters = gw_control
+                  EXCEPTIONS
+                    formatting_error   = 1
+                    internal_error     = 2
+                    send_error         = 3
+                    user_canceled      = 4
+                    OTHERS             = 5.
+
+                IF i_result = 1.
+                  CALL FUNCTION 'SSF_FUNCTION_MODULE_NAME'
+                    EXPORTING
+                      formname           = 'ZTCPRINTFORM'
+                    IMPORTING
+                      fm_name            = fm_name
+                    EXCEPTIONS
+                      no_form            = 1
+                      no_function_module = 2
+                      OTHERS             = 3.
+
+                  CALL FUNCTION fm_name
+                    EXPORTING
+                      control_parameters = gw_control
+                      matnr              = tc_no-matnr
+                      ztchead            = tc_no
+                    TABLES
+                      itab               = details
+                      it_zppspec1        = it_spec[].
+
+                ELSEIF i_result = 2 .
+
+                  CALL FUNCTION 'SSF_FUNCTION_MODULE_NAME'
+                    EXPORTING
+                      formname           = 'ZTCPRINTFORM1'
+                    IMPORTING
+                      fm_name            = fm_name
+                    EXCEPTIONS
+                      no_form            = 1
+                      no_function_module = 2
+                      OTHERS             = 3.
+
+                  CALL FUNCTION fm_name "'/1BCDWB/SF00000064'
+                    EXPORTING
+                      control_parameters = gw_control
+                      matnr              = tc_no-matnr
+                      ztchead            = tc_no
+                    TABLES
+                      itab               = details
+                      it_zppspec1        = it_spec[].
+                ENDIF .
+
+                DATA : job_output_infox TYPE  ssfcrescl .
+                CALL FUNCTION 'SSF_CLOSE'
+                  IMPORTING
+                    job_output_info  = job_output_infox
+                  EXCEPTIONS
+                    formatting_error = 1
+                    internal_error   = 2
+                    send_error       = 3
+                    OTHERS           = 4.
+
+                IF job_output_infox IS  NOT INITIAL .
+                  APPEND LINES OF job_output_infox-otfdata[] TO job_output_info-otfdata[] .
+                ENDIF .
+              ENDIF.    " M Deepak 28.08.24
+            ENDIF .
+          ENDLOOP .
+          REFRESH : i_ztc[], details .
+          CLEAR   :  tc_no.   " w_ztc , SKG JUN
+
+        ELSEIF lv_vbrpp-werks = '2003' . """""""""""""""""""""""""""""""""""""""""""""""""""""""""" 2003 TC
+
+          SELECT  tc_no , vbeln, matnr, posnr FROM       " Added by M Deepak 13.09.24
+            zpp_zstc_data
+          INTO TABLE @DATA(i_ztcn)
+          WHERE vbeln = @lv_vbrpp-vbeln .
+
+          SORT i_ztcn ASCENDING BY vbeln posnr.
+          DELETE ADJACENT DUPLICATES FROM i_ztcn COMPARING tc_no.
+          DATA : it_tab TYPE TABLE OF zpp_zstc_data,
+                 wa_tab TYPE zpp_zstc_data, wa_hdr TYPE zpp_zstc_data  .
+
+          LOOP AT i_ztcn INTO DATA(w_ztcn) .
+            REFRESH : it_tab.   " M Deepak 03.09.24
+            CLEAR gv_tcno.
+            SELECT * FROM zpp_zstc_data INTO TABLE @DATA(gt_data) WHERE  tc_no = @w_ztcn-tc_no.  "matnr = @w_ztcn-matnr AND
+            IF sy-subrc EQ 0.
+              gv_tcno = w_ztcn-tc_no.
+
+              LOOP AT gt_data INTO DATA(gw_data)  .
+                wa_tab-matnr = gw_data-matnr.       "M Deepak 13.09.24
+                wa_tab-maktx = gw_data-maktx.       "M Deepak 13.09.24
+                wa_hdr-kunnr = gw_data-kunnr.
+                wa_hdr-name1 = gw_data-name1.
+                wa_hdr-fkdat = gw_data-fkdat.
+                wa_tab-fkimg = gw_data-fkimg.       "M Deepak 13.09.24
+                wa_hdr-vbeln = gw_data-vbeln.
+                wa_tab-vbeln = gw_data-vbeln.
+                wa_hdr-posnr = gw_data-posnr.
+                wa_tab-posnr = gw_data-posnr.
+                wa_tab-sample_qty = gw_data-sample_qty.      " M Deepak 13.09.24
+                wa_hdr-delivery_no = gw_data-delivery_no.
+                wa_hdr-vehicle_no = gw_data-vehicle_no.
+                wa_tab-remarks = gw_data-remarks .            "Added by M Deepak 13.09.24
+                wa_hdr-checked_by = gw_data-checked_by.
+                wa_hdr-approved_by = gw_data-approved_by .
+                wa_hdr-tc_no = w_ztcn-tc_no.    " M Deepak 03.09.24
+                wa_tab-tc_no = w_ztcn-tc_no.    " M Deepak 03.09.24
+                wa_tab-sno = gw_data-sno.
+                wa_tab-control_par = gw_data-control_par.
+                wa_tab-ins_method = gw_data-ins_method.
+                wa_tab-spec_no = gw_data-spec_no.
+                wa_tab-uom = gw_data-uom.
+                wa_tab-tmax_hardness = gw_data-tmax_hardness.
+                wa_tab-tmin_hardness = gw_data-tmin_hardness.
+                wa_tab-observation1 = gw_data-observation1.
+                wa_tab-observation2 = gw_data-observation2.
+                wa_tab-observation3 = gw_data-observation3.
+                wa_tab-observation4 = gw_data-observation4.
+                wa_tab-observation5 = gw_data-observation5.
+                wa_tab-evaluation_ok = gw_data-evaluation_ok.
+                wa_tab-evaluation_notok = gw_data-evaluation_notok.
+
+                APPEND wa_tab TO it_tab.
+
+                COMMIT WORK AND WAIT.
+                CLEAR : gw_data,wa_tab.
+              ENDLOOP.
+              REFRESH : i_ztcn,  gt_data.
+
+              DATA: f_name   TYPE rs38l_fnam .
+*                formname TYPE tdsfname.
+
+              DATA: gt_control TYPE ssfctrlop,
+                    gt_output  TYPE ssfcompop.
+              DATA: document_output_info TYPE ssfcrespd,
+                    job_output_options   TYPE ssfcresop,
+                    output_options       TYPE ssfcompop.
+
+              DATA : otfdata TYPE ssfcrescl-otfdata .
+
+              DATA :   t_otf   TYPE ssfcrescl.
+
+              gt_control-no_dialog = 'X'.          gt_control-preview   = 'X'.
+              gt_control-no_open   = 'X'.          gt_control-no_close  = 'X'.
+              gt_control-getotf  = 'X'.
+
+              IF w_ztcn-tc_no NE '999999' AND  w_ztcn-tc_no NE ''. " M Deepak 28.08.24
+
+                CALL FUNCTION 'SSF_OPEN'
+                  EXPORTING
+                    control_parameters = gt_control.
+
+                CALL FUNCTION 'SSF_FUNCTION_MODULE_NAME'
+                  EXPORTING
+                    formname = 'ZSTC_SF'
+                  IMPORTING
+                    fm_name  = f_name.
+                DATA(gt_tab)  = it_tab[].
+                DATA(gt_tab1) = it_tab[].
+
+                """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""ujjwal
+                SORT gt_tab1 BY vbeln posnr sno.
+                SORT gt_tab BY vbeln posnr sno.
+                DELETE ADJACENT DUPLICATES FROM gt_tab1 COMPARING vbeln posnr .
+                LOOP AT gt_tab1 INTO DATA(watab) .
+                  REFRESH : it_tab .
+                  LOOP AT gt_tab INTO DATA(wgttab) WHERE matnr EQ watab-matnr.
+                    MOVE-CORRESPONDING wgttab TO wa_tab .
+                    APPEND : wa_tab TO it_tab .
+                    CLEAR  : wa_tab, wgttab .
+
+                  ENDLOOP.
+
+                  CALL FUNCTION f_name
+                    EXPORTING
+                      control_parameters   = gt_control
+                      output_options       = gt_output
+                      wa_header            = wa_hdr
+                    IMPORTING
+                      document_output_info = document_output_info
+                      job_output_info      = job_output_info
+                      job_output_options   = job_output_options
+                    TABLES
+                      it_item              = it_tab
+                    EXCEPTIONS
+                      formatting_error     = 1
+                      internal_error       = 2
+                      send_error           = 3
+                      user_canceled        = 4
+                      OTHERS               = 5.
+                ENDLOOP.
+                otfdata = job_output_info-otfdata[] .
+                CALL FUNCTION 'SSF_CLOSE'
+                  IMPORTING
+                    job_output_info  = t_otf
+                  EXCEPTIONS
+                    formatting_error = 1
+                    internal_error   = 2
+                    send_error       = 3
+                    OTHERS           = 4.
+                APPEND LINES OF t_otf-otfdata[] TO job_output_info-otfdata[] .
+                """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""" TC 2003 ....
+              ENDIF.       " M Deepak 28.08.24
+              REFRESH : gt_data .
+            ENDIF.
+          ENDLOOP .
+        ENDIF .
+
+        FREE MEMORY ID 'I_OBJBIN'.
+        "Added for Digital Signature
+        IF  gv_tcno NE '999999' AND gv_tcno NE ''.
+          CLEAR: page_str,page_cntr,lv_q,lv_i.
+          REFRESH :gw_return1-otfdata,gw_tmp-otfdata.
+          gw_return1-otfdata = job_output_info-otfdata.
+          gw_tmp-otfdata = gw_return1-otfdata.
+          DELETE gw_tmp-otfdata WHERE tdprintcom <> 'EP'.
+          DESCRIBE TABLE gw_tmp-otfdata LINES ep_cntr.
+          IF lv_vbrpp-werks = '2003' .
+            lv_q =  1.
+          ELSE.
+            lv_q = ep_cntr / 1.
+          ENDIF.
+          lv_i = lv_q.
+
+          WHILE lv_i LE ep_cntr.
+            page_cntr = page_cntr + lv_q.
+            CONDENSE page_cntr.
+            IF page_str IS INITIAL.
+              page_str = page_cntr.
+            ELSE.
+              CONCATENATE page_str page_cntr INTO page_str SEPARATED BY ','.
+            ENDIF.
+            lv_i = lv_i + lv_q.
+          ENDWHILE.
+          APPEND LINES OF gw_return1-otfdata TO gw_return-otfdata.
+          REFRESH lt_audit.
+          SELECT * INTO TABLE  lt_audit FROM zdsign_audit WHERE vbeln = gv_tcno.
+          IF lt_audit IS NOT INITIAL.
+            "Put digital Signature
+            PERFORM display_otf_base64 USING 'Q'.
+          ELSE.
+            CALL FUNCTION 'CONVERT_OTF'
+              EXPORTING
+                format                = 'PDF'
+                max_linewidth         = 132
+              IMPORTING
+                bin_filesize          = v_len_in
+                bin_file              = i_xstring
+              TABLES
+                otf                   = gw_return1-otfdata[]
+                lines                 = gt_lines
+              EXCEPTIONS
+                err_max_linewidth     = 1
+                err_format            = 2
+                err_conv_not_possible = 3
+                OTHERS                = 4.
+
+            CLEAR:i_qcbin[].
+            FREE:i_qcbin[].
+
+            IF sy-subrc IS INITIAL.
+              pdff->add_document( i_xstring ).
+            ENDIF.
+            CALL FUNCTION 'SCMS_XSTRING_TO_BINARY'
+              EXPORTING
+                buffer     = i_xstring
+              TABLES
+                binary_tab = i_qcbin[].
+            pdff->merge_documents(
+              IMPORTING
+                merged_document = merged_document
+            ).
+            CLEAR i_xstring.
+          ENDIF.
+
+******************************************************************************************
+        ENDIF.
+        IF lv_vbrpp-werks = '2002'.
+          SELECT SINGLE * INTO @DATA(tc_no_2002) FROM ztcheader1 WHERE vbeln EQ @p_vbeln1.
+          IF ( tc_no_2002 IS NOT INITIAL ) AND tc_no_2002-tc_no NE '999999'.
+            DATA : opdf11 TYPE xstring .
+            SUBMIT zsapmzqmtestcerti_1 WITH s_vbeln EQ p_vbeln1 AND RETURN.
+            IMPORT opdf11  FROM MEMORY ID 'ZTC2002'.
+            IF opdf11 IS  NOT INITIAL.
+              pdff->add_document( opdf11 ).
+            ENDIF.
+            CALL FUNCTION 'SCMS_XSTRING_TO_BINARY'
+              EXPORTING
+                buffer     = opdf11
+              TABLES
+                binary_tab = i_qcbin[].
+            pdff->merge_documents(
+              IMPORTING
+                merged_document = merged_document
+            ).
+            CLEAR opdf11.
+          ENDIF.
+          CLEAR tc_no_2002.
+        ENDIF.
+*********************************************************************************
+        gv_kunag = ls-kunag.
+        TRY.
+            gs_kna1 = gt_kna11[ kunnr = gv_kunag  ].
+          CATCH cx_sy_itab_line_not_found.
+        ENDTRY.
+
+        READ TABLE it_vbfa INTO DATA(wa_vbfa) WITH KEY vbeln = ls-vbeln.
+        READ TABLE it_vbpa INTO DATA(wa_vbpa) WITH KEY vbeln = wa_vbfa-vbelv.
+
+        IF sy-subrc = 0.
+
+          READ TABLE gt_kna1 INTO DATA(wa_kna1) WITH KEY kunnr = wa_vbpa-kunnr.
+          IF sy-subrc = 0.
+
+            SELECT SINGLE smtp_addr
+                          FROM adr6
+                          INTO in_mailid
+            WHERE addrnumber EQ wa_kna1-adrnr.
+
+          ENDIF.
+        ENDIF.
+
+        "Get LR Number and Vehicle Number
+        "---------------------------------"
+        CLEAR: gv_name,gv_lr_no,gv_vehicle_no.
+        REFRESH: gt_lines.
+        gv_name = p_vbeln1.
+
+        CALL FUNCTION 'READ_TEXT'
+          EXPORTING
+            client                  = sy-mandt
+            id                      = 'ZR38'
+            language                = sy-langu
+            name                    = gv_name
+            object                  = 'VBBK'
+          TABLES
+            lines                   = gt_lines
+          EXCEPTIONS
+            id                      = 1
+            language                = 2
+            name                    = 3
+            not_found               = 4
+            object                  = 5
+            reference_check         = 6
+            wrong_access_to_archive = 7
+            OTHERS                  = 8.
+        READ TABLE gt_lines INTO DATA(ls_line) INDEX 1.
+        IF sy-subrc EQ 0.
+          gv_lr_no = ls_line-tdline.
+        ENDIF.
+        CLEAR ls_line.
+
+* ------------sakshi
+        SELECT SINGLE vech_num  FROM  zeway_bill_data INTO @gv_vehicle_no WHERE vbeln = @ls-vbeln AND
+        eway_bill_num NE '' .
+        IF gv_vehicle_no IS INITIAL .
+          REFRESH: gt_lines.
+          CALL FUNCTION 'READ_TEXT'
+            EXPORTING
+              client                  = sy-mandt
+              id                      = 'ZR11'
+              language                = sy-langu
+              name                    = gv_name
+              object                  = 'VBBK'
+            TABLES
+              lines                   = gt_lines
+            EXCEPTIONS
+              id                      = 1
+              language                = 2
+              name                    = 3
+              not_found               = 4
+              object                  = 5
+              reference_check         = 6
+              wrong_access_to_archive = 7
+              OTHERS                  = 8.
+          READ TABLE gt_lines INTO ls_line INDEX 1.
+          IF sy-subrc EQ 0.
+            gv_vehicle_no = ls_line-tdline.
+          ENDIF.
+          CLEAR ls_line.
+        ENDIF .          " sakshi
+        REFRESH: gt_lines.
+        CLEAR : gv_mobile .   "02.07.2024
+
+        CALL FUNCTION 'READ_TEXT'
+          EXPORTING
+            client                  = sy-mandt
+            id                      = 'ZR42'
+            language                = sy-langu
+            name                    = gv_name
+            object                  = 'VBBK'
+          TABLES
+            lines                   = gt_lines
+          EXCEPTIONS
+            id                      = 1
+            language                = 2
+            name                    = 3
+            not_found               = 4
+            object                  = 5
+            reference_check         = 6
+            wrong_access_to_archive = 7
+            OTHERS                  = 8.
+        READ TABLE gt_lines INTO ls_line INDEX 1.
+        IF sy-subrc EQ 0.
+          gv_mobile = ls_line-tdline.
+        ENDIF.
+        CLEAR ls_line.
+
+        REFRESH: gt_lines.
+        CLEAR : gv_sales_pr . " 02.07.2024
+        CALL FUNCTION 'READ_TEXT'
+          EXPORTING
+            client                  = sy-mandt
+            id                      = 'ZR41'
+            language                = sy-langu
+            name                    = gv_name
+            object                  = 'VBBK'
+          TABLES
+            lines                   = gt_lines
+          EXCEPTIONS
+            id                      = 1
+            language                = 2
+            name                    = 3
+            not_found               = 4
+            object                  = 5
+            reference_check         = 6
+            wrong_access_to_archive = 7
+            OTHERS                  = 8.
+        READ TABLE gt_lines INTO ls_line INDEX 1.
+        IF sy-subrc EQ 0.
+          gv_sales_pr = ls_line-tdline.
+        ENDIF.
+        CLEAR ls_line.
+*----------sakshi
+        PERFORM track.
+        IF in_mailid IS NOT INITIAL.
+          IF lv_vbrpp-werks = '2011' OR lv_vbrpp-werks = '2012'  OR lv_vbrpp-werks = '2013' OR lv_vbrpp-werks = '2014'
+            OR lv_vbrpp-werks = '2015'.
+*            BREAK-POINT.
+            SUBMIT zsd_tax_inv WITH gw_vbeln EQ p_vbeln1 WITH rd_9 EQ ''
+            WITH rd_8 EQ ''  WITH rd_7 EQ '' WITH rd_6 EQ ''
+            WITH rd_5 EQ ''  WITH rd_10 EQ 'X' WITH rd_4 EQ ''
+            WITH rd_3 EQ ' ' WITH rd_2 EQ '' WITH rd_1 EQ '' AND RETURN.
+*            BREAK mawai_sd.
+            IMPORT lv_decodedx FROM MEMORY ID 'PDF_PLANT' .
+            FREE MEMORY ID 'PDF_PLANT' .
+            REFRESH i_qcbin[].
+            CALL FUNCTION 'SCMS_XSTRING_TO_BINARY'
+              EXPORTING
+                buffer     = lv_decodedx
+              TABLES
+                binary_tab = i_qcbin[].
+            IF lv_decodedx IS  NOT INITIAL.
+              pdff->add_document( lv_decodedx ).
+            ENDIF.
+            pdff->merge_documents(
+              IMPORTING
+                merged_document = merged_document
+            ).
+            CLEAR lv_decodedx.
+          ENDIF.
+          PERFORM send_mail.
+*        ELSE.
+        ENDIF.
+        PERFORM call_api.
+      ENDIF.
+
+      CLEAR: ls,p_vbeln1,gv_kunag,in_mailid,gs_kna1,lv_check ,wa_vbpa,wa_kna1,wa_vbfa, merged_document.
+      CLEAR lo_pdf_helper .
+      FREE lo_pdf_helper .
+
+      IF pdff IS BOUND .
+        CLEAR pdff .
+        FREE pdff .
+      ENDIF .
+
+    ENDLOOP.
+  ENDIF.
+
+*&---------------------------------------------------------------------*
+*& Form SEND_MAIL
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM send_mail .
+  DATA: lv_mail TYPE adr6-smtp_addr.
+
+  REFRESH: lt_message_body[].
+  lo_send_request = cl_bcs=>create_persistent( ).
+  SHIFT gs_kna1-kunnr LEFT DELETING LEADING '0'.
+  salutation = |Dear Customer { gs_kna1-name1 } ({ gs_kna1-kunnr })|.
+  APPEND salutation TO lt_message_body.
+  APPEND INITIAL LINE TO lt_message_body.
+
+  body = '<BR>'.
+  APPEND body TO lt_message_body.
+  APPEND INITIAL LINE TO lt_message_body.
+
+  body = '<BR>'.
+  APPEND body TO lt_message_body.
+  APPEND INITIAL LINE TO lt_message_body.
+
+  CLEAR: body.
+  CONCATENATE 'Your material has been dispatched in LR No:' gv_lr_no 'and Vehicle No:' gv_vehicle_no
+      'and track your vehicle with url :' url
+      INTO body SEPARATED BY space.
+
+  APPEND body TO lt_message_body.
+
+*  ---------sakshi 24.06.2024
+  body = '<BR>'.
+  APPEND body TO lt_message_body.
+  APPEND INITIAL LINE TO lt_message_body.
+
+  CLEAR: body.
+  body = |Driver Name : { gv_sales_pr } | .
+  APPEND body TO lt_message_body.
+  APPEND INITIAL LINE TO lt_message_body.
+
+  body = '<BR>'.
+  APPEND body TO lt_message_body.
+  APPEND INITIAL LINE TO lt_message_body.
+
+  CLEAR: body.
+  body = |Driver Mobile no : { gv_mobile } | .    "{ gv_mobile }
+  APPEND body TO lt_message_body.
+  APPEND INITIAL LINE TO lt_message_body.
+*   ---------sakshi 24.06.2024
+
+  body = '<BR>'.
+  APPEND body TO lt_message_body.
+  APPEND INITIAL LINE TO lt_message_body.
+
+  CLEAR : body .
+  body = '<BR>'.
+  APPEND body TO lt_message_body.
+  APPEND INITIAL LINE TO lt_message_body.
+
+  CLEAR : body .
+  body = 'Kindly check the Invoice as attached for following particulars:'.
+  APPEND body TO lt_message_body.
+
+  CLEAR : body .
+  body = '<BR>'.
+  APPEND body TO lt_message_body.
+  APPEND INITIAL LINE TO lt_message_body.
+  CLEAR : body .
+  body = '1.  Bill to Customer Name and address'.
+  APPEND body TO lt_message_body.
+
+  CLEAR : body .
+  body = '<BR>'.
+  APPEND body TO lt_message_body.
+  APPEND INITIAL LINE TO lt_message_body.
+  CLEAR : body .
+  body = '2.  Bill to Customer GST No.'.
+  APPEND body TO lt_message_body.
+  CLEAR : body .
+
+  body = '<BR>'.
+  APPEND body TO lt_message_body.
+  APPEND INITIAL LINE TO lt_message_body.
+  CLEAR : body .
+  body = '3.  Quantity Billed.'.
+  APPEND body TO lt_message_body.
+  CLEAR : body .
+
+  body = '<BR>'.
+  APPEND body TO lt_message_body.
+  APPEND INITIAL LINE TO lt_message_body.
+  CLEAR : body .
+  body = '4.  Rate Per UOM.'.
+  APPEND body TO lt_message_body.
+  CLEAR : body .
+
+  body = '<BR>'.
+  APPEND body TO lt_message_body.
+  APPEND INITIAL LINE TO lt_message_body.
+  CLEAR : body .
+  body = '5.  Ship to Customer Name and Address.'.
+  APPEND body TO lt_message_body.
+  CLEAR : body .
+
+  body = '<BR>'.
+  APPEND body TO lt_message_body.
+  APPEND INITIAL LINE TO lt_message_body.
+  CLEAR : body .
+  body = '6.  Ship to Customer GST No.'.
+  APPEND body TO lt_message_body.
+  CLEAR : body .
+
+  body = '<BR>'.
+  APPEND body TO lt_message_body.
+  APPEND INITIAL LINE TO lt_message_body.
+  CLEAR : body .
+  body = '7.  TCS, If Applicable.'.
+  APPEND body TO lt_message_body.
+  CLEAR : body .
+********************************************
+  body = '<BR>'.
+  APPEND body TO lt_message_body.
+  APPEND INITIAL LINE TO lt_message_body.
+  CLEAR : body .
+  body = 'Any discrepancies should be brought in notice within 24 hours of Dispatch.'.
+  APPEND body TO lt_message_body.
+  CLEAR : body .
+
+  body = '<BR>'.
+  APPEND body TO lt_message_body.
+  APPEND INITIAL LINE TO lt_message_body.
+
+  body = '<BR>'.
+  APPEND body TO lt_message_body.
+  APPEND INITIAL LINE TO lt_message_body.
+
+  CLEAR: body.
+  body = |Thanks & Regards| .
+  APPEND body TO lt_message_body.
+  APPEND INITIAL LINE TO lt_message_body.
+
+  body = '<BR>'.
+  APPEND body TO lt_message_body.
+  APPEND INITIAL LINE TO lt_message_body.
+  CLEAR : body .
+  body = 'Team SAP'.
+  APPEND body TO lt_message_body.
+  APPEND INITIAL LINE TO lt_message_body.
+  CLEAR : body .
+  CLEAR: g_subj, v_name.
+
+*"Create Subject
+  CONCATENATE wa_kna1-name1 p_vbeln1 INTO g_subj SEPARATED BY '/'.
+  lo_document = cl_document_bcs=>create_document(
+    i_type    = 'HTM'
+*   i_type    = 'RAW'
+    i_text    = lt_message_body
+    i_subject = g_subj ).
+
+  i_otf[] = job_output_info-otfdata[].
+
+  CLEAR g_subj.
+  g_subj = 'Invoice.pdf'.
+  CLEAR v_len_in.
+  CONDENSE : v_len_in .
+
+  CALL METHOD lo_document->add_attachment
+    EXPORTING
+      i_attachment_type    = 'PDF'
+      i_attachment_subject = g_subj
+      i_attachment_size    = v_len_in
+      i_att_content_hex    = i_invbin[].
+
+  IF i_pkgbin[] IS NOT INITIAL.
+    g_subj = 'packing.pdf'.
+    CALL METHOD lo_document->add_attachment
+      EXPORTING
+        i_attachment_type    = 'PDF'
+        i_attachment_subject = g_subj
+        i_attachment_size    = v_len_in
+        i_att_content_hex    = i_pkgbin[].
+  ENDIF.
+  IF i_qcbin[] IS NOT INITIAL.
+    g_subj = 'qc.pdf'.
+    CALL METHOD lo_document->add_attachment
+      EXPORTING
+        i_attachment_type    = 'PDF'
+        i_attachment_subject = g_subj
+        i_attachment_size    = v_len_in
+        i_att_content_hex    = i_qcbin[].
+  ENDIF.
+  lo_send_request->set_document( lo_document ).
+  lo_sender = cl_sapuser_bcs=>create( sy-uname ).
+  lo_send_request->set_sender( lo_sender ) .
+  lo_recipient = cl_cam_address_bcs=>create_internet_address( in_mailid ).
+  lo_send_request->add_recipient(
+    EXPORTING
+      i_recipient = lo_recipient
+      i_express   = abap_true ).
+  lo_send_request->add_recipient( lo_recipient ).
+
+  lo_send_request->send(
+    EXPORTING
+      i_with_error_screen = abap_true
+    RECEIVING
+      result              = lv_sent_to_all ).
+  IF sy-subrc = 0.
+    REFRESH : it_email. CLEAR lw_email.
+    lw_email-vbeln      = p_vbeln1.
+    lw_email-kunnr      = ls-kunag.
+    lw_email-to_mail_id = in_mailid.
+    lw_email-sender     = sy-uname.
+    lw_email-send_date  = sy-datum.
+    APPEND lw_email TO it_email.
+    CLEAR: lw_email.
+    IF it_email IS NOT INITIAL.
+      MODIFY zsd_cus_mail_his FROM TABLE it_email.
+    ENDIF.
+    MESSAGE |Mail sent { sy-tcode }|  TYPE 'S'.
+  ENDIF.
+  COMMIT WORK.
+  CLEAR:i_invbin[],i_pkgbin[],i_qcbin[].
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*& Form call_api
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM call_api .
+  SELECT SINGLE * FROM zwhats_app1 INTO @DATA(lv_t) WHERE vbeln = @ls-vbeln.
+  IF sy-subrc NE 0.
+    SHIFT gs_kna1-kunnr LEFT DELETING LEADING '0'.
+
+    i_otf[] = job_output_info-otfdata[].
+
+    "&*-------- Converting O T F
+    CALL FUNCTION 'CONVERT_OTF'
+      EXPORTING
+        format                = 'PDF'
+        max_linewidth         = 132
+      IMPORTING
+        bin_filesize          = v_len_in
+        bin_file              = i_xstring
+      TABLES
+        otf                   = i_otf[]
+        lines                 = gt_lines
+      EXCEPTIONS
+        err_max_linewidth     = 1
+        err_format            = 2
+        err_conv_not_possible = 3
+        OTHERS                = 4.
+
+    CLEAR:i_objbin[].
+    FREE:i_objbin[].
+
+    CLEAR: lo_http, lo_rest, lo_entity, lo_response, t_header,
+        v_in, v_url, v_uri, rv_out, v_xin.
+    CALL FUNCTION 'SCMS_BASE64_ENCODE_STR'
+      EXPORTING
+        input  = merged_document                   "i_xstring
+      IMPORTING
+        output = pdf.
+
+    CONCATENATE '{'
+    '"file": "' pdf '"'
+    '}' INTO v_in.
+
+    v_url = 'https://api.nextel.io/API_V2/Whatsapp/media/YkVDZkVWV0kyeTZ5SkxNK2hwckxoZz09?type=file'.
+
+    cl_http_client=>create_by_url( EXPORTING  url                = v_url
+                                   IMPORTING  client             = lo_http
+                                   EXCEPTIONS argument_not_found = 1
+                                              plugin_not_active  = 2
+                                              internal_error     = 3
+                                              OTHERS             = 4 ).
+    IF sy-subrc = 0.
+      CREATE OBJECT lo_rest EXPORTING io_http_client = lo_http.
+      lo_http->request->set_version( if_http_request=>co_protocol_version_1_0 ).
+      cl_http_utility=>set_request_uri( request = lo_http->request uri = v_uri ).
+      lo_entity = lo_rest->if_rest_client~create_request_entity( ).
+      lo_entity->set_content_type( iv_media_type = if_rest_media_type=>gc_appl_json ).
+      lo_entity->set_string_data( v_in ).
+      lo_rest->if_rest_resource~post( io_entity = lo_entity ).
+      lo_response = lo_rest->if_rest_client~get_response_entity( ).
+      t_header = lo_response->get_header_fields( ).
+      READ TABLE t_header ASSIGNING <header> WITH KEY name = '~status_code'.
+      IF sy-subrc = 0.
+        CASE <header>-value.
+          WHEN '200'.
+            rv_out = lo_response->get_string_data( ).
+          WHEN OTHERS.
+        ENDCASE.
+      ENDIF.
+    ENDIF.
+    BREAK mawai_abap.
+    SPLIT rv_out AT '"media_id"' INTO lv_tran1 lv_tran2.
+    REPLACE ALL OCCURRENCES OF ':' IN lv_tran2 WITH ''.
+    REPLACE ALL OCCURRENCES OF '"' IN lv_tran2 WITH ''.
+    REPLACE ALL OCCURRENCES OF '}' IN lv_tran2 WITH ''.
+    lv_tran3 = lv_tran2.
+    CONDENSE lv_tran3.
+
+    CALL FUNCTION 'SCP_REPLACE_STRANGE_CHARS'
+      EXPORTING
+        intext            = lv_tran3
+      IMPORTING
+        outtext           = lv_tran3
+      EXCEPTIONS
+        invalid_codepage  = 1
+        codepage_mismatch = 2
+        internal_error    = 3
+        cannot_convert    = 4
+        fields_not_type_c = 5
+        OTHERS            = 6.
+
+    IF sy-subrc <> 0.
+* Implement suitable error handling here
+    ENDIF.
+    REPLACE ALL OCCURRENCES OF '.' IN lv_tran3 WITH ''.
+    CONDENSE lv_tran3.
+
+    IF lv_tran2 IS NOT INITIAL.
+      CLEAR :i_objbin[].
+      FREE:i_objbin[].
+      lv_date = ls-fkdat+6(2) && '.' && ls-fkdat+4(2) && '.' && ls-fkdat+0(6).
+      CLEAR: lo_http, lo_rest, lo_entity, lo_response, t_header,
+          v_in, v_url, v_uri, rv_out, v_xin.
+      READ TABLE it_gatentryitm INTO DATA(lv_gate) WITH KEY vbeln_inv = ls-vbeln.
+      READ TABLE it_gate_out INTO DATA(lv_gate1) WITH KEY gateentryno = lv_gate-gateentryno.
+      IF lv_gate1 IS NOT INITIAL.
+        IF gv_lr_no IS INITIAL.
+          gv_lr_no = lv_gate1-lrno.
+          IF gv_lr_no IS INITIAL.
+            gv_lr_no = '-'.
+          ENDIF.
+        ENDIF.
+        IF gv_vehicle_no IS INITIAL.
+          gv_vehicle_no = lv_gate1-truckno.
+          IF gv_vehicle_no IS INITIAL.
+            gv_vehicle_no = '-'.
+          ENDIF.
+        ENDIF.
+        CONCATENATE 'Your material has been dispatched in LR No:' gv_lr_no
+      'and Vehicle No:' gv_vehicle_no 'and track your vehicle with url : ' url INTO gv_lr_no.
+        IF gv_sales_pr IS INITIAL.
+          gv_sales_pr = lv_gate1-driver_name.
+          IF gv_sales_pr IS INITIAL.
+            gv_sales_pr = '-'.
+          ENDIF.
+        ENDIF.
+        IF gv_mobile IS INITIAL.
+          gv_mobile = lv_gate1-driver_no.
+          IF gv_mobile IS INITIAL.
+            gv_mobile = '-'.
+          ENDIF.
+        ENDIF.
+      ENDIF.
+      gv_name1 = gs_kna1-name1 && '' && gs_kna1-kunnr.
+      DATA(lv_num) = '91' && gs_kna1-telf1.
+      CONCATENATE '{'
+       '"type": "richTemplate",'
+       '"templateId": "temp_jspl_final_02",'
+       '"templateLanguage": "en",'
+       '"templateArgs": ['
+           '"' lv_tran3 '","' gs_kna1-name1 '", "' gs_kna1-kunnr '", "' ls-vbeln '", "' lv_date  '","' gv_lr_no  '","' gv_vehicle_no '","' gv_sales_pr '","' gv_mobile '","arg9"'
+       '],'
+       '"file_name":"Sale_Invoice_Docs",'
+       '"sender_phone": "' lv_num '"'  "919506729127
+    '}' INTO v_in.
+
+      v_url = 'https://api.nextel.io/API_V2/Whatsapp/send_template/YkVDZkVWV0kyeTZ5SkxNK2hwckxoZz09'.
+
+      cl_http_client=>create_by_url( EXPORTING  url                = v_url
+                                     IMPORTING  client             = lo_http
+                                     EXCEPTIONS argument_not_found = 1
+                                                plugin_not_active  = 2
+                                                internal_error     = 3
+                                                OTHERS             = 4 ).
+      IF sy-subrc = 0.
+        CREATE OBJECT lo_rest EXPORTING io_http_client = lo_http.
+        lo_http->request->set_version( if_http_request=>co_protocol_version_1_0 ).
+        cl_http_utility=>set_request_uri( request = lo_http->request uri = v_uri ).
+        lo_entity = lo_rest->if_rest_client~create_request_entity( ).
+        lo_entity->set_content_type( iv_media_type = if_rest_media_type=>gc_appl_json ).
+        lo_entity->set_string_data( v_in ).
+        lo_rest->if_rest_resource~post( io_entity = lo_entity ).
+        lo_response = lo_rest->if_rest_client~get_response_entity( ).
+        t_header = lo_response->get_header_fields( ).
+        READ TABLE t_header ASSIGNING <header> WITH KEY name = '~status_code'.
+        IF sy-subrc = 0.
+          CASE <header>-value.
+            WHEN '200'.
+              rv_out = lo_response->get_string_data( ).
+            WHEN OTHERS.
+          ENDCASE.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+    IF rv_out IS NOT INITIAL.
+      gs_wh-kunnr =  gs_kna1-kunnr.
+      gs_wh-vbeln =  ls-vbeln.
+      gs_wh-zphone =  lv_num.           "in_phone.
+      gs_wh-resp = rv_out.
+      gs_wh-zdatum = sy-datum.
+      gs_wh-ztime = sy-uzeit.
+      APPEND gs_wh TO gt_wh.
+      CLEAR gs_wh.
+      IF gt_wh IS NOT INITIAL.
+        MODIFY zwhats_app1 FROM TABLE gt_wh.
+      ENDIF.
+      MESSAGE |Msg sent|  TYPE 'S'.
+**** Commit Work to send the email
+      COMMIT WORK.
+    ENDIF.
+  ELSE.
+    CLEAR merged_document.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form display_otf_base64
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM display_otf_base64 USING lv_type TYPE c.
+  DATA:cp_url            TYPE string.
+  DATA: lr_link          TYPE REF TO if_http_client.
+
+  DATA:gw_http_error_descr1      TYPE string,
+       gw_xml_result_str1        TYPE string,
+       gw_http_error_descr_long1 TYPE xstring,
+       gw_http_return_code1      TYPE i.
+  DATA: size   TYPE i,
+        buffer TYPE xstring,
+        file   TYPE xstring,
+        lines  TYPE tline_tab,
+        pdf    TYPE string.
+  DATA : otf TYPE tsfotf.
+
+  DATA : jname         TYPE string,
+         jsignpage     TYPE string,
+         jsignmode     TYPE string,
+         jdscname      TYPE string,
+         jdscpass      TYPE string,
+         jxloc         TYPE string,
+         jyloc         TYPE string,
+         jsignreason   TYPE string,
+         jsignname     TYPE string,
+         jsigndate     TYPE string,
+         jissignby     TYPE string,
+         jpageno       TYPE string,
+         jdoc          TYPE string,
+         mij_gw_string TYPE string.
+
+  DATA : lv1         TYPE string,
+         lv2         TYPE string,
+         lv3         TYPE string,
+         lv4         TYPE string,
+         lv5         TYPE string,
+         lv6         TYPE string,
+         lv7         TYPE string,
+         lv_date     TYPE string,
+         lv_time     TYPE string,
+         lv_ampm(2)  TYPE c,
+         lv_hr(2)    TYPE c,
+         lv_filename TYPE string.
+
+  DATA : i_load TYPE tsfotf.
+  DATA: itab TYPE TABLE OF string.
+  DATA: wtab TYPE  string.
+  DATA: lv_tab TYPE i.
+
+  SELECT SINGLE a~vbeln, bukrs, werks,fkart INTO @DATA(wa_vb) FROM vbrk AS a INNER JOIN vbrp AS b ON a~vbeln = b~vbeln
+  WHERE a~vbeln = @p_vbeln1.
+  SELECT SINGLE zurl INTO cp_url FROM zdsc_url WHERE bukrs = wa_vb-bukrs.
+  IF cp_url IS INITIAL.
+    MESSAGE 'Please maintain API URL in ZDSC_URL' TYPE 'E'.
+  ENDIF.
+  cl_http_client=>create_by_url(
+    EXPORTING
+      url                = cp_url
+    IMPORTING
+      client             = lr_link
+    EXCEPTIONS
+      argument_not_found = 1
+      plugin_not_active  = 2
+      internal_error     = 3
+      OTHERS             = 4 ).
+
+  lr_link->request->set_header_field( EXPORTING name  = '~request_method'
+                                                value = 'POST' ).
+  lr_link->request->set_header_field( EXPORTING name  = '~server_protocol'
+                                                value = 'HTTP/1.1' ).
+  lr_link->request->set_header_field( EXPORTING name  = 'Content-Type'
+                                                value = 'application/json; charset=utf-8' ).
+
+
+  REFRESH:  gt_otf[].
+  CLEAR : lv_len_in.
+
+** Get Output Text Format (OTF)
+  i_load = gw_return-otfdata.
+  otf = i_load.
+  CALL FUNCTION 'CONVERT_OTF'
+    EXPORTING
+      format                = 'PDF'
+    IMPORTING
+      bin_filesize          = size
+      bin_file              = file
+    TABLES
+      otf                   = otf
+      lines                 = lines
+    EXCEPTIONS
+      err_max_linewidth     = 1
+      err_format            = 2
+      err_conv_not_possible = 3
+      err_bad_otf           = 4
+      OTHERS                = 5.
+  CLEAR otf.
+  CALL FUNCTION 'SCMS_BASE64_ENCODE_STR'
+    EXPORTING
+      input  = file
+    IMPORTING
+      output = pdf.
+  IMPORT lv_rd = lv_rd FROM MEMORY ID 'RD'.
+
+  CONCATENATE '"' p_vbeln1 '",' INTO jname.
+  jsignpage = '"Specific",'.
+  jsignmode = '"",'.
+  jdscname = '"",'.
+  jdscpass = '"",'.
+  IF lv_type = 'I'. "Called for Invoice
+    jxloc = '665,'.
+    jyloc = '580,'.
+  ELSEIF lv_type = 'Q'.
+    IF wa_vb-werks = '2001' OR wa_vb-werks = '2002'.
+      jxloc = '630,'.
+      jyloc = '555,'.
+    ELSEIF wa_vb-werks = '2003'.
+      jxloc = '475,'.
+      jyloc = '782,'.
+    ENDIF.
+  ENDIF.
+  jsignreason =  '"",'.
+  IF lv_type = 'I'.
+    SELECT * INTO TABLE  lt_audit FROM zdsign_audit WHERE vbeln = p_vbeln1.
+    READ TABLE lt_audit INTO lw_audit WITH KEY vbeln = p_vbeln1.
+    IF sy-subrc = 0.
+      IF lw_audit-usr IS INITIAL.
+        SELECT SINGLE * INTO lw_auth FROM zdg_sign_auth WHERE uname = lw_audit-usr AND werks = wa_vb-werks AND fkart = wa_vb-fkart.
+        CONCATENATE '"' lw_auth-name1 '",' INTO jsignname.
+      ELSE.
+        CONCATENATE '"' lw_audit-name1 '",' INTO jsignname. "skgupta
+      ENDIF.
+    ENDIF.
+  ELSE.
+    SELECT * INTO TABLE  lt_audit FROM zdsign_audit WHERE vbeln = gv_tcno.
+    READ TABLE lt_audit INTO lw_audit WITH KEY vbeln = gv_tcno.
+    IF sy-subrc = 0.
+      CONCATENATE '"' lw_audit-name1 '",' INTO jsignname.   "skgupta
+    ENDIF.
+  ENDIF.
+
+  CLEAR : lv_hr,lv_time,lv_date.
+
+  IF lv_type = 'I'.
+    READ TABLE lt_audit INTO lw_audit WITH KEY vbeln = p_vbeln1.
+  ELSE.
+    READ TABLE lt_audit INTO lw_audit WITH KEY vbeln = gv_tcno.
+  ENDIF.
+
+  IF sy-subrc = 0.
+    lv_hr = lw_audit-ztime(2).
+    IF lv_hr GE '12'.
+      lv_ampm = 'PM'.
+      IF lv_hr > '12'.
+        lv_hr = lw_audit-ztime(2) - 12.
+      ENDIF.
+    ELSE.
+      lv_ampm = 'AM'.
+    ENDIF.
+    CONCATENATE '"' lw_audit-zdate+6(2) '/' lw_audit-zdate+4(2) '/' lw_audit-zdate(4) INTO lv_date.
+    CONCATENATE lv_hr ':' lw_audit-ztime+2(2) ':' lw_audit-ztime+4(2) INTO lv_time.
+    CONCATENATE lv_date lv_time lv_ampm '",' INTO jsigndate SEPARATED BY space.
+  ENDIF.
+
+  jissignby = 'true,'.
+  CONCATENATE '"' page_str '",' INTO jpageno.
+  CONCATENATE  '"' pdf '"' INTO jdoc.
+  CONDENSE : jname ,jsignpage ,jxloc, jyloc, jsignreason,jsignname,jissignby,jpageno,jdoc.
+  CONCATENATE  '{' '"Name":' jname '"SignPage":' jsignpage '"SignMode":' jsignmode '"DSCTokenName":' jdscname '"DSCPassword":' jdscpass '"XLoc":' jxloc '"YLoc":' jyloc '"signReason":' jsignreason
+  '"signerName":' jsignname '"signdatetime":' jsigndate '"IsSignedBy":' jissignby '"PageNo":' jpageno '"Document":' jdoc '}' INTO  mij_gw_string.
+  CONDENSE  mij_gw_string.
+*  BREAK mawai_abap.
+  lr_link->request->set_cdata( EXPORTING data = mij_gw_string ).
+
+  CALL METHOD lr_link->send
+    EXPORTING
+      timeout                    = 15   " 15 Seconds
+    EXCEPTIONS
+      http_communication_failure = 1
+      http_invalid_state         = 2.
+
+  CALL METHOD lr_link->receive
+    EXCEPTIONS
+      http_communication_failure = 1
+      http_invalid_state         = 2
+      http_processing_failed     = 3.
+
+
+  lr_link->response->get_status( IMPORTING code = gw_http_return_code1 ).
+  lr_link->response->get_status( IMPORTING reason = gw_http_error_descr1 ).
+  gw_http_error_descr_long1 = lr_link->response->get_raw_message( ).
+
+
+  CALL METHOD lr_link->refresh_request(
+    EXCEPTIONS
+      http_action_failed = 1
+      OTHERS             = 2 ).
+  CLEAR gw_xml_result_str1.
+  gw_xml_result_str1 = lr_link->response->get_cdata( ).
+
+  lr_link->close( ).
+  SPLIT gw_xml_result_str1 AT '"' INTO TABLE itab.
+  DESCRIBE TABLE itab LINES lv_tab.
+  READ TABLE itab INTO wtab INDEX lv_tab - 1.
+  IF wtab = 'Digital Sign successfully'.
+    SPLIT gw_xml_result_str1 AT '"' INTO lv1 lv2 lv3 lv4 lv5 lv6 lv7.
+
+
+    CALL FUNCTION 'SCMS_BASE64_DECODE_STR'
+      EXPORTING
+        input  = lv4
+      IMPORTING
+        output = opdf
+      EXCEPTIONS
+        failed = 1
+        OTHERS = 2.
+    IF sy-subrc <> 0.
+*         Implement suitable error handling here
+    ENDIF.
+
+    IF lv_type = 'I'.
+      CLEAR:i_invbin[].
+      FREE:i_invbin[].
+      CLEAR merged_document.
+
+*      REFRESH merged_document[].
+      CALL FUNCTION 'SCMS_XSTRING_TO_BINARY'
+        EXPORTING
+          buffer     = opdf
+        TABLES
+          binary_tab = i_invbin[].
+      IF sy-subrc IS INITIAL.
+        pdff->add_document( opdf ).
+      ENDIF.
+      pdff->merge_documents(
+        IMPORTING
+          merged_document = merged_document
+      ).
+      CLEAR opdf.
+
+    ELSEIF lv_type = 'Q'.
+      CLEAR:i_qcbin[].
+      FREE:i_qcbin[].
+      CALL FUNCTION 'SCMS_XSTRING_TO_BINARY'
+        EXPORTING
+          buffer     = opdf
+        TABLES
+          binary_tab = i_qcbin[].
+      IF sy-subrc IS INITIAL.
+        pdff->add_document( opdf ).
+      ENDIF.
+      pdff->merge_documents(
+        IMPORTING
+          merged_document = merged_document
+      ).
+      CLEAR opdf.
+    ENDIF.
+  ELSE.
+    MESSAGE 'Error has occured' TYPE 'E'.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form track
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM track .
+  CLEAR: lo_http, lo_rest, lo_entity, lo_response, t_header,
+      v_in, v_url, v_uri, rv_out, v_xin.
+  READ TABLE it_gatentryitm INTO DATA(lv_gate) WITH KEY vbeln_inv = ls-vbeln.
+  READ TABLE it_gate_out INTO DATA(lv_gate1) WITH KEY gateentryno = lv_gate-gateentryno.
+  IF lv_gate1 IS NOT INITIAL.
+    IF gv_lr_no IS INITIAL.
+      gv_lr_no = lv_gate1-lrno.
+      IF gv_lr_no IS INITIAL.
+        gv_lr_no = '-'.
+      ENDIF.
+    ENDIF.
+    IF gv_vehicle_no IS INITIAL.
+      gv_vehicle_no = lv_gate1-truckno.
+      IF gv_vehicle_no IS INITIAL.
+        gv_vehicle_no = '-'.
+      ENDIF.
+    ENDIF.
+  ENDIF.
+
+  CONCATENATE '['
+    '"' gv_vehicle_no '"'
+']' INTO v_in.
+  mi_rlength = strlen( v_in ).
+  v_url = 'https://etranssolutions.com/eTransRestApi/reports/location'.
+
+  cl_http_client=>create_by_url( EXPORTING  url                = v_url
+                                 IMPORTING  client             = lo_http
+                                 EXCEPTIONS argument_not_found = 1
+                                            plugin_not_active  = 2
+                                            internal_error     = 3
+                                            OTHERS             = 4 ).
+  IF sy-subrc = 0.
+    lo_http->request->set_method( 'GET' ).
+    lo_http->request->set_content_type( 'application/json' ) ##NO_TEXT.
+    CALL METHOD lo_http->request->set_header_field
+      EXPORTING
+        name  = 'username'
+        value = 'JYOTISPL'.
+    CALL METHOD lo_http->request->set_header_field
+      EXPORTING
+        name  = 'password'
+        value = 'oG8lv0rKJrA7e2g'.
+
+
+    CALL METHOD lo_http->request->set_cdata
+      EXPORTING
+        data   = v_in
+        offset = 0
+        length = mi_rlength.
+    lo_http->propertytype_logon_popup = if_http_client=>co_disabled.
+    lo_http->send( EXCEPTIONS http_communication_failure = 1
+                              http_invalid_state         = 2 ).
+    IF sy-subrc = 0.
+      lo_http->receive( EXCEPTIONS http_communication_failure = 1
+                                   http_invalid_state         = 2
+                                   http_processing_failed     = 3 ).
+      IF sy-subrc = 0.
+        lo_http->response->get_header_fields( CHANGING fields = t_header ).
+        READ TABLE t_header ASSIGNING <header> WITH KEY name = '~status_code'.
+        IF sy-subrc = 0.
+          CASE <header>-value.
+            WHEN '200'.
+              v_out = lo_http->response->get_cdata( ).
+            WHEN OTHERS.
+          ENDCASE.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+  ENDIF.
+  IF v_out IS NOT INITIAL.
+    SPLIT v_out AT '"liveTrackLink":' INTO DATA(b1) DATA(b2).
+    SPLIT b2 AT '"}],' INTO DATA(b3) DATA(b4).
+    SPLIT b3 AT '"' INTO DATA(b5) DATA(b6).
+    url = b6.
+  ENDIF.
+
+ENDFORM.
