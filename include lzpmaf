@@ -1,0 +1,96 @@
+FUNCTION zfpm_aaf_start_workflow
+  IMPORTING
+    VALUE(iv_cuuid) TYPE sysuuid_x16
+    VALUE(iv_cuuidi) TYPE sysuuid_x16
+    VALUE(iv_reqnr) TYPE char50.
+
+
+
+  CONSTANTS: lc_task TYPE sww_task VALUE 'WS99900133'.
+
+  DATA: lv_wiid       TYPE sww_wiid,
+        lt_input      TYPE TABLE OF swr_cont,
+        lwa_input     TYPE swr_cont,
+        lv_cuuid_char TYPE char32,
+        lv_err        TYPE c LENGTH 1,
+        lv_msg        TYPE string,
+        lv_rc         TYPE sy-subrc.
+
+
+  DATA: lv_wid  TYPE                   sww_wiid,
+        ls_cont TYPE                   swr_cont,
+        lt_cont TYPE STANDARD TABLE OF swr_cont.
+
+
+
+  " ── Step 1: Convert UUID to char for container ──────────────
+  lv_cuuid_char = iv_cuuid.
+
+  " ── Step 2: Build workflow container ────────────────────────
+  " Pass CUUID as key to identify the AAF record in workflow
+*  CLEAR lwa_input.
+*  lwa_input-element  = 'CUUID'.
+*  lwa_input-value    = lv_cuuid_char.
+*  APPEND lwa_input TO lt_input.
+*
+*  CLEAR lwa_input.
+*  lwa_input-element  = 'CUUIDI'.
+*  lwa_input-value    = iv_cuuidi.
+*  APPEND lwa_input TO lt_input.
+
+  CLEAR: ls_cont.
+  ls_cont-element = 'IV_REQNR'.
+  ls_cont-value = iv_reqnr.
+  APPEND ls_cont TO lt_cont.
+
+*    CLEAR: ls_cont.
+*    ls_cont-element = 'IV_REVNR'.
+*    ls_cont-value = is_request-revnr.
+*    APPEND ls_cont TO lt_cont.
+
+  " ── Step 3: Start workflow ───────────────────────────────────
+  CALL FUNCTION 'SAP_WAPI_START_WORKFLOW'
+    EXPORTING
+      task               = lc_task  " ← replace with your workflow ID
+      language           = sy-langu
+      user               = sy-uname
+    IMPORTING
+      return_code        = lv_rc
+      workitem_id        = lv_wiid
+*     error_message      = lv_msg
+    TABLES
+      input_container    = lt_cont
+    EXCEPTIONS
+      workflow_not_found = 1
+      OTHERS             = 2.
+
+
+
+  IF sy-subrc NE 0.
+    MESSAGE 'WORKFLOW WAS NOT TRIGGERED' TYPE 'E'.
+  ELSE.
+    MESSAGE | 'WORKFLOW SUCCESSFULLY TRIGGEREED' WORKITEM - { lv_wiid } | TYPE 'S'.
+  ENDIF.
+
+*  IF sy-subrc <> 0.
+*    " ── Step 4: Log error to trigger table ──────────────────
+*    UPDATE zpm_aaf_wf_trigger
+*      SET status  = '09'        " error
+*      WHERE cuuid     = iv_cuuid
+*        AND item_cuuidi = iv_cuuidi.
+*    COMMIT WORK.
+*    RETURN.
+*  ENDIF.
+*
+*  " ── Step 5: Update trigger table with workflow item ID ──────
+*  UPDATE zpm_aaf_wf_trigger
+*    SET status  = '02'          " processed
+*    WHERE cuuid     = iv_cuuid
+*      AND item_cuuidi = iv_cuuidi.
+
+  COMMIT WORK.
+
+
+
+
+ENDFUNCTION.
