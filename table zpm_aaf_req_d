@@ -1,0 +1,92 @@
+@EndUserText.label : 'Draft table for entity ZR_PM_AAF_REQ'
+@AbapCatalog.enhancement.category : #EXTENSIBLE_ANY
+@AbapCatalog.tableCategory : #TRANSPARENT
+@AbapCatalog.deliveryClass : #A
+@AbapCatalog.dataMaintenance : #RESTRICTED
+define table zpm_aaf_req_d {
+
+  key mandt            : mandt not null;
+  key cuuid            : sysuuid_x16 not null;
+  reqnr                : zfi_reqnr;
+  revnr                : zfi_revno;
+  migo_no              : mblnr;
+  migo_doc_item        : mblpo;
+  ponumber             : ebeln;
+  poitem               : ebelp;
+  anlar                : zpm_anlar;
+  asscat               : zpm_asset_cat;
+  cukyfield            : abap.cuky;
+  @Semantics.amount.currencyCode : 'zpm_aaf_req_d.cukyfield'
+  acquisitionvalue     : bprei;
+  mdmanumber           : stext;
+  assetdescription     : txz01;
+  assetcategory        : zpm_asset_cat;
+  acquisitiondate      : budat;
+  modelnumber          : char20;
+  functionallocation   : ztplnr;
+  objecttype           : zpm_aaf_objtyp;
+  serialnumber         : am_sernr;
+  costcenter           : kostl;
+  manufacturename      : mfrnr;
+  manufacturetel       : ap_phone_number;
+  localvendor          : abap.char(50);
+  vendortel            : ap_phone_number;
+  manufacturepartno    : mfrpn;
+  manufactureaddress   : adrnr;
+  vendorid             : lifnr;
+  localvendoraddress   : addr_tli;
+  ordercomplete        : zpm_int_flag;
+  chemicalcheck        : zpm_int_flag;
+  mechanicalcheck      : zpm_int_flag;
+  remarks              : zfi_notes;
+  functionalcheck      : zpm_int_flag;
+  electricalcheck      : zpm_int_flag;
+  power                : zpm_aaf_power;
+  operationmanual      : zpm_int_flag;
+  mnfmaintplan         : zpm_int_flag;
+  schematicdrawing     : zpm_int_flag;
+  technicaldatasheet   : zpm_int_flag;
+  servicemanual        : zpm_int_flag;
+  leasedserviceagmt    : zpm_int_flag;
+  partlist             : zpm_int_flag;
+  assetcriticality     : zpm_aaf_critic;
+  pmstartdate          : datum;
+  warrantystart        : datum;
+  warrantyend          : gwlen;
+  typeofservice        : zpm_aaf_servtp;
+  mainttype            : zpm_aaf_maintyp;
+  maintworkcenter      : ptr_iscal;
+  pmcyclemonths        : /osp/dt_prdmnth;
+  estlifespanyears     : fc_gwyr;
+  warrantyperiod       : abap.dats;
+  calibrationcycle     : /osp/dt_prdmnth;
+  estretirementdate    : gplab;
+  assetnumber          : anln1;
+  assetsubnumber       : anln2;
+  equipmentnumber      : equnr;
+  reqnrt               : abap.char(50);
+  txz01                : txz01;
+  doccurrency          : waers;
+  @Semantics.amount.currencyCode : 'zpm_aaf_req_d.doccurrency'
+  netpr                : bprei;
+  kostl                : kostl;
+  mfrnr                : mfrnr;
+  mfrpn                : mfrpn;
+  supplier             : md_supplier;
+  materialdoc          : mblnr;
+  materialdocitem      : nsdm_mblpo;
+  materialdocumenttext : sgtxt;
+  material             : matnr;
+  plant                : werks_d;
+  movementtype         : bwart;
+  baseunit             : meins;
+  @Semantics.quantity.unitOfMeasure : 'zpm_aaf_req_d.baseunit'
+  qty                  : erfmg;
+  @Semantics.quantity.unitOfMeasure : 'zpm_aaf_req_d.orderquantityunit'
+  poqty                : bstmg;
+  orderquantityunit    : bstme;
+  postingdate          : budat;
+  seqno                : zfi_seqno;
+  "%admin"             : include sych_bdl_draft_admin_inc;
+
+}
