@@ -1,0 +1,1526 @@
+CLASS lhc_aaf_req_i DEFINITION INHERITING FROM cl_abap_behavior_handler.
+
+  PRIVATE SECTION.
+
+    METHODS validate_item_fields FOR VALIDATE ON SAVE
+      IMPORTING keys FOR aaf_req_i~validate_item_fields.
+    METHODS validate_item_live FOR DETERMINE ON MODIFY
+      IMPORTING keys FOR aaf_req_i~validate_item_live.
+    METHODS get_instance_authorizations FOR INSTANCE AUTHORIZATION
+      IMPORTING keys REQUEST requested_authorizations FOR aaf_req_i RESULT result.
+
+    METHODS get_instance_features FOR INSTANCE FEATURES
+      IMPORTING keys REQUEST requested_features FOR aaf_req_i RESULT result.
+
+    METHODS generate_aaf_bulk FOR MODIFY
+      IMPORTING keys FOR ACTION aaf_req_i~generate_aaf_bulk RESULT result.
+
+    METHODS generate_aaf_single FOR MODIFY
+      IMPORTING keys FOR ACTION aaf_req_i~generate_aaf_single RESULT result.
+    METHODS save_selection FOR DETERMINE ON MODIFY
+      IMPORTING keys FOR aaf_req_i~save_selection.
+    METHODS set_workflow_flag FOR DETERMINE ON SAVE
+      IMPORTING keys FOR aaf_req_i~set_workflow_flag.
+
+ENDCLASS.
+
+CLASS lhc_aaf_req_i IMPLEMENTATION.
+
+  METHOD validate_item_fields.
+**  READ ENTITIES OF zr_pm_aaf_req IN LOCAL MODE
+**    ENTITY aaf_req_i
+**    FIELDS ( Anlar
+**             CostCenter
+**             FunctionalLocation
+**             SerialNumber
+**             ModelNumber
+**             AssetDescription )
+**    WITH CORRESPONDING #( keys )
+**    RESULT DATA(lt_items).
+*
+*
+*
+*      READ ENTITIES OF zr_pm_aaf_req IN LOCAL MODE
+*    ENTITY aaf_req_i
+*    ALL FIELDS WITH CORRESPONDING #( keys )
+*    RESULT DATA(lt_items).
+*
+*  LOOP AT lt_items INTO DATA(lwa_item) .
+*
+*    " Asset Type mandatory check
+*    IF lwa_item-anlar IS INITIAL.
+*      APPEND VALUE #( %tky = lwa_item-%tky )
+*        TO failed-aaf_req_i.
+*      APPEND VALUE #(
+*        %tky = lwa_item-%tky
+*        %msg = new_message_with_text(
+*                 severity = if_abap_behv_message=>severity-error
+*                 text     = |'Asset Type' is mandatory| )
+*      ) TO reported-aaf_req_i.
+*    ENDIF.
+*
+*    " Cost Center mandatory check
+*    IF lwa_item-costcenter IS INITIAL.
+*      APPEND VALUE #( %tky = lwa_item-%tky )
+*        TO failed-aaf_req_i.
+*      APPEND VALUE #(
+*        %tky = lwa_item-%tky
+*        %msg = new_message_with_text(
+*                 severity = if_abap_behv_message=>severity-error
+*                 text     = |'Cost Center' is mandatory| )
+*      ) TO reported-aaf_req_i.
+*    ENDIF.
+*
+*    " Functional Location mandatory check
+*    IF lwa_item-functionallocation IS INITIAL.
+*      APPEND VALUE #( %tky = lwa_item-%tky )
+*        TO failed-aaf_req_i.
+*      APPEND VALUE #(
+*        %tky = lwa_item-%tky
+*        %msg = new_message_with_text(
+*                 severity = if_abap_behv_message=>severity-error
+*                 text     = |'Functional Location' is mandatory| )
+*      ) TO reported-aaf_req_i.
+*    ENDIF.
+*
+*    " Serial Number mandatory check
+*    IF lwa_item-serialnumber IS INITIAL.
+*      APPEND VALUE #( %tky = lwa_item-%tky )
+*        TO failed-aaf_req_i.
+*      APPEND VALUE #(
+*        %tky = lwa_item-%tky
+*        %msg = new_message_with_text(
+*                 severity = if_abap_behv_message=>severity-error
+*                 text     = |'Serial Number' is mandatory| )
+*      ) TO reported-aaf_req_i.
+*    ENDIF.
+*
+*    " Model Number mandatory check
+*    IF lwa_item-modelnumber IS INITIAL.
+*      APPEND VALUE #( %tky = lwa_item-%tky )
+*        TO failed-aaf_req_i.
+*      APPEND VALUE #(
+*        %tky = lwa_item-%tky
+*        %msg = new_message_with_text(
+*                 severity = if_abap_behv_message=>severity-error
+*                 text     = |'Model Number' is mandatory| )
+*      ) TO reported-aaf_req_i.
+*    ENDIF.
+*
+*    " Asset Description mandatory check
+*    IF lwa_item-assetdescription IS INITIAL.
+*      APPEND VALUE #( %tky = lwa_item-%tky )
+*        TO failed-aaf_req_i.
+*      APPEND VALUE #(
+*        %tky = lwa_item-%tky
+*        %msg = new_message_with_text(
+*                 severity = if_abap_behv_message=>severity-error
+*                 text     = |'Asset Description' is mandatory| )
+*      ) TO reported-aaf_req_i.
+*    ENDIF.
+*  ENDLOOP.
+*
+
+  ENDMETHOD.
+
+  METHOD validate_item_live.
+    "when select value from dropdown
+
+*  " Read fields that triggered this determination
+*  READ ENTITIES OF zr_pm_aaf_req IN LOCAL MODE
+*    ENTITY aaf_req_i
+*    FIELDS ( Anlar  ) "asset item
+*    WITH CORRESPONDING #( keys )
+*    RESULT DATA(lt_items).
+*  LOOP AT lt_items INTO DATA(lwa_item).
+*
+*
+*    " Validate Asset Type (Anlar)
+*    IF lwa_item-anlar IS INITIAL.
+*      APPEND VALUE #(
+*        %tky = lwa_item-%tky
+*        %msg = new_message_with_text(
+*                 severity = if_abap_behv_message=>severity-error
+*                 text     = |'Asset Type' is mandatory| )
+*      ) TO reported-aaf_req_i.
+*    ENDIF.
+*  endlOOP.
+*
+  ENDMETHOD.
+*
+
+  METHOD get_instance_authorizations.
+
+
+
+  ENDMETHOD.
+
+
+
+*
+  METHOD generate_aaf_bulk.
+*
+*  " keys = all items user selected via checkboxes
+*
+*  READ ENTITIES OF zr_pm_aaf_req IN LOCAL MODE
+*    ENTITY aaf_req_i
+*    ALL FIELDS WITH CORRESPONDING #( keys )
+*    RESULT DATA(lt_selected_items).
+*
+*  " Check at least one item selected
+*  IF lt_selected_items IS INITIAL.
+*    RETURN.
+*  ENDIF.
+*
+*  LOOP AT lt_selected_items INTO DATA(lwa_item).
+*
+*    " ── STEP 1: Validate mandatory fields ──────────
+*    DATA(lv_error) = abap_false.
+*
+*    IF lwa_item-anlar IS INITIAL.
+*      APPEND VALUE #(
+*        %tky = lwa_item-%tky
+*        %msg = new_message_with_text(
+*                 severity = if_abap_behv_message=>severity-error
+*                 text     = |Item { lwa_item-srno }: 'Asset Type' is mandatory| )
+*      ) TO reported-aaf_req_i.
+*      lv_error = abap_true.
+*    ENDIF.
+*
+*    IF lwa_item-costcenter IS INITIAL.
+*      APPEND VALUE #(
+*        %tky = lwa_item-%tky
+*        %msg = new_message_with_text(
+*                 severity = if_abap_behv_message=>severity-error
+*                 text     = |Item { lwa_item-srno }: 'Cost Center' is mandatory| )
+*      ) TO reported-aaf_req_i.
+*      lv_error = abap_true.
+*    ENDIF.
+*
+*    IF lwa_item-functionallocation IS INITIAL.
+*      APPEND VALUE #(
+*        %tky = lwa_item-%tky
+*        %msg = new_message_with_text(
+*                 severity = if_abap_behv_message=>severity-error
+*                 text     = |Item { lwa_item-srno }: 'Functional Location' is mandatory| )
+*      ) TO reported-aaf_req_i.
+*      lv_error = abap_true.
+*    ENDIF.
+*
+*    IF lwa_item-serialnumber IS INITIAL.
+*      APPEND VALUE #(
+*        %tky = lwa_item-%tky
+*        %msg = new_message_with_text(
+*                 severity = if_abap_behv_message=>severity-error
+*                 text     = |Item { lwa_item-srno }: 'Serial Number' is mandatory| )
+*      ) TO reported-aaf_req_i.
+*      lv_error = abap_true.
+*    ENDIF.
+*
+*    " Skip this item if validation failed
+*    CHECK lv_error = abap_false.
+*
+*    " ── STEP 2: Value threshold check ──────────────
+*    IF lwa_item-totalamount > 2000.
+*
+*      " Route to Finance approval workflow
+*      " TODO: Trigger workflow for Finance approval
+*      APPEND VALUE #(
+*        %tky = lwa_item-%tky
+*        %msg = new_message_with_text(
+*                 severity = if_abap_behv_message=>severity-success
+*                 text     = |Item { lwa_item-srno }: Routed to Finance for approval| )
+*      ) TO reported-aaf_req_i.
+*
+*    ELSE.
+*
+*      " Direct equipment creation
+*      " TODO: Call equipment creation logic (IE01)
+*      APPEND VALUE #(
+*        %tky = lwa_item-%tky
+*        %msg = new_message_with_text(
+*                 severity = if_abap_behv_message=>severity-success
+*                 text     = |Item { lwa_item-srno }: Equipment created directly| )
+*      ) TO reported-aaf_req_i.
+*
+*    ENDIF.
+*
+*    " ── STEP 3: Update item status ──────────────────
+*    MODIFY ENTITIES OF zr_pm_aaf_req IN LOCAL MODE
+*      ENTITY aaf_req_i
+*      UPDATE FIELDS ( assectno )
+*      WITH VALUE #( (
+*          %tky     = lwa_item-%tky
+*          " Generate AAF number per item
+*          assectno = |AAF-{ lwa_item-ponumber }-{ lwa_item-srno }|
+*          %control-assectno = if_abap_behv=>mk-on
+*      ) ).
+
+*
+*
+*  ENDLOOP.
+*
+*  " Return updated items
+*  result = VALUE #(
+*    FOR lwa IN lt_selected_items (
+*      %tky   = lwa-%tky
+*      %param = lwa
+*    )
+*  ).
+
+  ENDMETHOD.
+
+  METHOD generate_aaf_single.
+
+    SELECT SINGLE MAX( reqnr )
+     FROM zpm_aaf_req
+     INTO @DATA(lv_reqnr).
+
+    READ ENTITIES OF zr_pm_aaf_req IN LOCAL MODE ENTITY aaf_req_i
+    ALL FIELDS WITH CORRESPONDING #( keys ) RESULT DATA(lt_item).
+
+    LOOP AT lt_item
+      ASSIGNING FIELD-SYMBOL(<lfs_item>).
+*    WHERE isselected IS NOT INITIAL.
+
+      DATA: ls_req   TYPE zpm_aaf_req_rap,
+            ls_req_t TYPE zpm_aaf_req,
+            lt_appr  TYPE zpm_aaf_appr_t.
+
+      " Increment request number per selected item
+      lv_reqnr = lv_reqnr + 1.
+
+      ls_req-reqnr  = lv_reqnr.
+      ls_req-status = '01'.
+      ls_req-updat  = sy-datum.
+      ls_req-upnam  = sy-uname.
+      ls_req-uptim  = sy-uzeit.
+
+      " Populate key fields from selected item
+      ls_req-cuuid  = <lfs_item>-cuuid.
+
+      MOVE-CORRESPONDING ls_req TO ls_req_t.
+
+      " Create approvers list
+      zcl_pm_aaf=>create_approvars_list(
+        EXPORTING
+          is_request   = ls_req_t
+        IMPORTING
+          et_approvars = lt_appr
+      ).
+
+      " Persist request and approvers
+*    MODIFY zpm_aaf_req_rap FROM ls_req.
+      MODIFY zpm_aaf_appr    FROM TABLE lt_appr.
+
+      IF <lfs_item>-totalamount > 2000.
+
+
+        " Call workflow FM in new LUW - fires after RAP COMMIT
+        CALL FUNCTION 'ZFPM_AAF_START_WORKFLOW'
+          IN BACKGROUND TASK DESTINATION 'NONE'
+          EXPORTING
+            iv_cuuid  = <lfs_item>-cuuid
+            iv_cuuidi = <lfs_item>-cuuidi
+            iv_reqnr  = lv_reqnr.
+      ENDIF.
+
+    ENDLOOP.
+
+    " Insert all trigger records in one shot
+*  CHECK lt_trigger IS NOT INITIAL.
+*  INSERT zpm_aaf_wf_trigger FROM TABLE lt_trigger.
+
+
+*    " keys = single item from detail page
+*
+*    READ ENTITIES OF zr_pm_aaf_req IN LOCAL MODE
+*      ENTITY aaf_req_i
+*      ALL FIELDS WITH CORRESPONDING #( keys )
+*      RESULT DATA(lt_item).
+*
+*    DATA(lwa_item) = VALUE #( lt_item[ 1 ] OPTIONAL ).
+*    CHECK lwa_item IS NOT INITIAL.
+*
+*    " ── STEP 1: Validate mandatory fields ──────────
+*    DATA(lv_error) = abap_false.
+*
+*    IF lwa_item-anlar IS INITIAL.
+*      APPEND VALUE #(
+*        %tky = lwa_item-%tky
+*        %msg = new_message_with_text(
+*                 severity = if_abap_behv_message=>severity-error
+*                 text     = |'Asset Type' is mandatory| )
+*      ) TO reported-aaf_req_i.
+*      lv_error = abap_true.
+*    ENDIF.
+*
+*    IF lwa_item-costcenter IS INITIAL.
+*      APPEND VALUE #(
+*        %tky = lwa_item-%tky
+*        %msg = new_message_with_text(
+*                 severity = if_abap_behv_message=>severity-error
+*                 text     = |'Cost Center' is mandatory| )
+*      ) TO reported-aaf_req_i.
+*      lv_error = abap_true.
+*    ENDIF.
+*
+*    IF lwa_item-functionallocation IS INITIAL.
+*      APPEND VALUE #(
+*        %tky = lwa_item-%tky
+*        %msg = new_message_with_text(
+*                 severity = if_abap_behv_message=>severity-error
+*                 text     = |'Functional Location' is mandatory| )
+*      ) TO reported-aaf_req_i.
+*      lv_error = abap_true.
+*    ENDIF.
+*
+*    IF lwa_item-serialnumber IS INITIAL.
+*      APPEND VALUE #(
+*        %tky = lwa_item-%tky
+*        %msg = new_message_with_text(
+*                 severity = if_abap_behv_message=>severity-error
+*                 text     = |'Serial Number' is mandatory| )
+*      ) TO reported-aaf_req_i.
+*      lv_error = abap_true.
+*    ENDIF.
+*
+*    " Stop if validation failed
+*    CHECK lv_error = abap_false.
+
+*    " ── STEP 2: Value threshold check ──────────────
+*    IF lwa_item-totalamount > 2000.
+*
+*      " Route to Finance approval
+*      APPEND VALUE #(
+*        %tky = lwa_item-%tky
+*        %msg = new_message_with_text(
+*                 severity = if_abap_behv_message=>severity-success
+*                 text     = |Routed to Finance for approval| )
+*      ) TO reported-aaf_req_i.
+*
+*    ELSE.
+*
+*      " Direct equipment creation
+*      APPEND VALUE #(
+*        %tky = lwa_item-%tky
+*        %msg = new_message_with_text(
+*                 severity = if_abap_behv_message=>severity-success
+*                 text     = |Equipment created directly| )
+*      ) TO reported-aaf_req_i.
+*
+*    ENDIF.
+*
+*    " ── STEP 3: Update item with AAF number ────────
+*    MODIFY ENTITIES OF zr_pm_aaf_req IN LOCAL MODE
+*      ENTITY aaf_req_i
+*      UPDATE FIELDS ( assectno )
+*      WITH VALUE #( (
+*          %tky     = lwa_item-%tky
+*          assectno = |AAF-{ lwa_item-ponumber }-{ lwa_item-srno }|
+*          %control-assectno = if_abap_behv=>mk-on
+*      ) ).
+*
+*    " Return result
+*    result = VALUE #(
+*      FOR lwa IN lt_item (
+*        %tky   = lwa-%tky
+*        %param = lwa
+*      )
+*    ).
+
+  ENDMETHOD.
+
+  METHOD save_selection.
+  ENDMETHOD.
+
+***  METHOD get_instance_features.
+***    READ ENTITIES OF zr_pm_aaf_req IN LOCAL MODE
+***        ENTITY aaf_req_i
+***        FIELDS ( workflowtriggered )
+***        WITH CORRESPONDING #( keys )
+***        RESULT DATA(lt_items).
+****    BREAK-POINT.
+***    SELECT cuuid,cuuid_i, workflow_triggered FROM zpm_aaf_req_i INTO TABLE @DATA(lt_wft_flag)
+***    FOR ALL ENTRIES IN @keys WHERE cuuid = @keys-cuuid AND cuuid_i = @keys-cuuidi.
+***
+***LOOP AT lt_items INTO DATA(lwa_item).
+***      DATA(lv_wfflag) = VALUE #( lt_wft_flag[
+***      cuuid = lwa_item-cuuid
+***      cuuid_i = lwa_item-CuuidI  ]-workflow_triggered OPTIONAL ).
+***
+***      IF lwa_item-workflowtriggered = abap_true OR lv_wfflag IS NOT INITIAL.
+***        APPEND VALUE #(
+***          %tky                      = lwa_item-%tky
+***
+***          %field-costcenter         = if_abap_behv=>fc-f-read_only
+***          %field-functionallocation = if_abap_behv=>fc-f-read_only
+***          %field-serialnumber       = if_abap_behv=>fc-f-read_only
+***          %field-anlar              = if_abap_behv=>fc-f-read_only
+***          %field-asscat             = if_abap_behv=>fc-f-read_only
+***          %field-objecttype         = if_abap_behv=>fc-f-read_only
+***          %field-modelnumber        = if_abap_behv=>fc-f-read_only
+***          %field-assetdescription   = if_abap_behv=>fc-f-read_only
+***          %field-manufacturename    = if_abap_behv=>fc-f-read_only
+***          %field-manufacturepartno  = if_abap_behv=>fc-f-read_only
+***          %field-ordercomplete      = if_abap_behv=>fc-f-read_only
+***          %field-functionalcheck    = if_abap_behv=>fc-f-read_only
+***          %field-chemicalcheck      = if_abap_behv=>fc-f-read_only
+***          %field-electricalcheck    = if_abap_behv=>fc-f-read_only
+***          %field-mechanicalcheck    = if_abap_behv=>fc-f-read_only
+***          %field-power              = if_abap_behv=>fc-f-read_only
+***          %field-operationmanual    = if_abap_behv=>fc-f-read_only
+***          %field-servicemanual      = if_abap_behv=>fc-f-read_only
+***          %field-mnfmaintplan       = if_abap_behv=>fc-f-read_only
+***          %field-leasedserviceagmt  = if_abap_behv=>fc-f-read_only
+***          %field-schematicdrawing   = if_abap_behv=>fc-f-read_only
+***          %field-assetcriticality   = if_abap_behv=>fc-f-read_only
+***          %field-pmstartdate        = if_abap_behv=>fc-f-read_only
+***          %field-warrantystart      = if_abap_behv=>fc-f-read_only
+***          %field-mainttype          = if_abap_behv=>fc-f-read_only
+***          %field-pmcyclemonths      = if_abap_behv=>fc-f-read_only
+***          %field-maintworkcenter    = if_abap_behv=>fc-f-read_only
+***          %field-estretirementdate  = if_abap_behv=>fc-f-read_only
+***        ) TO result.
+***      ELSE.
+***        APPEND VALUE #(
+***          %key                      = lwa_item-%key
+***          %is_draft = '01'
+***          %field-costcenter         = if_abap_behv=>fc-f-unrestricted
+***          %field-functionallocation = if_abap_behv=>fc-f-unrestricted
+***          %field-serialnumber       = if_abap_behv=>fc-f-unrestricted
+***          %field-anlar              = if_abap_behv=>fc-f-unrestricted
+***          %field-asscat             = if_abap_behv=>fc-f-unrestricted
+***          %field-objecttype         = if_abap_behv=>fc-f-unrestricted
+***          %field-modelnumber        = if_abap_behv=>fc-f-unrestricted
+***          %field-assetdescription   = if_abap_behv=>fc-f-unrestricted
+***          %field-manufacturename    = if_abap_behv=>fc-f-unrestricted
+***          %field-manufacturepartno  = if_abap_behv=>fc-f-unrestricted
+***          %field-ordercomplete      = if_abap_behv=>fc-f-unrestricted
+***          %field-functionalcheck    = if_abap_behv=>fc-f-unrestricted
+***          %field-chemicalcheck      = if_abap_behv=>fc-f-unrestricted
+***          %field-electricalcheck    = if_abap_behv=>fc-f-unrestricted
+***          %field-mechanicalcheck    = if_abap_behv=>fc-f-unrestricted
+***          %field-power              = if_abap_behv=>fc-f-unrestricted
+***          %field-operationmanual    = if_abap_behv=>fc-f-unrestricted
+***          %field-servicemanual      = if_abap_behv=>fc-f-unrestricted
+***          %field-mnfmaintplan       = if_abap_behv=>fc-f-unrestricted
+***          %field-leasedserviceagmt  = if_abap_behv=>fc-f-unrestricted
+***          %field-schematicdrawing   = if_abap_behv=>fc-f-unrestricted
+***          %field-assetcriticality   = if_abap_behv=>fc-f-unrestricted
+***          %field-pmstartdate        = if_abap_behv=>fc-f-unrestricted
+***          %field-warrantystart      = if_abap_behv=>fc-f-unrestricted
+***          %field-mainttype          = if_abap_behv=>fc-f-unrestricted
+***          %field-pmcyclemonths      = if_abap_behv=>fc-f-unrestricted
+***          %field-maintworkcenter    = if_abap_behv=>fc-f-unrestricted
+***          %field-estretirementdate  = if_abap_behv=>fc-f-unrestricted
+***        ) TO result.
+***      ENDIF.
+***
+***    ENDLOOP.
+***  ENDMETHOD.
+
+METHOD get_instance_features.
+
+  READ ENTITIES OF zr_pm_aaf_req IN LOCAL MODE
+    ENTITY aaf_req_i
+    FIELDS ( Cuuid CuuidI WorkflowTriggered )
+    WITH CORRESPONDING #( keys )
+    RESULT DATA(lt_items).
+
+  IF lt_items IS INITIAL.
+    RETURN.
+  ENDIF.
+
+  " 👉 Explicit type definition (FIX)
+  TYPES: BEGIN OF ty_key,
+           cuuid   TYPE zpm_aaf_req_i-cuuid,
+           cuuid_i TYPE zpm_aaf_req_i-cuuid_i,
+         END OF ty_key.
+
+  DATA: lt_keys_db TYPE STANDARD TABLE OF ty_key WITH EMPTY KEY.
+
+  lt_keys_db = VALUE #(
+    FOR ls IN lt_items
+    WHERE ( cuuid IS NOT INITIAL AND cuuidi IS NOT INITIAL )
+    ( cuuid = ls-cuuid
+      cuuid_i = ls-cuuidi )
+  ).
+
+  IF lt_keys_db IS INITIAL.
+    RETURN.
+  ENDIF.
+
+  SELECT cuuid, cuuid_i, workflow_triggered
+    FROM zpm_aaf_req_i
+    INTO TABLE @DATA(lt_db)
+    FOR ALL ENTRIES IN @lt_keys_db
+    WHERE cuuid   = @lt_keys_db-cuuid
+      AND cuuid_i = @lt_keys_db-cuuid_i.
+
+  LOOP AT lt_items INTO DATA(ls_item).
+
+    DATA(lv_flag) = VALUE #( lt_db[
+      cuuid   = ls_item-cuuid
+      cuuid_i = ls_item-cuuidi ]-workflow_triggered OPTIONAL ).
+
+    APPEND VALUE #(
+      %tky = ls_item-%tky
+
+      %field-costcenter =
+        COND #(
+          WHEN lv_flag = abap_true OR ls_item-workflowtriggered = abap_true
+          THEN if_abap_behv=>fc-f-read_only
+          ELSE if_abap_behv=>fc-f-unrestricted )
+
+    ) TO result.
+
+  ENDLOOP.
+
+ENDMETHOD.
+
+
+  METHOD set_workflow_flag.
+*    BREAK-POINT.
+
+    READ ENTITIES OF zr_pm_aaf_req IN LOCAL MODE
+      ENTITY aaf_req_i
+      FIELDS ( isselected )
+      WITH CORRESPONDING #( keys )
+      RESULT DATA(lt_items).
+
+    DATA lt_update TYPE TABLE FOR UPDATE zr_pm_aaf_req\\aaf_req_i.
+
+    LOOP AT lt_items INTO DATA(ls_item).
+
+      IF ls_item-isselected = abap_true.
+
+        APPEND VALUE #(
+          %tky = ls_item-%tky
+          workflowtriggered = abap_true
+          %control-workflowtriggered = if_abap_behv=>mk-on
+        ) TO lt_update.
+
+      ENDIF.
+
+    ENDLOOP.
+
+    IF lt_update IS NOT INITIAL.
+      MODIFY ENTITIES OF zr_pm_aaf_req IN LOCAL MODE
+        ENTITY aaf_req_i
+        UPDATE FIELDS ( workflowtriggered )
+        WITH lt_update.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+ENDCLASS.
+
+CLASS lhc_aaf_req DEFINITION INHERITING FROM cl_abap_behavior_handler.
+  PRIVATE SECTION.
+
+    METHODS get_instance_authorizations FOR INSTANCE AUTHORIZATION
+      IMPORTING keys REQUEST requested_authorizations FOR aaf_req RESULT result.
+    METHODS fetch_po_dtl FOR DETERMINE ON MODIFY
+      IMPORTING keys FOR aaf_req~fetch_po_dtl.
+    METHODS validate_fields FOR VALIDATE ON SAVE
+      IMPORTING keys FOR aaf_req~validate_fields.
+    METHODS validate_field FOR DETERMINE ON MODIFY
+      IMPORTING keys FOR aaf_req~validate_field.
+    METHODS assetitem FOR DETERMINE ON MODIFY
+      IMPORTING keys FOR aaf_req~assetitem.
+    METHODS sendmail FOR DETERMINE ON SAVE
+      IMPORTING keys FOR aaf_req~sendmail.
+    METHODS set_defaults FOR DETERMINE ON MODIFY
+      IMPORTING keys FOR aaf_req~set_defaults.
+    METHODS update_revnr FOR DETERMINE ON MODIFY
+      IMPORTING keys FOR aaf_req~update_revnr.
+
+ENDCLASS.
+
+CLASS lhc_aaf_req IMPLEMENTATION.
+
+  METHOD get_instance_authorizations.
+  ENDMETHOD.
+
+  METHOD fetch_po_dtl.
+    READ ENTITIES OF zr_pm_aaf_req IN LOCAL MODE
+    ENTITY aaf_req
+*    FIELDS ( ponumber poitem )
+     FIELDS ( ponumber poitem materialdoc materialdocitem )
+    WITH CORRESPONDING #( keys )
+    RESULT DATA(lt_podata).
+
+    IF lt_podata IS NOT INITIAL.
+
+      SELECT podtl~*
+       FROM zi_pm_purchasedocument AS podtl
+       INNER JOIN @lt_podata AS podata
+       ON podtl~ponumber EQ podata~ponumber
+       AND podtl~poitem EQ podata~poitem
+       AND podtl~materialdoc EQ podata~materialdoc
+       AND podtl~materialdocitem EQ podata~materialdocitem
+       INTO TABLE @DATA(lt_ent_podoc).
+
+      IF lt_ent_podoc IS NOT INITIAL.
+
+        DATA(lw_enetpodoc) = lt_ent_podoc[ 1 ].
+
+**IF  zcl_helper=>GV_FLAG IS INITIAL. "+PK
+        MODIFY ENTITIES OF zr_pm_aaf_req IN LOCAL MODE
+        ENTITY aaf_req
+        UPDATE FIELDS ( qty postingdate txz01 poqty migo_no  migo_doc_item )
+        WITH VALUE #(
+          FOR ls_podata IN lt_podata
+          (
+            %tky = ls_podata-%tky
+            qty = lw_enetpodoc-qty
+            postingdate = lw_enetpodoc-postingdate
+            txz01 = lw_enetpodoc-txz01
+            poqty = lw_enetpodoc-poqty
+            migo_no       = lw_enetpodoc-materialdoc
+            migo_doc_item = lw_enetpodoc-materialdocitem
+            %control-qty = if_abap_behv=>mk-on
+            %control-postingdate = if_abap_behv=>mk-on
+            %control-migo_no = if_abap_behv=>mk-on
+            %control-migo_doc_item = if_abap_behv=>mk-on
+          )
+        ).
+
+
+      ENDIF.
+
+
+
+
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD validate_fields.
+
+
+
+  ENDMETHOD.
+
+  METHOD validate_field.
+
+
+
+  ENDMETHOD.
+
+
+
+
+
+
+
+
+  METHOD sendmail.
+
+
+  ENDMETHOD.
+
+
+
+*  BEGIN OF CODE BY PK
+  METHOD assetitem.
+
+    DATA : it_items_create TYPE TABLE FOR CREATE zr_pm_aaf_req\_item.
+
+    " ============================================================
+    " STEP 1: Read current entity state (header + items)
+    " ============================================================
+    READ ENTITIES OF zr_pm_aaf_req IN LOCAL MODE
+      ENTITY aaf_req
+      ALL FIELDS WITH CORRESPONDING #( keys )
+      RESULT DATA(lit_header)
+      ENTITY aaf_req_i
+      ALL FIELDS WITH CORRESPONDING #( keys )
+      RESULT DATA(lit_item).
+
+    " ============================================================
+    " STEP 2: Loop over all header records in keys
+    " ============================================================
+    LOOP AT lit_header INTO DATA(lwa_header).
+
+      " ----------------------------------------------------------
+      " GUARD 1: Skip if MaterialDoc is blank - nothing to process
+      " ----------------------------------------------------------
+**    CHECK lwa_header-materialdoc IS NOT INITIAL.
+
+      CHECK lwa_header-ponumber      IS NOT INITIAL AND
+            lwa_header-poitem        IS NOT INITIAL AND
+            lwa_header-materialdoc   IS NOT INITIAL AND
+            lwa_header-materialdocitem IS NOT INITIAL.
+      " ----------------------------------------------------------
+      " GUARD 2: Skip if reqnr already set
+      " This is the KEY anti-recursion guard.
+      " When our own MODIFY fires the determination again,
+      " reqnr will already be populated so we exit immediately.
+      " ----------------------------------------------------------
+*    CHECK lwa_header-reqnr IS INITIAL.
+      IF lwa_header-reqnrt IS NOT INITIAL.
+
+        DATA(lv_expected_reqnrt_fragment) =
+           |{ lwa_header-ponumber }-{ lwa_header-poitem }-{ lwa_header-materialdoc }-{ lwa_header-materialdocitem }|.
+        IF lwa_header-reqnrt EQ lv_expected_reqnrt_fragment.
+          " Scenario B: Same materialdoc already processed.
+          " This is the recursive re-trigger. Exit immediately.
+          CONTINUE.
+        ELSE.
+          " Scenario C: materialdoc has changed.
+          " Delete existing draft items so we can recreate them.
+          SELECT *
+            FROM zpm_aaf_req_id
+            WHERE cuuid = @lwa_header-cuuid
+            INTO TABLE @DATA(lit_df_tbi).
+
+
+          IF lit_df_tbi IS NOT INITIAL.
+            MODIFY ENTITIES OF zr_pm_aaf_req IN LOCAL MODE
+              ENTITY aaf_req_i
+              DELETE FROM VALUE #(
+                FOR ls_dtb IN lit_df_tbi (
+                  %is_draft   = '01'
+                  %key-cuuid  = ls_dtb-cuuid
+                  %key-cuuidi = ls_dtb-cuuidi
+                )
+              )
+              REPORTED DATA(lit_del_rep)
+              FAILED   DATA(lit_del_fai).
+*            CLEAR LWA_HEADER. "ONCE PREVIOUS RECORD IS DELETED REMOVE PREVIOUS DATA
+          ENDIF.
+
+        ENDIF.
+      ENDIF.
+
+
+      " ============================================================
+      " STEP 3: Validate Purchase Order exists in system
+      " ============================================================
+      SELECT SINGLE purchasingdocument
+        FROM i_purchasingdocument
+        WHERE purchasingdocument = @lwa_header-ponumber
+        INTO @DATA(lv_po).
+
+      IF lv_po IS INITIAL.
+        reported-aaf_req = VALUE #( BASE reported-aaf_req (
+          %tky = lwa_header-%tky
+          %msg = new_message_with_text(
+                   severity = if_abap_behv_message=>severity-error
+                   text     = 'Purchase Order is Not In System' )
+        ) ).
+        CONTINUE.  "skip this header, continue with next
+      ENDIF.
+
+
+      " ============================================================
+      " STEP 5: Fetch PO and MIGO data from purchase document view
+      " ============================================================
+      SELECT *
+        FROM zi_pm_purchasedocument
+        WHERE ponumber    = @lwa_header-ponumber
+          AND poitem      = @lwa_header-poitem
+          AND materialdoc = @lwa_header-materialdoc
+          AND materialdocitem = @lwa_header-materialdocitem
+        INTO TABLE @DATA(lit_tb_data).
+
+      DATA(lwa_tb_data) = VALUE #( lit_tb_data[ 1 ] OPTIONAL ).
+
+      IF lwa_tb_data IS INITIAL.
+        reported-aaf_req = VALUE #( BASE reported-aaf_req (
+          %tky = lwa_header-%tky
+          %msg = new_message_with_text(
+                   severity = if_abap_behv_message=>severity-error
+                   text     = 'No PO / MIGO data found for this document' )
+        ) ).
+        CONTINUE.
+      ENDIF.
+
+
+
+      " ============================================================
+      " STEP 6: Fetch total amount from AAF RAP view
+      " ============================================================
+      SELECT SINGLE *
+        FROM zi_aaf_req_rap
+        WHERE purchaseorder = @lwa_tb_data-ponumber
+        AND   purchaseorderitem   = @lwa_tb_data-poitem
+         AND materialdocument = @lwa_tb_data-materialdoc
+
+        INTO @DATA(ls_totalamount).
+
+      DATA(lv_qty_int) = CONV i( lwa_tb_data-qty ).
+
+
+      IF lv_qty_int <= 0.
+        reported-aaf_req = VALUE #( BASE reported-aaf_req (
+          %tky = lwa_header-%tky
+          %msg = new_message_with_text(
+                   severity = if_abap_behv_message=>severity-error
+                   text     = 'Quantity is zero - cannot create asset items' )
+        ) ).
+        CONTINUE.
+      ENDIF.    " ============================================================
+      " STEP 10: Build item create table - one entry per quantity
+      " e.g. qty = 10 → 10 line items auto-created
+      " ============================================================
+      DATA(lv_sr) = 0.
+
+  " Get next request number once before loop
+      SELECT SINGLE MAX( reqnr )
+        FROM zpm_aaf_req
+        INTO @DATA(lv_reqnr).
+
+**   if lv_reqnr is not iniTIAL.
+**      SELECT *
+**        FROM  ZCPM_AAF_APPR1
+**        WHERE requestNo    = @lv_reqnr
+**        INTO TABLE @DATA(lit_tb_seq).
+**
+***      DATA(lwa_tb_seq) = VALUE #( lit_tb_seq[ 1 ] OPTIONAL ).
+** endif.
+**
+** DATA(lv_seqno) = 0.
+**
+**IF lit_tb_seq IS NOT INITIAL.
+**  lv_seqno = lit_tb_seq[ 1 ]-seqNo.
+**ENDIF.
+
+      lv_reqnr += 1 .
+
+      DO lv_qty_int TIMES.
+        lv_sr = lv_sr + 1.
+
+        it_items_create = VALUE #( BASE it_items_create (
+          %tky      = lwa_header-%tky
+          %is_draft = lwa_header-%is_draft
+          %pky      = lwa_header-%pky
+          %target   = VALUE #( (
+            %key = VALUE #(
+              cuuid  = lwa_header-cuuid
+              cuuidi = cl_system_uuid=>create_uuid_x16_static( )
+            )
+            %cid          = |item_{ lwa_header-cuuid }_{ lv_sr }|
+
+            " ── Sequence and identification ──────────────
+            srno          = lv_sr
+            ponumber      = lwa_header-ponumber
+            asscat        = lwa_header-asscat
+            assetcategory = lwa_header-assetcategory
+            Reqnr = lv_reqnr
+
+            " ── Financial ────────────────────────────────
+            costcenter    = lwa_tb_data-kostl
+            totalamount   = ls_totalamount-totalamount
+            amountcuky    = ls_totalamount-curry
+
+            " ── Manufacturer information ──────────────────
+            manufacturename    = lwa_tb_data-manufacturername  " LFA1-NAME1 via MFRNR
+            manufacturepartno  = lwa_tb_data-mfrpn             " EKPO-MFRPN
+            manufacturetel     = lwa_tb_data-manufacturertel   " ADRC via MFRNR
+            manufactureaddress = lwa_tb_data-vendorstreet      " ADRC via MFRNR
+
+            " ── Vendor information ────────────────────────
+            vendorid           = lwa_tb_data-supplier          " EKKO-LIFNR
+            localvendor        = lwa_tb_data-vendorname        " LFA1-NAME1 via LIFNR
+            vendortel          = lwa_tb_data-vendortel         " ADRC via LIFNR
+            localvendoraddress = lwa_tb_data-vendorcity        " ADRC via LIFNR
+            acquisitionvalue =  ls_totalamount-totalamount
+             cukyfield         = lwa_tb_data-curry
+             acquisitiondate = sy-datum
+             migono = lwa_tb_data-materialdoc
+             migodocitem = lwa_tb_data-materialdocitem
+
+             "-------Approver Detail
+*             seqno = lv_seqno
+
+
+            %is_draft     = lwa_header-%is_draft
+
+            " ── Control flags ────────────────────────────
+            %control = VALUE #(
+              cuuid              = if_abap_behv=>mk-on
+              cuuidi             = if_abap_behv=>mk-on
+              srno               = if_abap_behv=>mk-on
+              ponumber           = if_abap_behv=>mk-on
+              costcenter         = if_abap_behv=>mk-on
+              functionallocation = if_abap_behv=>mk-on
+              assectno           = if_abap_behv=>mk-on
+              reqnr              = if_abap_behv=>mk-on
+              totalamount        = if_abap_behv=>mk-on
+              amountcuky         = if_abap_behv=>mk-on
+              manufacturename    = if_abap_behv=>mk-on
+              manufacturepartno  = if_abap_behv=>mk-on
+              manufacturetel     = if_abap_behv=>mk-on
+              manufactureaddress = if_abap_behv=>mk-on
+              vendorid           = if_abap_behv=>mk-on
+              localvendor        = if_abap_behv=>mk-on
+              vendortel          = if_abap_behv=>mk-on
+              localvendoraddress = if_abap_behv=>mk-on
+              acquisitiondate    = if_abap_behv=>mk-on
+              migono             = if_abap_behv=>mk-on
+              migodocitem        = if_abap_behv=>mk-on
+*              seqno              = if_abap_behv=>mk-on
+            )
+          ) )
+        ) ).
+
+      ENDDO.
+
+
+      DATA(lv_new_reqnr) = |{ lwa_header-ponumber }-{ lwa_header-poitem }-{ lwa_header-materialdoc }-{ lwa_header-materialdocitem }|.
+
+
+
+      " ============================================================
+      " STEP 8: Update header fields
+      " IMPORTANT: materialdoc is intentionally NOT in UPDATE FIELDS
+      " Including materialdoc would re-trigger this determination
+      " causing the infinite recursion / short dump
+      " ============================================================
+      MODIFY ENTITIES OF zr_pm_aaf_req IN LOCAL MODE
+        ENTITY aaf_req
+        UPDATE FIELDS (
+          plant
+          materialdocitem
+          qty
+          poqty
+          reqnrt
+          reqnr
+          acquisitionvalue
+
+          cukyfield
+          assetdescription
+          acquisitiondate
+          manufacturename
+          vendorid
+*          seqno
+        )
+        WITH VALUE #( (
+            %tky             = lwa_header-%tky
+            plant            = lwa_tb_data-plant
+            " materialdoc   --> intentionally excluded, causes infinite loop
+            materialdocitem  = lwa_tb_data-materialdocitem
+            qty              = lwa_tb_data-qty
+            poqty            = lwa_tb_data-poqty
+            reqnrt            = lv_new_reqnr
+            reqnr = lv_reqnr
+            acquisitionvalue = lwa_tb_data-amountcurry
+
+            cukyfield         = lwa_tb_data-curry
+            assetdescription = lwa_tb_data-txz01
+            acquisitiondate  = sy-datum
+            manufacturename  = lwa_tb_data-mfrnr
+            vendorid         = lwa_tb_data-supplier
+
+        ) )
+        FAILED FINAL(lv_fail)
+        REPORTED FINAL(lv_rep).
+
+      " ============================================================
+      " STEP 9: Convert qty (decimal/packed) to integer for DO loop
+      " DO...TIMES requires plain integer - decimal fails silently
+      " ============================================================
+
+    ENDLOOP.  "end LOOP AT lit_header
+
+    " ============================================================
+    " STEP 11: Execute all item creates in one single EML call
+    " Done outside the loop for performance - batch all at once
+    " ============================================================
+    IF it_items_create IS NOT INITIAL.
+
+      MODIFY ENTITIES OF zr_pm_aaf_req IN LOCAL MODE
+        ENTITY aaf_req
+        CREATE BY \_item
+        FROM it_items_create
+        MAPPED DATA(lit_mapped)
+        FAILED DATA(lit_failed)
+        REPORTED DATA(lit_reported2).
+
+      " Report failure details if any items failed to create
+      IF lit_failed IS NOT INITIAL.
+        reported-aaf_req = VALUE #( BASE reported-aaf_req (
+          %tky = lit_header[ 1 ]-%tky
+          %msg = new_message_with_text(
+                   severity = if_abap_behv_message=>severity-error
+                   text     = 'Some asset items failed to create - check data' )
+        ) ).
+      ENDIF.
+
+    ENDIF.
+
+  ENDMETHOD.
+*  END OF CODE BY PK
+
+
+
+  METHOD set_defaults.
+
+    READ ENTITIES OF zr_pm_aaf_req IN LOCAL MODE
+      ENTITY aaf_req
+      FIELDS ( ponumber poitem materialdoc materialdocitem acquisitiondate )
+      WITH CORRESPONDING #( keys )
+      RESULT DATA(lt_data).
+
+    DATA(lw_data) = VALUE #( lt_data[ 1 ] OPTIONAL ).
+    CHECK lw_data IS NOT INITIAL.
+
+    " Only set if blank
+    CHECK lw_data-ponumber IS INITIAL.
+
+    MODIFY ENTITIES OF zr_pm_aaf_req IN LOCAL MODE
+      ENTITY aaf_req
+      UPDATE FIELDS (
+        ponumber
+        poitem
+        materialdoc
+        materialdocitem
+        acquisitiondate
+      )
+      WITH VALUE #( (
+          %tky            = lw_data-%tky
+
+*          " ── Test default values ─────────────
+*          ponumber        = '4500003111'
+*          poitem          = '3'
+*          materialdoc     = '5000005645'
+*          materialdocitem = '3'
+
+      ponumber        = '4500003005'
+          poitem          = '1'
+          materialdoc     = '5000004620'
+          materialdocitem = '1'
+
+          " ── Business default ────────────────
+          acquisitiondate = sy-datum
+
+          " ── Control flags ───────────────────
+          %control-ponumber        = if_abap_behv=>mk-on
+          %control-poitem          = if_abap_behv=>mk-on
+          %control-materialdoc     = if_abap_behv=>mk-on
+          %control-materialdocitem = if_abap_behv=>mk-on
+          %control-acquisitiondate = if_abap_behv=>mk-on
+      ) ).
+
+  ENDMETHOD.
+
+
+  METHOD update_revnr.
+
+" Step 1: Read existing data from Buffer
+*READ ENTITIES OF zr_pm_aaf_req IN LOCAL MODE
+*  ENTITY aaf_req_i
+*  FIELDS ( reqnr revnr )
+*  WITH CORRESPONDING #( keys )
+*  RESULT DATA(lt_result)
+*  FAILED DATA(lt_failed)
+*  reported data(lt_reported).
+
+  READ ENTITIES OF zr_pm_aaf_req IN LOCAL MODE
+  ENTITY aaf_req
+  FIELDS ( reqnr revnr )
+  WITH CORRESPONDING #( keys )
+  RESULT DATA(lt_result)
+  FAILED DATA(lt_failed)
+  reported data(lt_reported).
+
+  if lt_result is not inITIAL.
+  data(lv_reqnr) = lt_result[ 1 ]-reqnr.
+  endif.
+
+SELECT MAX( REVNR ) FROM ZPM_AAF_REQ_I INTO @data(LV_REVNR)  WHERE REQNR =  @lv_reqnr.
+
+
+  " Step 2: Get all unique Request Numbers
+  DATA(lt_req_keys) = lt_result.
+  SORT lt_req_keys BY reqnr.
+  DELETE ADJACENT DUPLICATES FROM lt_req_keys COMPARING reqnr.
+
+  " Step 3: ONE Select for all records (No MAX, No GROUP BY)
+  SELECT reqnr, revnr
+    FROM zpm_aaf_req_i
+    FOR ALL ENTRIES IN @lt_req_keys
+    WHERE reqnr = @lt_req_keys-reqnr
+    INTO TABLE @DATA(lt_db_revs).
+
+  " Step 4: Find the MAX in ABAP memory (Super fast)
+  " Sort descending so the highest revision is at the top for each request
+  SORT lt_db_revs BY reqnr ASCENDING revnr DESCENDING.
+  " Keep only the top record for each request
+  DELETE ADJACENT DUPLICATES FROM lt_db_revs COMPARING reqnr.
+
+  " Step 5: Prepare the update
+  DATA lt_update TYPE TABLE FOR UPDATE zr_pm_aaf_req\\aaf_req_i.
+
+  LOOP AT lt_result ASSIGNING FIELD-SYMBOL(<fs_res>).
+
+    " Now lt_db_revs ONLY contains the max revision for each request
+    READ TABLE lt_db_revs WITH KEY reqnr = <fs_res>-reqnr
+                          ASSIGNING FIELD-SYMBOL(<fs_max>).
+
+    DATA(lv_next_rev) = COND int1( WHEN sy-subrc = 0
+                                THEN <fs_max>-revnr + 1
+                                ELSE 1 ).
+
+    APPEND VALUE #(
+        %tky   = <fs_res>-%tky
+        %cid_ref = <fs_res>-Cuuid
+        revnr  = lv_next_rev
+        %control-revnr = if_abap_behv=>mk-on
+    ) TO lt_update.
+
+  ENDLOOP.
+
+  " Step 6: Final Modifydet
+*  MODIFY ENTITIES OF zr_pm_aaf_req IN LOCAL MODE
+*    ENTITY aaf_req_i
+*    UPDATE FIELDS ( revnr ) WITH lt_update.
+
+endmETHOD.
+ENDCLASS.
+
+CLASS lsc_zr_pm_aaf_req DEFINITION INHERITING FROM cl_abap_behavior_saver.
+  PROTECTED SECTION.
+
+
+    METHODS save_modified REDEFINITION.
+
+
+
+    METHODS cleanup_finalize REDEFINITION.
+
+
+
+
+ENDCLASS.
+
+CLASS lsc_zr_pm_aaf_req IMPLEMENTATION.
+
+  METHOD save_modified.
+
+    DATA: lt_update TYPE TABLE OF zpm_aaf_req_i.
+    DATA: ls_update TYPE  zpm_aaf_req_i.
+
+
+    DATA:lt_orig_tab TYPE TABLE OF zpm_aaf_req.
+    DATA: ls_orig TYPE zpm_aaf_req.
+
+    DATA: lv_reqnr TYPE zpm_aaf_req-reqnr.
+
+
+*  DATA lt_trigger TYPE TABLE OF zpm_aaf_wf_trigger.
+
+*    " Get next request number once before loop
+*    SELECT SINGLE MAX( reqnr )
+*      FROM zpm_aaf_req
+*      INTO @DATA(lv_reqnr).
+
+    LOOP AT create-aaf_req_i
+      ASSIGNING FIELD-SYMBOL(<lfs_item>)
+      WHERE isselected IS NOT INITIAL.
+
+      data(lv_revnr) = <lfs_item>-Revnr.
+*      <lfs_item>-Revnr = lv_revnr .
+
+      MOVE-CORRESPONDING <lfs_item> TO ls_update.
+
+*      BREAK-POINT.
+      lv_reqnr = <lfs_item>-reqnr.
+*      <lfs_item>-Revnr = lv_revnr.
+*ls_orig-reqnr = <lfs_item>-reqnr.
+*ls_orig-revnr = <lfs_item>-revnr.
+        ls_orig-revnr = lv_revnr.
+      ls_orig-anlar = <lfs_item>-anlar.
+      ls_orig-asscat = <lfs_item>-asscat.
+      ls_orig-acqdat = <lfs_item>-acquisitiondate.
+      ls_orig-acqval = '5000.00' ."<lfs_item>-acquisitionvalue = .
+      ls_orig-acqcurr = <lfs_item>-cukyfield.
+      ls_orig-objtyp = <lfs_item>-objecttype.
+      ls_orig-kostl     = <lfs_item>-costcenter.
+      ls_orig-mdmano = <lfs_item>-mdmanumber.
+      ls_orig-model = <lfs_item>-modelnumber.
+      ls_orig-descr = <lfs_item>-assetdescription.
+      ls_orig-manuf = <lfs_item>-manufacturename.
+      ls_orig-maddr = <lfs_item>-manufactureaddress.
+      ls_orig-partno = <lfs_item>-manufacturepartno.
+      ls_orig-mantel = <lfs_item>-manufacturetel.
+      ls_orig-vendor = <lfs_item>-vendorid.
+      ls_orig-vennam = <lfs_item>-localvendor.
+
+      ls_orig-ventel = <lfs_item>-vendortel.
+      ls_orig-orderok = <lfs_item>-ordercomplete.
+      ls_orig-functok = <lfs_item>-functionalcheck.
+      ls_orig-elecok = <lfs_item>-electricalcheck.
+      ls_orig-chemok = <lfs_item>-chemicalcheck.
+      ls_orig-mechok = <lfs_item>-mechanicalcheck.
+      ls_orig-power   = <lfs_item>-power.
+      ls_orig-techrem = <lfs_item>-remarks.
+      ls_orig-opman = <lfs_item>-operationmanual.
+      ls_orig-serman = <lfs_item>-servicemanual.
+      ls_orig-maintplan = <lfs_item>-mnfmaintplan.
+      ls_orig-agreem = <lfs_item>-leasedserviceagmt.
+      ls_orig-drawng = <lfs_item>-schematicdrawing.
+      ls_orig-partlst = <lfs_item>-partlist.
+      ls_orig-datasht = <lfs_item>-technicaldatasheet.
+      ls_orig-critic = <lfs_item>-assetcriticality.
+      ls_orig-maintp = <lfs_item>-mainttype.
+      ls_orig-pmcycle = <lfs_item>-pmcyclemonths.
+      ls_orig-calcycle = <lfs_item>-calibrationcycle.
+      ls_orig-pmstdat = <lfs_item>-pmstartdate.
+      ls_orig-wcenter = <lfs_item>-maintworkcenter.
+      ls_orig-lifespan = <lfs_item>-estlifespanyears.
+      ls_orig-retirdt = <lfs_item>-estretirementdate.
+      ls_orig-warst    = <lfs_item>-warrantystart.
+      ls_orig-waren = <lfs_item>-warrantyend.
+      ls_orig-servtp = <lfs_item>-typeofservice.
+      ls_orig-maintrem = <lfs_item>-maintremarks.
+      ls_orig-anln1 = <lfs_item>-assetnumber.
+      ls_orig-anln2 = <lfs_item>-assetsubnumber.
+      ls_orig-equnr = <lfs_item>-equipmentnumber.
+      ls_orig-locat = <lfs_item>-functionallocation.
+
+
+      DATA: ls_req   TYPE zpm_aaf_req_rap,
+            ls_req_t TYPE zpm_aaf_req,
+            lt_appr  TYPE zpm_aaf_appr_t.
+
+      " Increment request number per selected item
+*      lv_reqnr = lv_reqnr + 1.
+
+      ls_orig-reqnr = lv_reqnr.
+      ls_orig-revnr = lv_revnr.
+
+      ls_orig-reqnr  = lv_reqnr.
+      ls_orig-status = '01'.
+
+
+      ls_req-reqnr  = lv_reqnr.
+      ls_req-status = '01'.
+      ls_req-updat  = sy-datum.
+      ls_req-upnam  = sy-uname.
+      ls_req-uptim  = sy-uzeit.
+
+*      <lfs_item>-reqnr = lv_reqnr.
+      ls_update-reqnr = lv_reqnr.
+
+*       <lfs_item>-Revnr = lv_revnr.
+
+      " Populate key fields from selected item
+      ls_req-cuuid  = <lfs_item>-cuuid.
+
+
+*      MOVE-CORRESPONDING ls_req TO ls_req_t.
+      MOVE-CORRESPONDING ls_orig TO ls_req_t.
+      ls_req_t-locat = <lfs_item>-functionallocation.
+      ls_req_t-anlar = <lfs_item>-anlar.
+
+      " Create approvers list
+      zcl_pm_aaf=>create_approvars_list(
+        EXPORTING
+          is_request   = ls_req_t
+        IMPORTING
+          et_approvars = lt_appr
+      ).
+
+      " Persist request and approvers
+*    MODIFY zpm_aaf_req_rap FROM ls_req.
+      MODIFY zpm_aaf_appr    FROM TABLE lt_appr.
+
+*    " Write trigger record
+*    APPEND VALUE #(
+*      client      = sy-mandt
+*      cuuid       = <lfs_item>-cuuid
+*      item_cuuidi = <lfs_item>-cuuidi
+*      reqnr       = lv_reqnr
+*      status      = '01'
+*      created_on  = sy-datum
+*      created_at  = sy-uzeit
+*      created_by  = sy-uname
+*    ) TO lt_trigger.
+
+      " Call workflow FM in new LUW - fires after RAP COMMIT
+      CALL FUNCTION 'ZFPM_AAF_START_WORKFLOW'
+        IN BACKGROUND TASK DESTINATION 'NONE'
+        EXPORTING
+          iv_cuuid  = <lfs_item>-cuuid
+          iv_cuuidi = <lfs_item>-cuuidi
+          iv_reqnr  = lv_reqnr.
+
+*      ls_update-cuuid = <lfs_item>-cuuid.
+*      ls_update-cuuid_i = <lfs_item>-cuuidi.
+*      ls_update-workflow_triggered = abap_true.
+*      APPEND ls_update TO lt_update.
+
+
+
+*      MOVE-CORRESPONDING ls_update TO ls_orig.
+      APPEND ls_orig TO lt_orig_tab.
+*      UPDATE zpm_aaf_req_i SET workflow_triggered = abap_true
+*         WHERE cuuid_i EQ ls_update-cuuid_i .
+    ENDLOOP.
+
+
+    LOOP AT update-aaf_req_i
+      ASSIGNING <lfs_item>
+      WHERE isselected IS NOT INITIAL.
+
+       clear lv_revnr.
+
+      MOVE-CORRESPONDING <lfs_item> TO ls_update.
+
+*      BREAK-POINT.
+      lv_reqnr = <lfs_item>-reqnr.
+      lv_revnr = <lfs_item>-Revnr.
+*      <lfs_item>-Revnr = lv_revnr + 1.
+
+*ls_orig-reqnr = <lfs_item>-reqnr.
+*ls_orig-revnr = <lfs_item>-revnr.
+      ls_orig-revnr = lv_revnr.
+      ls_orig-anlar = <lfs_item>-anlar.
+      ls_orig-asscat = <lfs_item>-asscat.
+      ls_orig-acqdat = <lfs_item>-acquisitiondate.
+      ls_orig-acqval = '5000.00' ."<lfs_item>-acquisitionvalue = .
+      ls_orig-acqcurr = <lfs_item>-cukyfield.
+      ls_orig-objtyp = <lfs_item>-objecttype.
+      ls_orig-kostl     = <lfs_item>-costcenter.
+      ls_orig-mdmano = <lfs_item>-mdmanumber.
+      ls_orig-model = <lfs_item>-modelnumber.
+      ls_orig-descr = <lfs_item>-assetdescription.
+      ls_orig-manuf = <lfs_item>-manufacturename.
+      ls_orig-maddr = <lfs_item>-manufactureaddress.
+      ls_orig-partno = <lfs_item>-manufacturepartno.
+      ls_orig-mantel = <lfs_item>-manufacturetel.
+      ls_orig-vendor = <lfs_item>-vendorid.
+      ls_orig-vennam = <lfs_item>-localvendor.
+
+      ls_orig-ventel = <lfs_item>-vendortel.
+      ls_orig-orderok = <lfs_item>-ordercomplete.
+      ls_orig-functok = <lfs_item>-functionalcheck.
+      ls_orig-elecok = <lfs_item>-electricalcheck.
+      ls_orig-chemok = <lfs_item>-chemicalcheck.
+      ls_orig-mechok = <lfs_item>-mechanicalcheck.
+      ls_orig-power   = <lfs_item>-power.
+      ls_orig-techrem = <lfs_item>-remarks.
+      ls_orig-opman = <lfs_item>-operationmanual.
+      ls_orig-serman = <lfs_item>-servicemanual.
+      ls_orig-maintplan = <lfs_item>-mnfmaintplan.
+      ls_orig-agreem = <lfs_item>-leasedserviceagmt.
+      ls_orig-drawng = <lfs_item>-schematicdrawing.
+      ls_orig-partlst = <lfs_item>-partlist.
+      ls_orig-datasht = <lfs_item>-technicaldatasheet.
+      ls_orig-critic = <lfs_item>-assetcriticality.
+      ls_orig-maintp = <lfs_item>-mainttype.
+      ls_orig-pmcycle = <lfs_item>-pmcyclemonths.
+      ls_orig-calcycle = <lfs_item>-calibrationcycle.
+      ls_orig-pmstdat = <lfs_item>-pmstartdate.
+      ls_orig-wcenter = <lfs_item>-maintworkcenter.
+      ls_orig-lifespan = <lfs_item>-estlifespanyears.
+      ls_orig-retirdt = <lfs_item>-estretirementdate.
+      ls_orig-warst    = <lfs_item>-warrantystart.
+      ls_orig-waren = <lfs_item>-warrantyend.
+      ls_orig-servtp = <lfs_item>-typeofservice.
+      ls_orig-maintrem = <lfs_item>-maintremarks.
+      ls_orig-anln1 = <lfs_item>-assetnumber.
+      ls_orig-anln2 = <lfs_item>-assetsubnumber.
+      ls_orig-equnr = <lfs_item>-equipmentnumber.
+      ls_orig-locat = <lfs_item>-functionallocation.
+
+
+*      DATA: ls_req   TYPE zpm_aaf_req_rap,
+*            ls_req_t TYPE zpm_aaf_req,
+*            lt_appr  TYPE zpm_aaf_appr_t.
+
+      " Increment request number per selected item
+      lv_reqnr = lv_reqnr + 1.
+
+      ls_orig-reqnr = lv_reqnr.
+      ls_orig-revnr = lv_revnr.
+
+      ls_orig-reqnr  = lv_reqnr.
+      ls_orig-status = '01'.
+
+
+      ls_req-reqnr  = lv_reqnr.
+      ls_req-status = '01'.
+      ls_req-updat  = sy-datum.
+      ls_req-upnam  = sy-uname.
+      ls_req-uptim  = sy-uzeit.
+
+*      <lfs_item>-reqnr = lv_reqnr.
+      ls_update-reqnr = lv_reqnr.
+
+*       <lfs_item>-Revnr = lv_revnr.
+
+      " Populate key fields from selected item
+      ls_req-cuuid  = <lfs_item>-cuuid.
+
+
+*      MOVE-CORRESPONDING ls_req TO ls_req_t.
+      MOVE-CORRESPONDING ls_orig TO ls_req_t.
+      ls_req_t-locat = <lfs_item>-functionallocation.
+      ls_req_t-anlar = <lfs_item>-anlar.
+
+      " Create approvers list
+      zcl_pm_aaf=>create_approvars_list(
+        EXPORTING
+          is_request   = ls_req_t
+        IMPORTING
+          et_approvars = lt_appr
+      ).
+
+      " Persist request and approvers
+*    MODIFY zpm_aaf_req_rap FROM ls_req.
+      MODIFY zpm_aaf_appr    FROM TABLE lt_appr.
+
+
+      " Call workflow FM in new LUW - fires after RAP COMMIT
+      CALL FUNCTION 'ZFPM_AAF_START_WORKFLOW'
+        IN BACKGROUND TASK DESTINATION 'NONE'
+        EXPORTING
+          iv_cuuid  = <lfs_item>-cuuid
+          iv_cuuidi = <lfs_item>-cuuidi
+          iv_reqnr  = lv_reqnr.
+
+*      ls_update-cuuid = <lfs_item>-cuuid.
+*      ls_update-cuuid_i = <lfs_item>-cuuidi.
+*      ls_update-workflow_triggered = abap_true.
+*      APPEND ls_update TO lt_update.
+
+
+
+*      MOVE-CORRESPONDING ls_update TO ls_orig.
+      APPEND ls_orig TO lt_orig_tab.
+*      UPDATE zpm_aaf_req_i SET workflow_triggered = abap_true
+*         WHERE cuuid_i EQ ls_update-cuuid_i .
+    ENDLOOP.
+
+    IF lt_update IS NOT INITIAL.
+
+*    UPDATE zpm_aaf_req_i set workflow_triggered = abap_true
+*    where cuuid_i in .
+
+    ENDIF.
+
+    IF lt_orig_tab IS NOT INITIAL.
+
+      MODIFY zpm_aaf_req FROM TABLE lt_orig_tab.
+
+    ENDIF.
+    " Insert all trigger records in one shot
+*  CHECK lt_trigger IS NOT INITIAL.
+*  INSERT zpm_aaf_wf_trigger FROM TABLE lt_trigger.
+
+  ENDMETHOD.
+
+  METHOD cleanup_finalize.
+  ENDMETHOD.
+
+
+
+
+ENDCLASS.
