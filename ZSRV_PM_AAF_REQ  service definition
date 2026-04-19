@@ -1,0 +1,13 @@
+@EndUserText.label: 'Service Definition of AAF REQ'
+@ObjectModel : {
+leadingEntity : {
+name: 'ZC_PM_AAF_REQ'
+}
+}
+define service ZSRV_PM_AAF_REQ
+  provider contracts odata_v4_ui {
+  expose ZC_PM_AAF_REQ;
+  expose ZC_PM_AFF_REQ_I;
+  expose ZFI_LOCAT_TXT;
+  expose ZI_PM_PURCHASEDOCUMENT;
+}
