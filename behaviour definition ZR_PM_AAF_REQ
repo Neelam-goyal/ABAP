@@ -1,0 +1,341 @@
+managed with additional save with full data implementation in class zcl_r_pm_aaf_req unique;
+strict ( 2 );
+with draft;
+define behavior for ZR_PM_AAF_REQ alias AAF_REQ
+persistent table zpm_aaf_req_rap
+with additional save
+draft table zpm_aaf_req_d
+lock master total etag PONumber
+etag master Reqnr
+
+authorization master ( instance )
+
+{
+  create;
+  update;
+  delete;
+
+  field ( readonly, numbering : managed ) Cuuid;
+  ////  field ( readonly ) Plant, Qty, Baseunit, PoQty, OrderQuantityUnit, TXZ01,PostingDate;// MaterialDoc;
+  field ( readonly ) seqno,Plant, Qty, Baseunit, PoQty, OrderQuantityUnit, TXZ01, PostingDate, AcquisitionValue, CukyField;
+  field ( mandatory ) Anlar, AssetDescription, AssetCategory, AcquisitionDate, ModelNumber, ObjectType
+  , SerialNumber, PONumber, POItem, ManufactureName, ManufactureAddress, VendorId,
+  OrderComplete, ChemicalCheck, MechanicalCheck, FunctionalCheck, ElectricalCheck, Power,
+  OperationManual, MnfMaintPlan, SchematicDrawing, TechnicalDatasheet, ServiceManual,
+  LeasedServiceAgmt, PartList, AssetCriticality, PmStartDate, TypeOfService, MaintType,
+  MaintWorkcenter, PmCycleMonths, EstLifeSpanYears, EstRetirementDate;
+  field ( mandatory ) MaterialDoc;
+  ////  determination fetch_po_dtl on modify { field POItem; }
+  determination fetch_po_dtl on modify
+  {
+    field PONumber, POItem, MaterialDoc, MaterialDocitem; } //new added , MaterialDoc
+  ////  determination assetitem on modify { field PONumber; }
+  determination assetitem on modify { field PONumber; field POItem; field MaterialDoc; field MaterialDocitem; }
+  determination sendmail on save { create; update; }
+  determination validate_field on modify { field PONumber, POItem, MaterialDoc, MaterialDocitem, Cuuid, Anlar; }
+  determination set_defaults on modify { create; }
+  determination update_revnr on modify { create;update; }
+
+  side effects
+  {
+    // When MaterialDoc changes - refresh qty, date, description AND item table
+    ////  field MaterialDoc affects field Qty,
+    field MaterialDocitem affects field Qty,
+    field PostingDate,
+    field txz01,
+    field PONumber,
+    field PoQty,
+    field Reqnr,
+    field seqno,
+    field AcquisitionValue,
+    field CukyField,
+    field AssetDescription,
+    field AcquisitionDate,
+    field ManufactureName,
+    field VendorId,
+    entity _Item;         //- THIS IS THE KEY FIX
+
+    field POItem affects field PoQty, entity _Item;
+
+    //" When PONumber changes - refresh everything including items
+    field PONumber affects $self,
+    entity _Item;        //  " <-- also add here
+     field Reqnr affects entity _Item;
+  }
+
+
+
+  validation validate_fields on save
+  { field
+    Cuuid,  //new added
+    Anlar,
+    AssetCategory,
+    FunctionalLocation,
+    ObjectType,
+    MdmaNumber,
+    ModelNumber,
+    SerialNumber,
+    OrderComplete,
+    ChemicalCheck,
+    MechanicalCheck,
+    FunctionalCheck,
+    ElectricalCheck,
+    Power,
+    OperationManual,
+    MnfMaintPlan,
+    SchematicDrawing,
+    TechnicalDatasheet,
+    ServiceManual,
+    LeasedServiceAgmt,
+    PartList,
+    AssetCriticality,
+    MaintType,
+    PmCycleMonths,
+    EstRetirementDate,
+    CalibrationCycle,
+    PmStartDate,
+    MaintWorkcenter,
+    EstLifeSpanYears,
+    WarrantyStart,
+    WarrantyEnd,
+    TypeOfService; }
+
+  field ( readonly )
+
+  WarrantyPeriod;
+
+
+  field ( readonly )
+  CostCenter,
+  ManufacturePartNo;
+
+
+
+  draft action Edit;
+  draft action Activate ;
+  draft action Discard;
+  draft action Resume;
+
+  draft determine action Prepare
+  {
+    validation validate_fields;             // Header's own validation
+    validation AAF_REQ_I~validate_item_fields; // <--- ADD THIS LINE
+  }
+  association _Item { create; with draft; }
+
+
+  mapping for zpm_aaf_req_rap corresponding
+    {
+      Cuuid              = cuuid;
+      Reqnr              = reqnr;
+      Revnr              = revnr;
+      PONumber           = po_number;
+      Anlar              = anlar;
+      Asscat             = asscat;
+      CukyField          = cuky_field;
+      AcquisitionValue   = acquisition_value;
+      MdmaNumber         = mdma_number;
+      AssetDescription   = asset_description;
+      AssetCategory      = asset_category;
+      AcquisitionDate    = acquisition_date;
+      ModelNumber        = model_number;
+      FunctionalLocation = functional_location;
+      ObjectType         = object_type;
+      SerialNumber       = serial_number;
+      CostCenter         = cost_center;
+      ManufactureName    = manufacture_name;
+      ManufactureTel     = manufacture_tel;
+      LocalVendor        = local_vendor;
+      VendorTel          = vendor_tel;
+      ManufacturePartNo  = manufacture_part_no;
+      ManufactureAddress = manufacture_address;
+      VendorId           = vendor_id;
+      LocalVendorAddress = local_vendor_address;
+      OrderComplete      = order_complete;
+      ChemicalCheck      = chemical_check;
+      MechanicalCheck    = mechanical_check;
+      Remarks            = remarks;
+      FunctionalCheck    = functional_check;
+      ElectricalCheck    = electrical_check;
+      Power              = power;
+      OperationManual    = operation_manual;
+      MnfMaintPlan       = mnf_maint_plan;
+      SchematicDrawing   = schematic_drawing;
+      TechnicalDatasheet = technical_datasheet;
+      ServiceManual      = service_manual;
+      LeasedServiceAgmt  = leased_service_agmt;
+      PartList           = part_list;
+      AssetCriticality   = asset_criticality;
+      PmStartDate        = pm_start_date;
+      WarrantyStart      = warranty_start;
+      WarrantyEnd        = warranty_end;
+      TypeOfService      = type_of_service;
+      MaintType          = maint_type;
+      MaintWorkcenter    = maint_workcenter;
+      PmCycleMonths      = pm_cycle_months;
+      EstLifeSpanYears   = est_life_span_years;
+      WarrantyPeriod     = warranty_period;
+      CalibrationCycle   = calibration_cycle;
+      EstRetirementDate  = est_retirement_date;
+      AssetNumber        = asset_number;
+      AssetSubNumber     = asset_sub_number;
+      EquipmentNumber    = equipment_number;
+      POItem             = po_item;
+      Qty                = migo_qty;
+      Baseunit           = migo_qty_unit;
+      PoQty              = po_qty;
+      OrderQuantityUnit  = po_unit;
+      PostingDate        = posting_date;
+      MaterialDoc        = migo_no;
+      MaterialDocitem    = migo_doc_item;
+      reqnrt = reqnr_t;
+    }
+}
+
+
+define behavior for ZI_PM_AFF_REQ_I alias AAF_REQ_I
+persistent table zpm_aaf_req_i
+with additional save
+draft table zpm_aaf_req_id
+lock dependent by _Header
+authorization dependent by _Header
+{
+
+  update;
+  delete;
+  //  field ( numbering : managed, readonly : update ) CuuidI;
+  field ( readonly ) Cuuid,seqno, SrNo, AssectNo, TotalAmount, amountcuky, AcquisitionValue, CukyField, AcquisitionDate, PoNumber, VendorId, VendorTel;
+  field ( mandatory ) Anlar, ASSCAT, OBJECTTYPE, MODELNUMBER, SERIALNUMBER, ASSETDESCRIPTION,
+  CostCenter, MANUFACTURENAME, ORDERCOMPLETE, FUNCTIONALCHECK, CHEMICALCHECK, ELECTRICALCHECK, MECHANICALCHECK,
+  POWER, OPERATIONMANUAL, SERVICEMANUAL, MNFMAINTPLAN, LEASEDSERVICEAGMT, SCHEMATICDRAWING, MANUFACTUREPARTNO,
+  ASSETCRITICALITY, PMSTARTDATE, WARRANTYSTART, MAINTTYPE, PMCYCLEMONTHS, MAINTWORKCENTER, ESTRETIREMENTDATE;
+
+
+// ADD THIS ONE LINE ONLY
+field ( features : instance ) CostCenter, FunctionalLocation, SerialNumber,
+                               Anlar, AssCat, ObjectType, ModelNumber,
+                               AssetDescription, ManufactureName, ManufacturePartNo,
+                               OrderComplete, FunctionalCheck, ChemicalCheck,
+                               ElectricalCheck, MechanicalCheck, Power,
+                               OperationManual, ServiceManual, MnfMaintPlan,
+                               LeasedServiceAgmt, SchematicDrawing,
+                               AssetCriticality, PmStartDate, WarrantyStart,
+                               MaintType, PmCycleMonths, MaintWorkcenter,
+                               EstRetirementDate;
+
+
+
+  //  " In BDEF under ZI_PM_AFF_REQ_I:
+  determination validate_item_live on modify
+  { field CostCenter,
+    FunctionalLocation,
+    Anlar; }
+
+  action generate_aaf_bulk
+    result [0..*] $self;
+
+
+  action generate_aaf_single
+    result [1] $self;
+
+  validation validate_item_fields on save
+  { field Anlar,
+    CostCenter,
+    FunctionalLocation,
+    SerialNumber,
+    ModelNumber,
+    AssetDescription; }
+
+  association _Header { with draft; }
+
+determination save_selection on modify { field IsSelected; }
+
+side effects
+{
+  field workflowtriggered affects $self;
+}
+
+  mapping for zpm_aaf_req_i corresponding
+    {
+
+      cuuid              = cuuid;
+      cuuidi             = cuuid_i;
+      srno               = sr_no;
+      costcenter         = cost_center;
+      functionallocation = functional_location;
+      remark1            = remark1;
+      remark2            = remark2;
+      assectno           = assectno;
+      totalamount        = totalamount;
+      amountcuky         = amountcuky;
+      ponumber           = po_number;
+      poitem             = po_item;
+      migono             = migo_no;
+      migodocitem        = migo_doc_item;
+      reqnr              = reqnr;
+      revnr              = revnr;
+      anlar              = anlar;
+      asscat             = asscat;
+      cukyfield          = cuky_field;
+      acquisitionvalue   = acquisition_value;
+      mdmanumber         = mdma_number;
+      assetdescription   = asset_description;
+      assetcategory      = asset_category;
+      acquisitiondate    = acquisition_date;
+      modelnumber        = model_number;
+      objecttype         = object_type;
+      serialnumber       = serial_number;
+      manufacturename    = manufacture_name;
+      manufacturetel     = manufacture_tel;
+      localvendor        = local_vendor;
+      vendortel          = vendor_tel;
+      manufacturepartno  = manufacture_part_no;
+      manufactureaddress = manufacture_address;
+      vendorid           = vendor_id;
+      localvendoraddress = local_vendor_address;
+      ordercomplete      = order_complete;
+      chemicalcheck      = chemical_check;
+      mechanicalcheck    = mechanical_check;
+      remarks            = remarks;
+      functionalcheck    = functional_check;
+      electricalcheck    = electrical_check;
+      power              = power;
+      operationmanual    = operation_manual;
+      mnfmaintplan       = mnf_maint_plan;
+      schematicdrawing   = schematic_drawing;
+      technicaldatasheet = technical_datasheet;
+      servicemanual      = service_manual;
+      leasedserviceagmt  = leased_service_agmt;
+      partlist           = part_list;
+      assetcriticality   = asset_criticality;
+      pmstartdate        = pm_start_date;
+      warrantystart      = warranty_start;
+      warrantyend        = warranty_end;
+      typeofservice      = type_of_service;
+      mainttype          = maint_type;
+      maintworkcenter    = maint_workcenter;
+      pmcyclemonths      = pm_cycle_months;
+      estlifespanyears   = est_life_span_years;
+      warrantyperiod     = warranty_period;
+      calibrationcycle   = calibration_cycle;
+      estretirementdate  = est_retirement_date;
+      assetnumber        = asset_number;
+      assetsubnumber     = asset_sub_number;
+      equipmentnumber    = equipment_number;
+      poqty              = po_qty;
+      pounit             = po_unit;
+      migoqty            = migo_qty;
+      migoqtyunit        = migo_qty_unit;
+      postingdate        = posting_date;
+      clearpatientinfo   = clear_patient_info;
+      maintremarks       = maint_remarks;
+      seqno              = seqno;
+      IsSelected    = is_selected;
+      workflowtriggered = workflow_triggered;
+    }
+
+
+determination set_workflow_flag on save { field IsSelected; }
+
+
+}
