@@ -1,0 +1,93 @@
+@EndUserText.label : 'Draft table for entity ZI_PM_AFF_REQ_I'
+@AbapCatalog.enhancement.category : #EXTENSIBLE_ANY
+@AbapCatalog.tableCategory : #TRANSPARENT
+@AbapCatalog.deliveryClass : #A
+@AbapCatalog.dataMaintenance : #RESTRICTED
+define table zpm_aaf_req_id {
+
+  key mandt          : mandt not null;
+  key cuuid          : sysuuid_x16 not null;
+  key cuuidi         : sysuuid_x16 not null;
+  srno               : abap.numc(4);
+  assectno           : abap.char(40);
+  remark1            : abap.char(40);
+  remark2            : abap.char(40);
+  ponumber           : ebeln;
+  poitem             : ebelp;
+  migono             : mblnr;
+  migodocitem        : mjahr;
+  reqnrt             : abap.char(50);
+  reqnr              : zfi_reqnr;
+  revnr              : zfi_revno;
+  @Semantics.quantity.unitOfMeasure : 'zpm_aaf_req_id.pounit'
+  poqty              : bstmg;
+  pounit             : bstme;
+  @Semantics.quantity.unitOfMeasure : 'zpm_aaf_req_id.migoqtyunit'
+  migoqty            : bstmg;
+  migoqtyunit        : bstme;
+  postingdate        : budat;
+  anlar              : zpm_anlar;
+  asscat             : zpm_asset_cat;
+  assetdescription   : txz01;
+  assetcategory      : zpm_asset_cat;
+  assetnumber        : anln1;
+  assetsubnumber     : anln2;
+  @Semantics.amount.currencyCode : 'zpm_aaf_req_id.cukyfield'
+  acquisitionvalue   : bprei;
+  cukyfield          : abap.cuky;
+  acquisitiondate    : budat;
+  modelnumber        : char20;
+  objecttype         : zpm_aaf_objtyp;
+  serialnumber       : am_sernr;
+  mdmanumber         : stext;
+  clearpatientinfo   : abap.char(20);
+  costcenter         : abap.char(10);
+  functionallocation : ztplnr;
+  @Semantics.amount.currencyCode : 'zpm_aaf_req_id.amountcuky'
+  totalamount        : abap.curr(13,2);
+  amountcuky         : abap.cuky;
+  manufacturename    : mfrnr;
+  manufacturetel     : ap_phone_number;
+  manufacturepartno  : mfrpn;
+  manufactureaddress : adrnr;
+  localvendor        : abap.char(50);
+  vendortel          : ap_phone_number;
+  vendorid           : lifnr;
+  localvendoraddress : addr_tli;
+  ordercomplete      : zpm_int_flag;
+  chemicalcheck      : zpm_int_flag;
+  mechanicalcheck    : zpm_int_flag;
+  functionalcheck    : zpm_int_flag;
+  electricalcheck    : zpm_int_flag;
+  power              : zpm_aaf_power;
+  remarks            : zfi_notes;
+  operationmanual    : zpm_int_flag;
+  mnfmaintplan       : zpm_int_flag;
+  schematicdrawing   : zpm_int_flag;
+  technicaldatasheet : zpm_int_flag;
+  servicemanual      : zpm_int_flag;
+  leasedserviceagmt  : zpm_int_flag;
+  partlist           : zpm_int_flag;
+  assetcriticality   : zpm_aaf_critic;
+  pmstartdate        : datum;
+  warrantystart      : datum;
+  warrantyend        : gwlen;
+  warrantyperiod     : abap.dats;
+  typeofservice      : zpm_aaf_servtp;
+  mainttype          : zpm_aaf_maintyp;
+  maintworkcenter    : ptr_iscal;
+  pmcyclemonths      : /osp/dt_prdmnth;
+  estlifespanyears   : fc_gwyr;
+  calibrationcycle   : /osp/dt_prdmnth;
+  estretirementdate  : gplab;
+  maintremarks       : abap.string(256);
+  seqno              : abap.numc(4);
+  assetapprstat      : zfi_appr_stat;
+  currentapprovar    : zfi_apprv_name;
+  currentapprtitle   : zfi_apprv_title;
+  equipmentnumber    : equnr;
+  isselected         : abap_boolean;
+  workflowtriggered  : abap_boolean;
+  "%admin"           : include sych_bdl_draft_admin_inc;
+
+}
