@@ -1,0 +1,206 @@
+@AbapCatalog.viewEnhancementCategory: [#NONE]
+@AccessControl.authorizationCheck: #NOT_REQUIRED
+@EndUserText.label: 'Interface View For AAF REQ Item'
+@Metadata.ignorePropagatedAnnotations: true
+
+define view entity ZI_PM_AFF_REQ_I
+  as select from zpm_aaf_req_i
+
+  // ── Parent association ─────────────────────────────────────────
+  association        to parent ZR_PM_AAF_REQ as _Header               on  $projection.Cuuid = _Header.Cuuid
+
+  // ── Asset Information VH ──────────────────────────────────────
+  association [0..1] to ZCPM_ANLAR_VH        as _AssetTypeVh          on  $projection.Anlar = _AssetTypeVh.Value
+
+  association [0..1] to ZCPM_AAF_OBJTYP      as _ObjTypeVH            on  $projection.ObjectType = _ObjTypeVH.Value
+
+  association [0..1] to ZCPM_AAF_ASSCAT_VH   as _AssetCatVh           on  $projection.AssCat = _AssetCatVh.Value
+
+  association [0..1] to ZCPM_CLR_PI_VH       as _ClrPatientVH         on  $projection.ClearPatientInfo = _ClrPatientVH.Value
+
+  // ── Technical Evaluation VH ───────────────────────────────────
+  association [0..1] to ZCPM_INT_FLAG_VH     as _OrderCompleteVH      on  $projection.OrderComplete = _OrderCompleteVH.Value
+
+  association [0..1] to ZCPM_INT_FLAG_VH     as _ChemicalCheckVH      on  $projection.ChemicalCheck = _ChemicalCheckVH.Value
+
+  association [0..1] to ZCPM_INT_FLAG_VH     as _MechanicalCheckVH    on  $projection.MechanicalCheck = _MechanicalCheckVH.Value
+
+  association [0..1] to ZCPM_INT_FLAG_VH     as _FunctionalCheckVH    on  $projection.FunctionalCheck = _FunctionalCheckVH.Value
+
+  association [0..1] to ZCPM_INT_FLAG_VH     as _ElectricalCheckVH    on  $projection.ElectricalCheck = _ElectricalCheckVH.Value
+
+  association [0..1] to ZCPM_AAF_POWER_VH    as _PowerVH              on  $projection.Power = _PowerVH.Value
+
+  // ── Relevant Documents VH ─────────────────────────────────────
+  association [0..1] to ZCPM_INT_FLAG_VH     as _OperationManualVH    on  $projection.OperationManual = _OperationManualVH.Value
+
+  association [0..1] to ZCPM_INT_FLAG_VH     as _MnfMaintPlanVH       on  $projection.MnfMaintPlan = _MnfMaintPlanVH.Value
+
+  association [0..1] to ZCPM_INT_FLAG_VH     as _SchematicDrawingVH   on  $projection.SchematicDrawing = _SchematicDrawingVH.Value
+
+  association [0..1] to ZCPM_INT_FLAG_VH     as _TechnicalDatasheetVH on  $projection.TechnicalDatasheet = _TechnicalDatasheetVH.Value
+
+  association [0..1] to ZCPM_INT_FLAG_VH     as _ServiceManualVH      on  $projection.ServiceManual = _ServiceManualVH.Value
+
+  association [0..1] to ZCPM_INT_FLAG_VH     as _LeasedServiceAgmtVH  on  $projection.LeasedServiceAgmt = _LeasedServiceAgmtVH.Value
+
+  association [0..1] to ZCPM_INT_FLAG_VH     as _PartListVH           on  $projection.PartList = _PartListVH.Value
+
+  // ── Maintenance Plan VH ───────────────────────────────────────
+  association [0..1] to ZCPM_AAF_CRITIC_VH   as _AssetCriticalityVH   on  $projection.AssetCriticality = _AssetCriticalityVH.Value
+
+  association [0..1] to ZCPM_AAF_SERVTP_VH   as _TypeOfServiceVH      on  $projection.TypeOfService = _TypeOfServiceVH.Value
+
+  association [0..1] to ZCPM_AAF_MAINTYP_VH  as _MaintTypeVH          on  $projection.MaintType = _MaintTypeVH.Value
+
+  association [0..*] to ZCPM_AAF_APPR        as _Approver             on  $projection.reqnr = _Approver.requestNo
+                                                                    //  and $projection.Seri = _Approver.seqNo
+
+{
+  key cuuid                        as Cuuid,
+  key cuuid_i                      as CuuidI,
+
+      // ── Line Item ─────────────────────────────────────────────────
+      sr_no                        as SrNo,
+      assectno                     as AssectNo,
+      remark1                      as Remark1,
+      remark2                      as Remark2,
+
+      // ── PO / MIGO Reference ───────────────────────────────────────
+      po_number                    as PoNumber,
+      po_item                      as PoItem,
+      migo_no                      as MigoNo,
+      migo_doc_item                as MigoDocItem,
+      reqnr_t                      as Reqnrt,
+      reqnr                        as reqnr,
+      revnr                        as Revnr,
+
+      @Semantics.quantity.unitOfMeasure: 'PoUnit'
+      po_qty                       as PoQty,
+      po_unit                      as PoUnit,
+
+      @Semantics.quantity.unitOfMeasure: 'MigoQtyUnit'
+      migo_qty                     as MigoQty,
+      migo_qty_unit                as MigoQtyUnit,
+
+      posting_date                 as PostingDate,
+
+      // ── Asset Information ─────────────────────────────────────────
+      anlar                        as Anlar,
+      asscat                       as AssCat,
+      asset_description            as AssetDescription,
+      asset_category               as AssetCategory,
+      asset_number                 as AssetNumber,
+      asset_sub_number             as AssetSubNumber,
+
+      @Semantics.amount.currencyCode: 'CukyField'
+      acquisition_value            as AcquisitionValue,
+      cuky_field                   as CukyField,
+
+      // ← FIXED: use actual DB field, not session variable
+      // Default value set via determination set_defaults
+      acquisition_date             as AcquisitionDate,
+
+      model_number                 as ModelNumber,
+      object_type                  as ObjectType,
+      serial_number                as SerialNumber,
+      mdma_number                  as MdmaNumber,
+      clear_patient_info           as ClearPatientInfo,
+
+      // ── Cost and Location ─────────────────────────────────────────
+      cost_center                  as CostCenter,
+      functional_location          as FunctionalLocation,
+
+      @Semantics.amount.currencyCode: 'Amountcuky'
+      totalamount                  as TotalAmount,
+      amountcuky                   as Amountcuky,
+
+      // ── Manufacture Information ───────────────────────────────────
+      manufacture_name             as ManufactureName,
+      manufacture_tel              as ManufactureTel,
+      manufacture_part_no          as ManufacturePartNo,
+      manufacture_address          as ManufactureAddress,
+
+      // ── Vendor Information ────────────────────────────────────────
+      local_vendor                 as LocalVendor,
+      vendor_tel                   as VendorTel,
+      vendor_id                    as VendorId,
+      local_vendor_address         as LocalVendorAddress,
+
+      // ── Technical Evaluation ──────────────────────────────────────
+      order_complete               as OrderComplete,
+      chemical_check               as ChemicalCheck,
+      mechanical_check             as MechanicalCheck,
+      functional_check             as FunctionalCheck,
+      electrical_check             as ElectricalCheck,
+      power                        as Power,
+      remarks                      as Remarks,
+
+      // ── Relevant Documents ────────────────────────────────────────
+      operation_manual             as OperationManual,
+      mnf_maint_plan               as MnfMaintPlan,
+      schematic_drawing            as SchematicDrawing,
+      technical_datasheet          as TechnicalDatasheet,
+      service_manual               as ServiceManual,
+      leased_service_agmt          as LeasedServiceAgmt,
+      part_list                    as PartList,
+
+      // ── Maintenance Plan ──────────────────────────────────────────
+      asset_criticality            as AssetCriticality,
+      pm_start_date                as PmStartDate,
+      warranty_start               as WarrantyStart,
+      warranty_end                 as WarrantyEnd,
+      warranty_period              as WarrantyPeriod,
+      type_of_service              as TypeOfService,
+      maint_type                   as MaintType,
+      maint_workcenter             as MaintWorkcenter,
+      pm_cycle_months              as PmCycleMonths,
+      est_life_span_years          as EstLifeSpanYears,
+      calibration_cycle            as CalibrationCycle,
+      est_retirement_date          as EstRetirementDate,
+      maint_remarks                as MaintRemarks,
+
+      //Approver detail
+      _Approver.seqNo as seqno,
+      _Approver[seqNo=3].status    as assetApprStat,
+      _Approver[status='03'].name  as CurrentApprovar,
+      _Approver[status='03'].title as CurrentApprTitle,
+      /* Associations */
+
+      // ── Finance Information ───────────────────────────────────────
+      equipment_number             as EquipmentNumber,
+      is_selected                  as IsSelected,
+      workflow_triggered           as workflowtriggered,
+
+      // ── Associations ──────────────────────────────────────────────
+      _Header,
+
+      // Asset Info VH
+      _AssetTypeVh,
+      _ObjTypeVH,
+      _AssetCatVh,
+      _ClrPatientVH,
+
+      // Technical Evaluation VH
+      _OrderCompleteVH,
+      _ChemicalCheckVH,
+      _MechanicalCheckVH,
+      _FunctionalCheckVH,
+      _ElectricalCheckVH,
+      _PowerVH,
+
+      // Relevant Documents VH
+      _OperationManualVH,
+      _MnfMaintPlanVH,
+      _SchematicDrawingVH,
+      _TechnicalDatasheetVH,
+      _ServiceManualVH,
+      _LeasedServiceAgmtVH,
+      _PartListVH,
+
+      // Maintenance Plan VH
+      _AssetCriticalityVH,
+      _TypeOfServiceVH,
+      _MaintTypeVH,
+      _Approver
+}
