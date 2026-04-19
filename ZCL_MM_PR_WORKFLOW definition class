@@ -1,0 +1,179 @@
+class ZCL_MM_PR_WORKFLOW definition
+  public
+  final
+  create public .
+
+public section.
+
+  interfaces BI_OBJECT .
+  interfaces BI_PERSISTENT .
+  interfaces IF_WORKFLOW .
+
+  types:
+    BEGIN OF gty_org_level,
+        level TYPE i,
+        name  TYPE char10,
+        value TYPE abtel,
+      END OF gty_org_level .
+  types:
+    gty_t_org_level TYPE STANDARD TABLE OF gty_org_level .
+
+  class-methods TASK_PROCESS_PR01
+    importing
+      !MBLNR type MBLNR optional
+      !EBELN type EBELN optional
+      !LS_MSEG type MSEG
+    exporting
+      !APPROVER type ERNAM .
+  class-methods TASK_PROCESS_PR_APPR
+    importing
+      !MBLNR type MBLNR optional
+      !EBELN type EBELN optional
+      !MATERIAL type MATNR optional
+      !PLANT type WERKS_D optional
+      !STORAGE_LOCATION type LGORT_D optional
+      !QUANTITY type ERFMG optional
+      !BASE_UNIT type MEINS optional
+      !EBELP type EBELP optional .
+  class-methods TASK_PROCESS_PR_REJCT
+    importing
+      !MBLNR type MBLNR optional
+      !EBELN type EBELN optional
+      !MATERIAL type MATNR
+      !PLANT type WERKS_D
+      !STORAGE_LOCATION type LGORT_D
+      !QUANTITY type ERFMG
+      !BASE_UNIT type MEINS
+      !EBELP type EBELP
+    exporting
+      !ET_RETURN type BAPIRET2_T .
+protected section.
+private section.
+ENDCLASS.
+
+
+
+CLASS ZCL_MM_PR_WORKFLOW IMPLEMENTATION.
+
+
+  METHOD task_process_pr01.
+
+    SELECT *
+        FROM ekpo
+        INTO TABLE @DATA(lt_ekpo)
+        WHERE ebeln EQ @ebeln.
+
+    SELECT SINGLE *
+      FROM ekko
+      INTO @DATA(ls_ekko)
+      WHERE ebeln EQ @ebeln.
+
+*    IF ls_ekko-ernam IS NOT INITIAL.
+*      approver = |US{ ls_ekko-ernam }|.
+*    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD task_process_pr_appr.
+
+    DATA : ls_header    TYPE bapi2017_gm_head_01,
+           ls_code      TYPE bapi2017_gm_code,
+           ls_item      TYPE bapi2017_gm_item_create,
+           lt_item      TYPE STANDARD TABLE OF bapi2017_gm_item_create,
+           lv_entry_qnt TYPE bapi2017_gm_item_create-entry_qnt,
+           lt_return    TYPE STANDARD TABLE OF bapiret2.
+
+    "" Header data
+    ls_header-pstng_date = sy-datum.
+    ls_header-doc_date = sy-datum.
+    ls_header-pr_uname = sy-uname.
+
+    "" GM Code ( 01 = GR for PO  )
+    ls_code-gm_code = '01'.
+
+    "" Item Data
+    ls_item-material = material.
+    ls_item-plant    = plant.
+    ls_item-stge_loc = storage_location.
+    ls_item-move_type = '105'.
+    ls_item-entry_qnt = CONV #( quantity ).
+    ls_item-entry_uom = base_unit.
+
+    ls_item-po_number = ebeln.
+    ls_item-po_item = ebelp.
+    APPEND ls_item TO lt_item.
+
+    CALL FUNCTION 'BAPI_GOODSMVT_CREATE'
+      EXPORTING
+        goodsmvt_header = ls_header
+        goodsmvt_code   = ls_code
+      TABLES
+        goodsmvt_item   = lt_item
+        return          = lt_return.
+
+    CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+      EXPORTING
+        wait = 'X'.
+
+
+  ENDMETHOD.
+
+
+  METHOD task_process_pr_rejct.
+
+    DATA : ls_header    TYPE bapi2017_gm_head_01,
+           ls_code      TYPE bapi2017_gm_code,
+           ls_item      TYPE bapi2017_gm_item_create,
+           lt_item      TYPE STANDARD TABLE OF bapi2017_gm_item_create,
+           lv_entry_qnt TYPE bapi2017_gm_item_create-entry_qnt,
+           lt_return    TYPE STANDARD TABLE OF bapiret2.
+
+    "" Header data
+    ls_header-pstng_date = sy-datum.
+    ls_header-doc_date = sy-datum.
+    ls_header-pr_uname = sy-uname.
+    ls_header-ref_doc_no = mblnr.
+    "" GM Code ( 01 = GR for PO  )
+    ls_code-gm_code = '01'.
+
+    "" Item Data
+    ls_item-material = material.
+    ls_item-plant    = plant.
+    ls_item-stge_loc = storage_location.
+    ls_item-move_type = '104'."'105'.
+    ls_item-entry_qnt = CONV #( quantity ).
+    ls_item-entry_uom = base_unit.
+    ls_item-ref_doc_yr = sy-datum+0(4).
+
+    ls_item-po_number = ebeln.
+    ls_item-po_item = ebelp.
+    APPEND ls_item TO lt_item.
+
+    CALL FUNCTION 'BAPI_GOODSMVT_CREATE'
+      EXPORTING
+        goodsmvt_header = ls_header
+        goodsmvt_code   = ls_code
+      TABLES
+        goodsmvt_item   = lt_item
+        return          = lt_return.
+
+    CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+      EXPORTING
+        wait = ' '.
+
+    et_return = lt_return.
+  ENDMETHOD.
+
+
+  method BI_PERSISTENT~FIND_BY_LPOR.
+  endmethod.
+
+
+  method BI_PERSISTENT~LPOR.
+  endmethod.
+
+
+  method BI_PERSISTENT~REFRESH.
+  endmethod.
+ENDCLASS.
