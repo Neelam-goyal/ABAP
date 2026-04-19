@@ -1,0 +1,98 @@
+@AccessControl.authorizationCheck: #CHECK
+@EndUserText.label: 'Root View of AAF_REQ'
+@Metadata.ignorePropagatedAnnotations: false
+define root view entity ZR_PM_AAF_REQ
+  as select from    zpm_aaf_req_rap        as _aaf_req
+
+  //    left outer join ZI_PM_PURCHASEDOCUMENT as _podoc on _aaf_req.po_number = _podoc.PONumber
+    left outer join ZI_PM_PURCHASEDOCUMENT as _podoc on  _aaf_req.po_number     = _podoc.PONumber
+                                                     and _aaf_req.po_item       = _podoc.POItem
+                                                     and _aaf_req.migo_no       = _podoc.MaterialDoc
+                                                     and _aaf_req.migo_doc_item = _podoc.MaterialDocitem
+  composition [0..*] of ZI_PM_AFF_REQ_I as _Item
+
+{
+  key _aaf_req.cuuid                as Cuuid,
+      _aaf_req.reqnr                as Reqnr,
+      _aaf_req.revnr                as Revnr,
+      _aaf_req.migo_no              as migo_no,
+      _aaf_req.migo_doc_item        as migo_doc_item,
+      _podoc.PONumber,
+      _podoc.POItem,
+      _aaf_req.anlar                as Anlar,
+      _aaf_req.asscat               as Asscat,
+      _aaf_req.cuky_field           as CukyField,
+      @Semantics.amount.currencyCode: 'CukyField'
+      _aaf_req.acquisition_value    as AcquisitionValue,
+      _aaf_req.mdma_number          as MdmaNumber,
+      _aaf_req.asset_description    as AssetDescription,
+      _aaf_req.asset_category       as AssetCategory,
+      _aaf_req.acquisition_date     as AcquisitionDate,
+      _aaf_req.model_number         as ModelNumber,
+      _aaf_req.functional_location  as FunctionalLocation,
+      _aaf_req.object_type          as ObjectType,
+      _aaf_req.serial_number        as SerialNumber,
+      _aaf_req.cost_center          as CostCenter,
+      _aaf_req.manufacture_name     as ManufactureName,
+      _aaf_req.manufacture_tel      as ManufactureTel,
+      _aaf_req.local_vendor         as LocalVendor,
+      _aaf_req.vendor_tel           as VendorTel,
+      _aaf_req.manufacture_part_no  as ManufacturePartNo,
+      _aaf_req.manufacture_address  as ManufactureAddress,
+      _aaf_req.vendor_id            as VendorId,
+      _aaf_req.local_vendor_address as LocalVendorAddress,
+      _aaf_req.order_complete       as OrderComplete,
+      _aaf_req.chemical_check       as ChemicalCheck,
+      _aaf_req.mechanical_check     as MechanicalCheck,
+      _aaf_req.remarks              as Remarks,
+      _aaf_req.functional_check     as FunctionalCheck,
+      _aaf_req.electrical_check     as ElectricalCheck,
+      _aaf_req.power                as Power,
+      _aaf_req.operation_manual     as OperationManual,
+      _aaf_req.mnf_maint_plan       as MnfMaintPlan,
+      _aaf_req.schematic_drawing    as SchematicDrawing,
+      _aaf_req.technical_datasheet  as TechnicalDatasheet,
+      _aaf_req.service_manual       as ServiceManual,
+      _aaf_req.leased_service_agmt  as LeasedServiceAgmt,
+      _aaf_req.part_list            as PartList,
+      _aaf_req.asset_criticality    as AssetCriticality,
+      _aaf_req.pm_start_date        as PmStartDate,
+      _aaf_req.warranty_start       as WarrantyStart,
+      _aaf_req.warranty_end         as WarrantyEnd,
+      _aaf_req.type_of_service      as TypeOfService,
+      _aaf_req.maint_type           as MaintType,
+      _aaf_req.maint_workcenter     as MaintWorkcenter,
+      _aaf_req.pm_cycle_months      as PmCycleMonths,
+      _aaf_req.est_life_span_years  as EstLifeSpanYears,
+      _aaf_req.warranty_period      as WarrantyPeriod,
+      _aaf_req.calibration_cycle    as CalibrationCycle,
+      _aaf_req.est_retirement_date  as EstRetirementDate,
+      _aaf_req.asset_number         as AssetNumber,
+      _aaf_req.asset_sub_number     as AssetSubNumber,
+      _aaf_req.equipment_number     as EquipmentNumber,
+      _aaf_req.reqnr_t as reqnrt,
+      _podoc.TXZ01,
+      _podoc.DocCurrency,
+      @Semantics.amount.currencyCode: 'DocCurrency'
+      _podoc.NETPR,
+      _podoc.kostl,
+      _podoc.mfrnr,
+      _podoc.MFRPN,
+      _podoc.Supplier,
+      _podoc.MaterialDoc,
+      _podoc.MaterialDocitem,
+      _podoc.MaterialDocumentText,
+      _podoc.Material,
+      _podoc.Plant,
+      _podoc.MovementType,
+      _podoc.Baseunit,
+      @Semantics.quantity.unitOfMeasure: 'Baseunit'
+      _podoc.Qty,
+      @Semantics.quantity.unitOfMeasure: 'OrderQuantityUnit'
+      _podoc.PoQty,
+      _podoc.OrderQuantityUnit,
+      _podoc.PostingDate            as PostingDate,
+      _aaf_req.seqno,
+
+      _Item
+}
