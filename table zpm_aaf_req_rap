@@ -1,0 +1,86 @@
+@EndUserText.label : 'Asset Acceptance Request'
+@AbapCatalog.enhancement.category : #NOT_EXTENSIBLE
+@AbapCatalog.tableCategory : #TRANSPARENT
+@AbapCatalog.deliveryClass : #A
+@AbapCatalog.dataMaintenance : #RESTRICTED
+define table zpm_aaf_req_rap {
+
+  key client           : abap.clnt not null;
+  key cuuid            : sysuuid_x16 not null;
+  po_number            : ebeln;
+  po_item              : ebelp;
+  migo_no              : mblnr;
+  migo_doc_item        : mblpo;
+  reqnr_t              : abap.char(50);
+  reqnr                : zfi_reqnr;
+  revnr                : zfi_revno;
+  anlar                : zpm_anlar;
+  asscat               : zpm_asset_cat;
+  cuky_field           : abap.cuky;
+  @Semantics.amount.currencyCode : 'zpm_aaf_req_rap.cuky_field'
+  acquisition_value    : bprei;
+  mdma_number          : stext;
+  asset_description    : txz01;
+  asset_category       : zpm_asset_cat;
+  acquisition_date     : budat;
+  model_number         : char20;
+  functional_location  : ztplnr;
+  object_type          : zpm_aaf_objtyp;
+  serial_number        : am_sernr;
+  cost_center          : kostl;
+  manufacture_name     : mfrnr;
+  manufacture_tel      : ap_phone_number;
+  local_vendor         : abap.char(50);
+  vendor_tel           : ap_phone_number;
+  manufacture_part_no  : mfrpn;
+  manufacture_address  : adrnr;
+  vendor_id            : lifnr;
+  local_vendor_address : addr_tli;
+  order_complete       : zpm_int_flag;
+  chemical_check       : zpm_int_flag;
+  mechanical_check     : zpm_int_flag;
+  remarks              : zfi_notes;
+  functional_check     : zpm_int_flag;
+  electrical_check     : zpm_int_flag;
+  power                : zpm_aaf_power;
+  operation_manual     : zpm_int_flag;
+  mnf_maint_plan       : zpm_int_flag;
+  schematic_drawing    : zpm_int_flag;
+  technical_datasheet  : zpm_int_flag;
+  service_manual       : zpm_int_flag;
+  leased_service_agmt  : zpm_int_flag;
+  part_list            : zpm_int_flag;
+  asset_criticality    : zpm_aaf_critic;
+  pm_start_date        : datum;
+  warranty_start       : datum;
+  warranty_end         : gwlen;
+  type_of_service      : zpm_aaf_servtp;
+  maint_type           : zpm_aaf_maintyp;
+  maint_workcenter     : ptr_iscal;
+  pm_cycle_months      : /osp/dt_prdmnth;
+  est_life_span_years  : fc_gwyr;
+  warranty_period      : abap.dats;
+  calibration_cycle    : /osp/dt_prdmnth;
+  est_retirement_date  : gplab;
+  asset_number         : anln1;
+  asset_sub_number     : anln2;
+  equipment_number     : equnr;
+  status               : zfi_appr_stat;
+  title                : zfi_apprv_title;
+  name                 : zfi_apprv_name;
+  netid                : xubname;
+  email                : comm_id_long;
+  notes                : zfi_notes;
+  updat                : updat;
+  uptim                : uptim;
+  upnam                : upnam;
+  @Semantics.quantity.unitOfMeasure : 'zpm_aaf_req_rap.po_unit'
+  po_qty               : bstmg;
+  po_unit              : bstme;
+  @Semantics.quantity.unitOfMeasure : 'zpm_aaf_req_rap.migo_qty_unit'
+  migo_qty             : bstmg;
+  migo_qty_unit        : bstme;
+  posting_date         : budat;
+  seqno                : zfi_seqno;
+
+}
