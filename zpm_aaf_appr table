@@ -1,0 +1,23 @@
+@EndUserText.label : 'AAF Approval Details'
+@AbapCatalog.enhancement.category : #NOT_EXTENSIBLE
+@AbapCatalog.tableCategory : #TRANSPARENT
+@AbapCatalog.deliveryClass : #A
+@AbapCatalog.dataMaintenance : #RESTRICTED
+define table zpm_aaf_appr {
+
+  key mandt : mandt not null;
+  key reqnr : zfi_reqnr not null;
+  key revnr : zfi_revno not null;
+  key seqnr : zfi_seqno not null;
+  wf_id     : sww_wiid;
+  status    : zfi_appr_stat;
+  title     : zfi_apprv_title;
+  name      : zfi_apprv_name;
+  netid     : xubname;
+  email     : comm_id_long;
+  notes     : zfi_notes;
+  updat     : updat;
+  uptim     : uptim;
+  upnam     : upnam;
+
+}
