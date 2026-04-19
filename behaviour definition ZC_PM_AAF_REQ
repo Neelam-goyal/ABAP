@@ -1,0 +1,38 @@
+projection;
+strict ( 1 );
+use draft;
+use side effects;
+
+define behavior for ZC_PM_AAF_REQ //alias <alias_name>
+{
+  use create;
+  use update;
+ use delete;
+
+  use action Edit;
+  use action Activate;
+  use action Discard;
+  use action Resume;
+  use action Prepare;
+
+  use association _Item { create; with draft; }
+//    use association _Item {  with draft; }
+}
+
+define behavior for ZC_PM_AFF_REQ_I
+{
+  use update;
+  use delete;
+
+  //    " ← ADD this - exposes Prepare to UI
+//   use action Prepare;
+
+//  " ← ADD both actions:
+  use action generate_aaf_bulk;   // " item list button
+  use action generate_aaf_single; // " item detail button
+
+  use association _Header { with draft; }
+
+
+
+}
