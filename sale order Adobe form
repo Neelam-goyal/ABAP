@@ -1,0 +1,1274 @@
+connectivity create : ZHTTP_WORKSORDER_PRINT
+handler class       :  ZCL_HTTP_WORK_ORDER
+
+CLASS zcl_http_work_order DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+    INTERFACES if_http_service_extension.
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+    METHODS: get_html RETURNING VALUE(html) TYPE string.
+    METHODS: post_html
+      IMPORTING
+                salesorderno TYPE string
+      RETURNING VALUE(html)  TYPE string.
+
+    CLASS-DATA url TYPE string.
+ENDCLASS.
+
+
+
+CLASS ZCL_HTTP_WORK_ORDER IMPLEMENTATION.
+
+
+  METHOD get_html.    "Response HTML for GET request
+
+    html = |<html> \n| &&
+  |<body> \n| &&
+  |<title>Works Order </title> \n| &&
+  |<form action="{ url }" method="POST">\n| &&
+  |<H2>GTZ Works Order Print</H2> \n| &&
+  |<label for="fname">Works Order:  </label> \n| &&
+  |<input type="text" id="salesorderno" name="salesorderno" required ><br><br> \n| &&
+  |<input type="submit" value="Submit"> \n| &&
+  |</form> | &&
+  |</body> \n| &&
+  |</html> | .
+
+
+
+
+
+  ENDMETHOD.
+
+
+  METHOD if_http_service_extension~handle_request.
+
+*    DATA(req) = request->get_form_fields(  ).
+*    response->set_header_field( i_name = 'Access-Control-Allow-Origin' i_value = '*' ).
+*    response->set_header_field( i_name = 'Access-Control-Allow-Credentials' i_value = 'true' ).
+*
+*    DATA json TYPE string .
+*    DATA salesorderno TYPE string.
+*    DATA salesorder TYPE n LENGTH 10.
+*
+*    salesorderno = VALUE #( req[ name = 'salesorderno' ]-value OPTIONAL ) .
+*
+*    json =  VALUE #( req[ name = 'json' ]-value OPTIONAL ) .
+*    salesorder = salesorderno .
+*
+*    SELECT SINGLE * FROM i_salesdocumentitem WITH PRIVILEGED ACCESS WHERE salesdocument = @salesorder
+*    INTO @DATA(check).
+*    IF check IS NOT INITIAL .
+*      DATA(pdf2) = ywk_or_print_class=>read_posts( salesorderno = salesorderno ) .
+*    ELSE .
+*      pdf2 = 'Error Please Check Plant'.
+*    ENDIF.
+    DATA(req) = request->get_form_fields(  ).
+    response->set_header_field( i_name = 'Access-Control-Allow-Origin' i_value = '*' ).
+    response->set_header_field( i_name = 'Access-Control-Allow-Credentials' i_value = 'true' ).
+    DATA(cookies)  = request->get_cookies(  ) .
+
+    DATA req_host TYPE string.
+    DATA req_proto TYPE string.
+    DATA req_uri TYPE string.
+    DATA json TYPE string .
+
+    req_host = request->get_header_field( i_name = 'Host' ).
+    req_proto = request->get_header_field( i_name = 'X-Forwarded-Proto' ).
+    IF req_proto IS INITIAL.
+      req_proto = 'https'.
+    ENDIF.
+*     req_uri = request->get_request_uri( ).
+    DATA(symandt) = sy-mandt.
+    req_uri = '/sap/bc/http/sap/ZHTTP_WORKSORDER_PRINT?sap-client=080'.
+    url = |{ req_proto }://{ req_host }{ req_uri }client={ symandt }|.
+
+
+    CASE request->get_method( ).
+
+      WHEN CONV string( if_web_http_client=>get ).
+
+        response->set_text( get_html( ) ).
+
+      WHEN CONV string( if_web_http_client=>post ).
+
+        DATA(vbeln) = request->get_form_field( `salesorderno` ).
+
+        SELECT SINGLE FROM I_salesdocument
+        FIELDS SalesDocument WHERE SalesDocument = @vbeln
+        INTO @DATA(lv_so).
+
+        IF lv_so IS NOT INITIAL.
+
+          TRY.
+              DATA(pdf) = ywk_or_print_class=>read_posts( salesorderno = vbeln ) .
+
+*            response->set_text( pdf ).
+
+              DATA(html) = |<html> | &&
+                             |<body> | &&
+                               | <iframe src="data:application/pdf;base64,{ pdf }" width="100%" height="100%"></iframe>| &&
+                             | </body> | &&
+                           | </html>|.
+
+
+
+              response->set_header_field( i_name = 'Content-Type' i_value = 'text/html' ).
+              response->set_text( pdf ).
+            CATCH cx_static_check INTO DATA(er).
+              response->set_text( er->get_longtext(  ) ).
+          ENDTRY.
+        ELSE.
+          response->set_text( 'Works Order does not exist.' ).
+        ENDIF.
+
+    ENDCASE.
+
+  ENDMETHOD.
+
+
+  METHOD post_html.
+
+    html = |<html> \n| &&
+   |<body> \n| &&
+   |<title>Works Order</title> \n| &&
+   |<form action="{ url }" method="Get">\n| &&
+   |<H2>Works Order Print Success </H2> \n| &&
+   |<input type="submit" value="Go Back"> \n| &&
+   |</form> | &&
+   |</body> \n| &&
+   |</html> | .
+  ENDMETHOD.
+ENDCLASS.
+
+
+
+CLASS ywk_or_print_class DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+*    INTERFACES if_oo_adt_classrun .
+    CLASS-DATA : access_token TYPE string .
+    CLASS-DATA : xml_file TYPE string .
+    CLASS-DATA : var1 TYPE vbeln.
+    TYPES :
+      BEGIN OF struct,
+        xdp_template TYPE string,
+        xml_data     TYPE string,
+        form_type    TYPE string,
+        form_locale  TYPE string,
+        tagged_pdf   TYPE string,
+        embed_font   TYPE string,
+      END OF struct."
+
+
+    CLASS-METHODS :
+      create_client
+        IMPORTING url           TYPE string
+        RETURNING VALUE(result) TYPE REF TO if_web_http_client
+        RAISING   cx_static_check ,
+
+      read_posts
+        IMPORTING salesorderno    TYPE string
+        RETURNING VALUE(result12) TYPE string
+        RAISING   cx_static_check .
+  PROTECTED SECTION.
+
+  PRIVATE SECTION.
+    CONSTANTS lc_ads_render TYPE string VALUE '/ads.restapi/v1/adsRender/pdf'.
+    CONSTANTS  lv1_url    TYPE string VALUE 'https://adsrestapi-formsprocessing.cfapps.jp10.hana.ondemand.com/v1/adsRender/pdf?templateSource=storageName&TraceLevel=2'  .
+    CONSTANTS  lv2_url    TYPE string VALUE 'https://dev-tcul4uw9.authentication.jp10.hana.ondemand.com/oauth/token'  .
+    CONSTANTS lc_storage_name TYPE string VALUE 'templateSource=storageName'.
+    CONSTANTS lc_template_name TYPE string VALUE 'ZSD_WORKSORDER_CUST/ZSD_WORKSORDER_CUST'."'zpo/zpo_v2'."
+ENDCLASS.
+
+
+
+CLASS YWK_OR_PRINT_CLASS IMPLEMENTATION.
+
+
+  METHOD create_client .
+    DATA(dest) = cl_http_destination_provider=>create_by_url( url ).
+    result = cl_web_http_client_manager=>create_by_http_destination( dest ).
+
+  ENDMETHOD .
+
+
+  METHOD read_posts.
+*  METHOD if_oo_adt_classrun~main.
+    var1 = salesorderno.
+    var1 =   |{ |{ var1 ALPHA = OUT }| ALPHA = IN }| .
+    DATA(lv_salesorderno) = var1.
+****************************************  header data ******************************************************
+    SELECT SINGLE
+    a~purchaseorderbycustomer,
+        a~customerpurchaseorderdate,
+        a~yy1_poamendmentno_sdh,
+        a~yy1_precarriageby_sdh,
+            a~yy1_poamendmentdate_sdh,
+                a~yy1_dono_sdh,
+                    a~yy1_dodate_sdh,
+                    b~customerName,
+                    b~BpcustomerName,
+                    b~streetName,
+                    b~BPAddrCityName,
+                    b~BPAddrStreetName,
+                    b~DistrictName,
+                    b~postalcode,
+                    b~TaxNumber3,
+                    a~customerpaymentterms,
+                    b~Region,
+                    b~CustomerAccountGroup,
+                    b~country,
+                    a~soldtoparty,
+                    a~soldtoparty AS gtz_cust_code,
+                    a~salesdocument,
+                    a~creationdate,
+                    a~RequestedDeliveryDate,
+*                    a~YY1_TCSAmount_SDH,
+                    a~transactioncurrency,
+                    a~YY1_Remarks_SO_sdh,
+                    c~customerPaymentTermsName,
+                    d~supplierName,
+                    d~taxnumber3 AS suppliergst,
+                    e~countryName,
+                    b~AddressID,
+                    f~region AS addressregion,
+                    f~country AS addresscountry,
+                    g~regionname,
+                    h~BusinessPartnerIDByExtSystem,
+                    i~CustomerPaymentTermsName AS paymentterms
+
+     FROM i_salesdocument WITH PRIVILEGED ACCESS  AS a LEFT JOIN
+     i_customer WITH PRIVILEGED ACCESS  AS b ON a~soldtoparty = b~Customer LEFT JOIN
+
+     I_CustomerPaymentTermsText WITH PRIVILEGED ACCESS  AS c ON a~customerPaymentTerms = c~customerPaymentTerms LEFT JOIN
+     i_supplier WITH PRIVILEGED ACCESS  AS d ON a~yy1_TransportName_SDH = d~supplier LEFT JOIN
+      i_countrytext WITH PRIVILEGED ACCESS  AS e ON b~country = e~Country
+      LEFT JOIN i_address_2 WITH PRIVILEGED ACCESS AS f ON b~AddressID = f~AddressID
+      LEFT JOIN i_regiontext WITH PRIVILEGED ACCESS AS g ON f~Region = g~Region AND f~Country = g~Country AND g~language = 'E'
+      LEFT JOIN i_businesspartner WITH PRIVILEGED ACCESS AS h ON a~SoldToParty = h~BusinessPartner
+    LEFT JOIN i_customerpaymenttermstext WITH PRIVILEGED ACCESS AS i ON a~CustomerPaymentTerms = i~CustomerPaymentTerms AND  i~Language = 'E'
+
+    WHERE a~salesdocument EQ @lv_salesorderno
+    INTO @DATA(wa_header1).
+
+    DATA: modedispatch TYPE string.
+    IF wa_header1-YY1_PreCarriageby_SDH = 'A'.
+      modedispatch = 'Air'.
+    ELSEIF wa_header1-YY1_PreCarriageby_SDH = 'R'.
+      modedispatch = 'Road'.
+    ELSEIF wa_header1-YY1_PreCarriageby_SDH = 'S'.
+      modedispatch = 'Ship'.
+    ELSEIF wa_header1-YY1_PreCarriageby_SDH = 'T'.
+      modedispatch = 'Rail'.
+    ENDIF.
+
+    DATA : transportename TYPE string.
+    CONCATENATE wa_header1-SupplierName '-' wa_header1-suppliergst INTO transportename.
+    DATA : state_code2 TYPE string.
+    state_code2 = wa_header1-TaxNumber3.
+
+    SELECT SINGLE
+    b~customerName,
+    f~streetName,
+    b~BPAddrStreetName,
+    b~BPAddrCityName,
+    b~DistrictName,
+    b~postalcode,
+    b~TaxNumber3,
+    b~Region,
+    b~CustomerAccountGroup,
+    b~country,
+    c~plantname,
+    c~plant,
+    d~countryName ,
+    b~addressid,
+     f~region AS addressregion,
+     f~country AS addresscountry,
+     f~streetprefixname1,
+     f~streetprefixname2,
+     f~streetsuffixname1,   """""""""""3
+      f~streetsuffixname2, """"""""""""4
+      f~villagename,
+      f~cityname,
+      f~HouseNumber,
+     g~regionname,
+     b~BpcustomerName
+     FROM i_salesdocumentitem  WITH PRIVILEGED ACCESS  AS a LEFT JOIN
+     i_customer  WITH PRIVILEGED ACCESS  AS b ON a~shiptoparty = b~Customer LEFT JOIN
+     i_plant  WITH PRIVILEGED ACCESS  AS c ON a~plant = c~plant LEFT JOIN
+     i_countrytext  WITH PRIVILEGED ACCESS  AS d ON b~country = d~Country
+      LEFT JOIN i_address_2 WITH PRIVILEGED ACCESS AS f ON b~AddressID = f~AddressID
+       LEFT JOIN i_regiontext WITH PRIVILEGED ACCESS AS g ON f~Region = g~Region AND f~Country = g~Country AND g~language = 'E'
+*     left join i_address_2 WITH PRIVILEGED ACCESS as e on e~addressid = b~AddressID
+    WHERE a~salesdocument EQ  @lv_salesorderno
+    INTO @DATA(wa_header2) .
+    DATA : state_codesihpto  TYPE string.
+    state_codesihpto = wa_header2-TaxNumber3.
+    """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+    DATA condigneedd1 TYPE string.
+    DATA condigneeadd2 TYPE string.
+    DATA condigneeadd3 TYPE string.
+    DATA condigneeadd6 TYPE string.
+    DATA condigneeadd5 TYPE string.
+
+    CONCATENATE wa_header2-HouseNumber wa_header2-StreetName wa_header2-StreetPrefixName1 wa_header2-StreetPrefixName2 INTO condigneedd1 SEPARATED BY space.
+    CONCATENATE wa_header2-StreetSuffixName1 wa_header2-StreetSuffixName2  INTO condigneeadd2 SEPARATED BY space.
+
+    CONCATENATE wa_header2-DistrictName wa_header2-VillageName
+    wa_header2-CityName wa_header2-PostalCode INTO condigneeadd3 SEPARATED BY space.
+*    CONCATENATE wa_header2-RegionName INTO condigneeadd5 SEPARATED BY space.
+    condigneeadd5  =  wa_header2-CountryName .
+    CONCATENATE condigneeadd2 condigneeadd3 condigneeadd5 INTO condigneeadd6 SEPARATED BY space.
+
+    """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+
+    "add by vishal
+    "Buyer Address
+    IF wa_header1-AddressID IS NOT INITIAL.
+      SELECT SINGLE FROM i_address_2 WITH PRIVILEGED ACCESS
+      FIELDS streetname , streetprefixname1 ,StreetSuffixName1,StreetSuffixName2,
+      VillageName, streetprefixname2 , cityname , HouseNumber ,
+             postalcode , districtname , country
+             WHERE AddressID = @wa_header1-AddressID
+             INTO @DATA(wa_header3).
+
+
+
+*      wa_header1-BPAddrStreetName = wa_header3-StreetName.
+      CONCATENATE  wa_header3-HouseNumber wa_header3-StreetName
+                  INTO wa_header1-BPAddrStreetName SEPARATED BY ' '.
+
+      IF wa_header3-streetprefixname1 <> ',' .
+        CONCATENATE wa_header3-streetprefixname1 ' ' INTO wa_header1-BPAddrCityName.
+      ENDIF.
+
+      IF wa_header3-StreetPrefixName2 <> ','.
+        CONCATENATE wa_header1-BPAddrCityName wa_header3-StreetPrefixName2
+         INTO wa_header1-BPAddrCityName SEPARATED BY ' '.
+      ENDIF.
+
+      wa_header1-DistrictName = wa_header3-DistrictName.
+      CONCATENATE wa_header3-streetName wa_header3-PostalCode INTO wa_header1-streetName SEPARATED BY ' ' .
+      wa_header1-PostalCode = wa_header3-PostalCode.
+*           wa_header1-BPAddrStreetName = wa_header3-PostalCode.
+
+    ENDIF.
+    DATA str1 TYPE string.
+    DATA str2 TYPE string.
+    DATA str3 TYPE string.
+*    CONCATENATE wa_header3-StreetPrefixName1 wa_header3-StreetPrefixName2 wa_header2-StreetName wa_header3-StreetSuffixName1 wa_header3-StreetSuffixName2 INTO str1 SEPARATED BY space.
+    CONCATENATE wa_header3-HouseNumber wa_header3-StreetName wa_header3-StreetPrefixName1 wa_header3-StreetPrefixName2 wa_header3-StreetSuffixName1 wa_header3-StreetSuffixName2 INTO str1 SEPARATED BY space.
+*    CONCATENATE wa_header1-DistrictName wa_header2-VillageName wa_header2-CityName  wa_header3-PostalCode  INTO str2 SEPARATED BY space.
+    CONCATENATE wa_header3-DistrictName wa_header3-VillageName wa_header3-CityName  wa_header3-PostalCode wa_header1-CountryName  INTO str2 SEPARATED BY space.
+*    CONCATENATE  wa_header1-RegionName wa_header1-CountryName INTO str3 SEPARATED BY space.
+*    str3 = wa_header1-CountryName .
+*    CONCATENATE  wa_header2-RegionName wa_header1-CountryName INTO str3 SEPARATED BY space.
+
+
+    " Consignee Adres
+    IF wa_header2-AddressID IS NOT INITIAL.
+      SELECT SINGLE FROM i_address_2 WITH PRIVILEGED ACCESS
+       FIELDS streetname , streetprefixname1 , streetprefixname2 , cityname , HouseNumber ,
+              postalcode , districtname , country
+              WHERE AddressID = @wa_header2-AddressID
+              INTO @DATA(wa_header4).
+
+
+      CONCATENATE  wa_header4-HouseNumber wa_header4-StreetName
+                INTO wa_header2-BPAddrStreetName SEPARATED BY ' '.
+
+      IF wa_header4-streetprefixname1 <> ',' .
+        CONCATENATE wa_header4-streetprefixname1 ' ' INTO wa_header2-BPAddrCityName.
+      ENDIF.
+
+      IF wa_header4-StreetPrefixName2 <> ','.
+        CONCATENATE wa_header2-BPAddrCityName wa_header4-StreetPrefixName2
+         INTO wa_header2-BPAddrCityName SEPARATED BY ' '.
+      ENDIF.
+
+      wa_header2-DistrictName = wa_header4-DistrictName.
+      wa_header2-PostalCode = wa_header4-PostalCode.
+      CONCATENATE wa_header4-streetName wa_header4-PostalCode INTO wa_header2-streetName SEPARATED BY ' ' .
+
+
+    ENDIF.
+
+
+
+*    out->write( wa_header1 ).
+*    out->write( wa_header2 ).
+
+
+*******************************************************    line item data  ******************************
+    SELECT
+    a~salesdocument,
+    a~salesdocumentitem,
+    a~Salesdocumentitemtext,
+    a~OrderQuantity,
+    a~netpricequantityunit,
+    a~product,
+    a~yy1_packsize_sd_sdi,
+    b~consumptiontaxctrlcode,
+    c~pricedetnexchangerate
+    FROM i_salesdocumentitem WITH PRIVILEGED ACCESS  AS a LEFT JOIN
+    i_productplantbasic WITH PRIVILEGED ACCESS  AS b ON a~product = b~Product AND a~Plant = b~Plant
+    LEFT JOIN i_salesdocument WITH PRIVILEGED ACCESS AS c ON a~SalesDocument = c~SalesDocument
+    WHERE a~salesdocument =  @lv_salesorderno  AND consumptiontaxctrlcode IS NOT INITIAL
+    INTO TABLE @DATA(it_line).
+
+*    TYPES: BEGIN OF ty_itlines2,
+*             salesdocument      TYPE i_salesdocitempricingelement-SalesDocument,
+*             salesdocumentitem  TYPE i_salesdocitempricingelement-SalesDocumentItem,
+*             conditionratevalue TYPE i_salesdocitempricingelement-conditionratevalue,
+*             conditionamount    TYPE i_salesdocitempricingelement-conditionamount,
+*             conditionbasevalue TYPE i_salesdocitempricingelement-conditionbasevalue,
+*             conditiontype      TYPE i_salesdocitempricingelement-conditiontype,
+*           END OF ty_itlines2.
+*
+*    DATA wa_lines2 TYPE ty_itlines2.
+*    DATA it_line2 TYPE TABLE OF ty_itlines2.
+
+*    IF it_line IS NOT INITIAL.
+*      SELECT
+*      a~salesdocument,
+*      a~salesdocumentitem,
+*      a~conditionratevalue,
+*         a~conditionamount,
+*         a~conditionbasevalue,
+*         a~conditiontype
+*         FROM i_salesdocitempricingelement as a
+*         FOR ALL ENTRIES IN @it_line
+*         WHERE a~salesdocument =  @it_line-salesdocument AND a~salesdocumentitem =  @it_line-salesdocumentitem
+*         INTO TABLE @DATA(it_line2) PRIVILEGED ACCESS.
+*
+*    ENDIF.
+    IF it_line IS NOT INITIAL.
+
+      SELECT
+        a~salesdocument,
+        a~salesdocumentitem,
+        a~conditionratevalue,
+        a~conditionamount,
+        a~conditionbasevalue,
+        a~conditiontype
+        FROM i_salesdocitempricingelement WITH PRIVILEGED ACCESS AS a
+        INNER JOIN @it_line AS b
+        ON a~salesdocument = b~salesdocument
+        AND a~salesdocumentitem = b~salesdocumentitem
+        INTO TABLE @DATA(it_line2).
+
+    ENDIF.
+
+*    DELETE it_line where CONSUMPTIONTAXCTRLCODE is INITIAL.
+
+*    out->write( it_line ).
+*    out->write( '  ' ).
+*    out->write( it_line2 ).
+
+*************************************************    header xml ***********************************************
+
+    IF wa_header1-Country = 'IN' AND wa_header1-RegionName = 'Chhattīsgarh'.
+      wa_header1-RegionName = 'Chhattisgarh'.
+    ENDIF.
+    IF wa_header2-Country = 'IN' AND wa_header2-RegionName = 'Chhattīsgarh'.
+      wa_header2-RegionName = 'Chhattisgarh'.
+    ENDIF.
+
+    DATA string1 TYPE string.
+    DATA stringtax1 TYPE string.
+    CONCATENATE str1 str2 str3 INTO string1 SEPARATED BY space.
+    CONCATENATE condigneedd1   condigneeadd6 INTO stringtax1 SEPARATED BY space.
+    CONDENSE stringtax1.
+
+    DATA(lv_xml) =
+    |<Form>| &&
+    |<header>| &&
+    |<po_no>{ wa_header1-purchaseorderbycustomer }</po_no>| &&
+    |<dated1>{ wa_header1-customerpurchaseorderdate }</dated1>| &&
+    |<amd_po_no>{ wa_header1-yy1_poamendmentno_sdh }</amd_po_no>| &&
+    |<dated2>{ wa_header1-yy1_poamendmentdate_sdh }</dated2>| &&
+    |<do_no>{ wa_header1-YY1_DONo_SDH }</do_no>| &&
+    |<date>{ wa_header1-YY1_DODate_SDH }</date>| &&
+    |<buyer>{ wa_header1-BpcustomerName }</buyer>| &&
+*    |<buyer_address1>{ wa_header1-streetName }</buyer_address1>| &&
+    |<buyer_address1>{ string1 }</buyer_address1>| &&
+*    |<buyer_address2>{ wa_header1-BPAddrStreetName }</buyer_address2>| && "1
+    |<buyer_address2>{ str2 }</buyer_address2>| && "1
+*    |<buyer_address3>{ wa_header1-DistrictName }</buyer_address3>| &&  "3
+    |<buyer_address3>{ str3 }</buyer_address3>| &&  "3
+*    |<buyer_address4>{ wa_header1-postalcode }</buyer_address4>| &&
+*    |<buyer_address5>{ wa_header1-BPAddrCityName }</buyer_address5>| && "2
+    |<buyer_gstin>{ wa_header1-TaxNumber3 }</buyer_gstin>| &&
+    |<Payment_terms>{ wa_header1-CustomerPaymentTermsName }</Payment_terms>| &&
+    |<buyer_state>{ state_code2 }</buyer_state>| &&
+    |<buyer_state_Name>{ wa_header1-RegionName }</buyer_state_Name>| &&
+    |<party_code>{ wa_header1-soldtoparty }</party_code>| &&
+    |<consignee_name>{ wa_header2-BpcustomerName }</consignee_name>| &&
+*    |<consignee_address1>{ wa_header2-StreetName }</consignee_address1>| &&
+    |<consignee_address1>{ stringtax1 }</consignee_address1>| &&
+*    |<consignee_address2>{ wa_header2-BPAddrStreetName }</consignee_address2>| && "1
+    |<consignee_address2>{ wa_header2-DistrictName }</consignee_address2>| && "1
+*    |<consignee_address3>{ wa_header2-DistrictName }</consignee_address3>| &&   "3
+    |<consignee_address3>{ condigneeadd6 }</consignee_address3>| &&   "3
+*    |<consignee_address4>{ wa_header2-PostalCode }</consignee_address4>| &&
+*    |<consignee_address5>{ wa_header2-BPAddrCityName }</consignee_address5>| && " 2
+    |<consignee_gstin>{ wa_header2-TaxNumber3 }</consignee_gstin>| &&
+    """"""""""""""""""""""""""""""""""""'
+    |<consignee_state>{ state_codesihpto }</consignee_state>| &&
+    |<consignee_state_Name>{ wa_header2-RegionName }</consignee_state_Name>| &&
+    |<consignee_country_Name>{ wa_header2-CountryName }</consignee_country_Name>| &&
+    |<gtz_customer_code>{ wa_header1-BusinessPartnerIDByExtSystem }</gtz_customer_code>| &&
+    |<work_order_no>{ wa_header1-salesdocument }</work_order_no>| &&
+    |<work_order_date>{ wa_header1-CreationDate }</work_order_date>| &&
+    |<c_c>{ wa_header2-PlantName }</c_c>| &&
+    |<plant>{ wa_header2-Plant }</plant>| &&
+    |<tr_currency>{ wa_header1-TransactionCurrency }</tr_currency>| &&
+    |<Mode_Of_Dispatch>{ modedispatch }</Mode_Of_Dispatch>| &&
+    |<remarks>{ wa_header1-YY1_Remarks_SO_sdh }</remarks>|.
+
+    IF wa_header1-CustomerAccountGroup = 'ZEXP'.
+      DATA(lv_xml_cn_buyer) =
+      |<buyer_country>{ wa_header1-countryName }</buyer_country>|.
+    ELSE.
+      lv_xml_cn_buyer = |<buyer_country></buyer_country>|.
+    ENDIF.
+
+    IF wa_header2-CustomerAccountGroup = 'ZEXP'.
+      DATA(lv_xml_cn_consignee) =
+      |<consignee_country>{ wa_header2-countryName }</consignee_country>|.
+    ELSE.
+      lv_xml_cn_consignee = |<consignee_country></consignee_country>|.
+    ENDIF.
+    DATA(lv_header_last) =
+    |</header>| &&
+    |<lineItem>|.
+
+    CONCATENATE lv_xml lv_xml_cn_buyer lv_xml_cn_consignee lv_header_last INTO lv_xml.
+
+    SELECT SINGLE
+    FROM i_salesdocument AS a
+    FIELDS
+    a~pricedetnexchangerate
+    WHERE a~SalesDocument = @lv_salesorderno
+    INTO @DATA(lv_exchange).
+
+***********************************************    line item xml   ***************************************************
+    DATA : taxrate TYPE p LENGTH 9 DECIMALS 2.
+    DATA r_flag TYPE i VALUE 0.
+    DATA d_flag TYPE i VALUE 0.
+    DATA i_flag TYPE i VALUE 0.
+    DATA c_s_flag TYPE i VALUE 0.
+    DATA value_of_sup TYPE i_salesdocumentitem-OrderQuantity.
+    DATA taxable_value TYPE i_salesdocumentitem-OrderQuantity.
+    DATA discount TYPE i_salesdocitempricingelement-conditionratevalue.
+    DATA rounding_off TYPE i_salesdocitempricingelement-ConditionAmount.
+    DATA freight_amt TYPE i_salesdocitempricingelement-ConditionAmount.
+    DATA Insurance_amt TYPE i_salesdocitempricingelement-ConditionAmount.
+    DATA tcs_amount TYPE i_salesdocitempricingelement-ConditionAmount.
+    DATA: fr_line_tax TYPE p DECIMALS 2.
+    DATA: fr_line_gross TYPE p DECIMALS 2.
+    DATA: ins_line_gross TYPE p DECIMALS 2.
+    DATA: ins_line_tax TYPE p DECIMALS 2.
+
+    LOOP AT it_line INTO DATA(wa_line).
+
+
+
+
+      DATA(reverse_string) = reverse( wa_line-Salesdocumentitemtext ).
+      DATA(lv_pos) = find( val = reverse_string sub = '-' ).
+      DATA(length) = strlen( reverse_string ) - ( lv_pos + 1 ).
+      lv_pos = lv_pos + 1.
+      DATA(temp_data) = reverse_string+lv_pos(length).
+*      temp_data = reverse( temp_data ). "comment by Vishal
+
+      " for Fetching MAterial Description " add By Vishal Tyagi on 2202025
+      DATA : lv_material TYPE c LENGTH 40.
+      lv_material = wa_line-Product.
+      SHIFT lv_material LEFT DELETING LEADING '0'.
+
+      SELECT SINGLE FROM zmaterial_table WITH PRIVILEGED ACCESS
+      FIELDS trade_name
+      WHERE Mat = @lv_material
+      INTO @DATA(lv_desc).
+
+      IF lv_desc IS INITIAL.
+        SELECT SINGLE FROM I_producttext WITH PRIVILEGED ACCESS
+        FIELDS ProductName
+        WHERE Product = @wa_line-Product
+        INTO @lv_desc.
+      ENDIF.
+
+      temp_data = lv_desc.
+      CLEAR : lv_desc , lv_material.
+
+      SELECT SINGLE FROM i_salesorderitempricingelement  AS a
+      FIELDS
+      a~ConditionAmount
+      WHERE a~SalesOrder = @wa_line-SalesDocument AND a~SalesOrderItem = @wa_line-SalesDocumentItem
+      AND a~ConditionType = 'ZMRK'
+      INTO @DATA(tax).
+
+
+      SELECT SINGLE
+      FROM i_salesdocumentitem AS a
+      FIELDS
+      a~MaterialByCustomer
+      WHERE a~SalesDocument = @wa_line-SalesDocument AND
+      a~SalesDocumentItem = @wa_line-SalesDocumentItem
+      INTO @DATA(lv_des2).
+
+*      DATA: lv_des TYPE string.
+*      lv_des = temp_data.
+*
+*      IF lv_des2 IS NOT INITIAL.
+*        IF lv_des IS NOT INITIAL.
+*          CONCATENATE lv_des '" - "' lv_des2 INTO lv_des.
+*        ELSE.
+*          lv_des = lv_des2.
+*        ENDIF.
+*      ENDIF.
+
+
+
+      DATA(lv_xml1) =
+      |<item>| &&
+      |<Description>{ temp_data }</Description>| &&
+      |<HSN>{ wa_line-consumptiontaxctrlcode }</HSN>| &&
+      |<quantity>{ wa_line-OrderQuantity }</quantity>| &&
+      |<uom>{ wa_line-netpricequantityunit }</uom>| &&
+      |<PRICEDETNEXCHANGERATE>{ wa_line-PriceDetnExchangeRate }</PRICEDETNEXCHANGERATE>| &&
+      |<pack_size>{ wa_line-yy1_packsize_sd_sdi }</pack_size>| &&
+      |<tax>{ tax }</tax>| &&
+       |<des>{ lv_des2 }</des>|.
+      """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+      CLEAR :lv_des2 .
+      DATA ratexchange TYPE p LENGTH 9 DECIMALS 2 .
+
+      LOOP AT it_line2 INTO DATA(wa_line2) WHERE salesdocument = wa_line-salesdocument AND salesdocumentitem = wa_line-salesdocumentitem.
+        IF wa_line2-ConditionType = 'ZBSP' OR wa_line2-ConditionType = 'ZEXP'.
+          ratexchange = wa_line-PriceDetnExchangeRate * wa_line2-ConditionRateValue.
+          taxrate = floor( ratexchange * 100 ) / 100.
+
+          DATA(lv_xml1_rate) =
+          """""""""""""""""""""""""""""""""""""
+*          |<rate>{ wa_line2-conditionratevalue }</rate>|.
+          |<rate>{ taxrate }</rate>|.
+*          value_of_sup = wa_line-OrderQuantity * wa_line2-conditionratevalue.
+          value_of_sup = wa_line-OrderQuantity * ratexchange.
+
+          r_flag = 1.
+        ELSEIF wa_line2-ConditionType = 'ZDIS'.
+          IF wa_line2-conditionratevalue < 0.
+            discount = wa_line2-conditionratevalue * -1.
+          ELSE.
+            discount = wa_line2-conditionratevalue.
+          ENDIF.
+
+          DATA(lv_xml1_dis) =
+         |<discount>{ discount }</discount>|.
+          d_flag = 1.
+          DATA: line_igst TYPE p DECIMALS 2.
+          DATA: line_sgst TYPE p DECIMALS 2.
+          DATA: line_cgst TYPE p DECIMALS 2.
+        ELSEIF wa_line2-ConditionType = 'JOIG'.
+          DATA(lv_xml1_igst) =
+           |<igst_rate>{ wa_line2-conditionratevalue }</igst_rate>| &&
+           |<igst_amount>{ ( ( value_of_sup  - ( value_of_sup * discount ) / 100 ) * wa_line2-conditionratevalue ) / 100 }</igst_amount>|.
+          line_igst = wa_line2-conditionamount.
+          i_flag = 1.
+        ELSEIF wa_line2-ConditionType = 'JOCG' OR wa_line2-ConditionType = 'JOSG'.
+          DATA(lv_xml1_cgst_sgst) =
+           |<cgst_rate>{ wa_line2-conditionratevalue }</cgst_rate>| &&
+           |<cgst_amount>{ ( ( value_of_sup  - ( value_of_sup * discount ) / 100 ) * wa_line2-conditionratevalue ) / 100 }</cgst_amount>| &&
+           |<sgst_rate>{ wa_line2-conditionratevalue }</sgst_rate>| &&
+           |<sgst_amount>{ ( ( value_of_sup  - ( value_of_sup * discount ) / 100 ) * wa_line2-conditionratevalue ) / 100 }</sgst_amount>|.
+          line_sgst = wa_line2-conditionamount.
+          line_cgst = wa_line2-conditionamount.
+          c_s_flag = 1.
+        ENDIF.
+        IF wa_line2-ConditionType = 'ZDIF'.
+          rounding_off = rounding_off + wa_line2-ConditionAmount.
+        ENDIF.
+        IF wa_line2-ConditionType = 'ZFRT' OR wa_line2-ConditionType = 'ZEFC'.
+*          Freight_amt = Freight_amt + wa_line2-ConditionAmount.
+          fr_line_tax = fr_line_tax + wa_line2-ConditionAmount * lv_exchange.
+          fr_line_gross  = fr_line_gross +  wa_line2-ConditionAmount * lv_exchange + line_igst +
+        line_cgst + line_sgst.
+        ENDIF.
+        IF wa_line2-ConditionType = 'ZINC' OR wa_line2-ConditionType = 'ZINP' OR wa_line2-ConditionType = 'ZINS' OR  wa_line2-ConditionType = 'ZENS'.
+*          Insurance_amt = Insurance_amt + wa_line2-ConditionAmount * lv_exchange.
+          ins_line_tax = ins_line_tax + wa_line2-ConditionAmount * lv_exchange.
+          ins_line_gross  = ins_line_gross +  wa_line2-ConditionAmount * lv_exchange + line_igst +
+        line_cgst + line_sgst.
+        ENDIF.
+        IF wa_line2-ConditionType = 'JTC1'.
+          tcs_amount += wa_line2-ConditionAmount.
+        ENDIF.
+
+
+
+ data  stringgst type p dECIMALS 2.
+ data  stringgst1 type  p deCIMALS 2.
+ data gststring type  p deCIMALS 2.
+
+      ENDLOOP.
+
+      IF value_of_sup IS NOT INITIAL.
+      stringgst =  value_of_sup - (  tax * -1 )   .
+      stringgst1 =  value_of_sup   .
+      gststring =  stringgst * discount  / 100 .
+    taxable_value = stringgst1 - gststring      .
+
+
+  clear tax.
+*        taxrate =   value_of_sup  - ( value_of_sup * discount ) / 100.
+      ENDIF.
+
+      IF r_flag = 0.
+        lv_xml1_rate = |<rate></rate>|.
+      ENDIF.
+      IF d_flag = 0.
+        lv_xml1_dis =
+            |<discount></discount>|.
+      ENDIF.
+      IF i_flag = 0.
+        lv_xml1_igst =
+             |<igst_rate></igst_rate>| &&
+             |<igst_amount></igst_amount>|.
+      ENDIF.
+      IF c_s_flag = 0.
+        lv_xml1_cgst_sgst =
+             |<cgst_rate></cgst_rate>| &&
+             |<cgst_amount></cgst_amount>| &&
+             |<sgst_rate></sgst_rate>| &&
+             |<sgst_amount></sgst_amount>|.
+      ENDIF.
+
+      DATA(lv_xml_gross) =
+      |<value_of_sup>{ value_of_sup }</value_of_sup>| &&
+     |<taxable_value>{ taxable_value }</taxable_value>| &&
+*      |<taxable_value>{ taxrate }</taxable_value>| &&
+      |</item>|.
+
+      CONCATENATE lv_xml lv_xml1 lv_xml1_rate lv_xml1_dis lv_xml1_igst lv_xml1_cgst_sgst lv_xml_gross INTO lv_xml.
+      r_flag = 0.
+      d_flag = 0.
+      i_flag = 0.
+      c_s_flag = 0.
+      CLEAR value_of_sup.
+      CLEAR taxable_value.
+    ENDLOOP.
+
+    SELECT SINGLE
+   FROM i_salesdocument AS a
+   FIELDS
+   a~IncotermsLocation1
+   WHERE a~SalesDocument = @lv_salesorderno
+   INTO @DATA(lv_despatch).
+
+    DATA(lv_xml2) =
+    |</lineItem>| &&
+    |<footer>| &&
+    |<ins_line_gross>{ ins_line_gross }</ins_line_gross>| &&
+    |<fr_line_gross>{ fr_line_gross }</fr_line_gross>| &&
+    |<fr_line_tax>{ fr_line_tax }</fr_line_tax>| &&
+    |<ins_line_tax>{ ins_line_tax }</ins_line_tax>| &&
+    |<freight_amt>{ Freight_amt }</freight_amt>| &&
+    |<insurance_amt>{ Insurance_amt }</insurance_amt>| &&
+    |<rounding_off>{ rounding_off }</rounding_off>| &&
+    |<tcs_amount>{ tcs_amount }</tcs_amount>| &&
+    |<expected_despatch>{ wa_header1-RequestedDeliveryDate }</expected_despatch>| &&
+    |<expected_del>{ wa_header1-RequestedDeliveryDate }</expected_del>| &&
+    |<payment_terms>{ wa_header1-customerPaymentTermsName }</payment_terms>| &&
+    |<despatch_terms>{ lv_despatch }</despatch_terms>| &&
+    |<transport_name>{ wa_header1-SupplierName }</transport_name>| &&
+    |<transport_gst>{ wa_header1-suppliergst }</transport_gst>|.
+    CONCATENATE lv_xml lv_xml2 INTO lv_xml.
+
+*************************************************    footer xml  *************************************************
+    DATA(lv_xml_last) =
+    |</footer>| &&
+    |</Form>|.
+    CONCATENATE lv_xml lv_xml_last INTO lv_xml.
+    DATA(lv_syid) = sy-sysid.
+    DATA(lv_mandt) = sy-mandt.
+    CONDENSE lv_syid NO-GAPS.
+*    out->write( lv_xml ).
+
+*
+*    IF lv_syid = 'KA5'.
+    CALL METHOD ycl_test_adobe2=>getpdf(
+      EXPORTING
+        xmldata  = lv_xml
+        template = lc_template_name
+      RECEIVING
+        result   = result12 ).
+*    ELSE.
+*      CONSTANTS lc_template_name_prd TYPE string VALUE 'zsd_worksorder/zsd_worksorder'.
+*      CALL METHOD ycl_test_adobe2=>getpdf(
+*        EXPORTING
+*          xmldata  = lv_xml
+*          template = lc_template_name_prd
+*        RECEIVING
+*          result   = result12 ).
+*    ENDIF.
+
+  ENDMETHOD.
+ENDCLASS.
+
+CLASS ycl_test_adobe2 DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+    INTERFACES if_oo_adt_classrun.
+    CLASS-DATA : access_token TYPE string .
+    CLASS-DATA : xml_file TYPE string .
+    TYPES :
+      BEGIN OF struct,
+        xdp_template TYPE string,
+        xml_data     TYPE string,
+        form_type    TYPE string,
+        form_locale  TYPE string,
+        tagged_pdf   TYPE string,
+        embed_font   TYPE string,
+      END OF struct.
+    CLASS-DATA: lc_ads_render TYPE string VALUE '/ads.restapi/v1/adsRender/pdf',
+                lv1_url       TYPE string.
+*                xml_data2     TYPE string.
+
+    CLASS-METHODS create_client
+      IMPORTING url           TYPE string
+      RETURNING VALUE(result) TYPE REF TO if_web_http_client
+      RAISING   cx_static_check.
+
+    CLASS-METHODS generate_token
+      RETURNING VALUE(result) TYPE string.
+
+    CLASS-METHODS getpdf
+      IMPORTING template      TYPE string
+                xmldata       TYPE string
+      RETURNING VALUE(result) TYPE string .
+
+    CLASS-METHODS getxdp
+      IMPORTING form          TYPE string OPTIONAL
+                template      TYPE string OPTIONAL
+      RETURNING VALUE(result) TYPE string.
+
+    CLASS-METHODS Get_Pdf_From_Saved_template
+      IMPORTING xmldata_1     TYPE string OPTIONAL
+                template_1    TYPE string OPTIONAL
+      RETURNING VALUE(result) TYPE string.
+
+    CLASS-METHODS Format_xml
+      IMPORTING xmldata           TYPE string OPTIONAL
+      RETURNING VALUE(result_xml) TYPE string.
+
+ENDCLASS.
+
+
+
+CLASS YCL_TEST_ADOBE2 IMPLEMENTATION.
+
+
+  METHOD create_client.
+    DATA(dest) = cl_http_destination_provider=>create_by_url( url ).
+    result = cl_web_http_client_manager=>create_by_http_destination( dest ).
+  ENDMETHOD.
+
+
+  METHOD format_xml.
+    DATA lv_xmldata TYPE string.
+    lv_xmldata = xmldata.
+    REPLACE ALL OCCURRENCES OF '\t' IN lv_xmldata WITH '&#9;'.
+    REPLACE ALL OCCURRENCES OF '\n' IN lv_xmldata WITH '&#10;'.
+    REPLACE ALL OCCURRENCES OF '\r' IN lv_xmldata WITH '&#13;'.
+    REPLACE ALL OCCURRENCES OF '!' IN lv_xmldata WITH '&#33;'.
+*    REPLACE ALL OCCURRENCES OF '"' IN xmldata WITH '&#34;'.
+*    REPLACE ALL OCCURRENCES OF '#' IN xmldata WITH '&#35;'.
+    REPLACE ALL OCCURRENCES OF '$' IN lv_xmldata WITH '&#36;'.
+*        REPLACE ALL OCCURRENCES OF '%' IN xmldata WITH '&#37;'.
+    REPLACE ALL OCCURRENCES OF '&' IN lv_xmldata WITH '&#38;'.
+*    REPLACE ALL OCCURRENCES OF |'| IN xmldata WITH '&#39;'.
+    REPLACE ALL OCCURRENCES OF '(' IN lv_xmldata WITH '&#40;'.
+    REPLACE ALL OCCURRENCES OF ')' IN lv_xmldata WITH '&#41;'.
+    REPLACE ALL OCCURRENCES OF '*' IN lv_xmldata WITH '&#42;'.
+    REPLACE ALL OCCURRENCES OF '+' IN lv_xmldata WITH '&#43;'.
+*    REPLACE ALL OCCURRENCES OF ',' IN xmldata WITH '&#44;'.
+*    REPLACE ALL OCCURRENCES OF '-' IN xmldata WITH '&#45;'.
+*    REPLACE ALL OCCURRENCES OF '.' IN xmldata WITH '&#46;'.
+*    REPLACE ALL OCCURRENCES OF '/' IN xmldata WITH '&#47;'.
+    REPLACE ALL OCCURRENCES OF ':' IN lv_xmldata WITH '&#58;'.
+*    REPLACE ALL OCCURRENCES OF ';' IN xmldata WITH '&#59;'.
+*    REPLACE ALL OCCURRENCES OF '<' IN xmldata WITH '&#60;'.
+    REPLACE ALL OCCURRENCES OF '=' IN lv_xmldata WITH '&#61;'.
+*    REPLACE ALL OCCURRENCES OF '>' IN xmldata WITH '&#62;'.
+    REPLACE ALL OCCURRENCES OF '?' IN lv_xmldata WITH '&#63;'.
+    REPLACE ALL OCCURRENCES OF '@' IN lv_xmldata WITH '&#64;'.
+    REPLACE ALL OCCURRENCES OF '[' IN lv_xmldata WITH '&#91;'.
+*    REPLACE ALL OCCURRENCES OF '\' IN xmldata WITH '&#92;'.
+    REPLACE ALL OCCURRENCES OF ']' IN lv_xmldata WITH '&#93;'.
+    REPLACE ALL OCCURRENCES OF '^' IN lv_xmldata WITH '&#94;'.
+*    REPLACE ALL OCCURRENCES OF '_' IN xmldata WITH '&#95;'.
+    REPLACE ALL OCCURRENCES OF '`' IN lv_xmldata WITH '&#96;'.
+    REPLACE ALL OCCURRENCES OF '{' IN lv_xmldata WITH '&#123;'.
+    REPLACE ALL OCCURRENCES OF '|' IN lv_xmldata WITH '&#124;'.
+    REPLACE ALL OCCURRENCES OF '}' IN lv_xmldata WITH '&#125;'.
+    REPLACE ALL OCCURRENCES OF '~' IN lv_xmldata WITH '&#126;'.
+    REPLACE ALL OCCURRENCES OF '€' IN lv_xmldata WITH '&#128;'.
+    REPLACE ALL OCCURRENCES OF '‚' IN lv_xmldata WITH '&#130;'.
+    REPLACE ALL OCCURRENCES OF 'ƒ' IN lv_xmldata WITH '&#131;'.
+    REPLACE ALL OCCURRENCES OF '„' IN lv_xmldata WITH '&#132;'.
+    REPLACE ALL OCCURRENCES OF '…' IN lv_xmldata WITH '&#133;'.
+    REPLACE ALL OCCURRENCES OF '†' IN lv_xmldata WITH '&#134;'.
+    REPLACE ALL OCCURRENCES OF '‡' IN lv_xmldata WITH '&#135;'.
+    REPLACE ALL OCCURRENCES OF 'ˆ' IN lv_xmldata WITH '&#136;'.
+    REPLACE ALL OCCURRENCES OF '‰' IN lv_xmldata WITH '&#137;'.
+    REPLACE ALL OCCURRENCES OF 'Š' IN lv_xmldata WITH '&#138;'.
+    REPLACE ALL OCCURRENCES OF '‹' IN lv_xmldata WITH '&#139;'.
+    REPLACE ALL OCCURRENCES OF 'Œ' IN lv_xmldata WITH '&#140;'.
+    REPLACE ALL OCCURRENCES OF 'Ž' IN lv_xmldata WITH '&#142;'.
+    REPLACE ALL OCCURRENCES OF '‘' IN lv_xmldata WITH '&#145;'.
+    REPLACE ALL OCCURRENCES OF '’' IN lv_xmldata WITH '&#146;'.
+    REPLACE ALL OCCURRENCES OF '“' IN lv_xmldata WITH '&#147;'.
+    REPLACE ALL OCCURRENCES OF '”' IN lv_xmldata WITH '&#148;'.
+    REPLACE ALL OCCURRENCES OF '•' IN lv_xmldata WITH '&#149;'.
+    REPLACE ALL OCCURRENCES OF '–' IN lv_xmldata WITH '&#150;'.
+    REPLACE ALL OCCURRENCES OF '—' IN lv_xmldata WITH '&#151;'.
+    REPLACE ALL OCCURRENCES OF '˜' IN lv_xmldata WITH '&#152;'.
+    REPLACE ALL OCCURRENCES OF '™' IN lv_xmldata WITH '&#153;'.
+    REPLACE ALL OCCURRENCES OF 'š' IN lv_xmldata WITH '&#154;'.
+    REPLACE ALL OCCURRENCES OF '›' IN lv_xmldata WITH '&#155;'.
+    REPLACE ALL OCCURRENCES OF 'œ' IN lv_xmldata WITH '&#156;'.
+    REPLACE ALL OCCURRENCES OF 'ž' IN lv_xmldata WITH '&#158;'.
+    REPLACE ALL OCCURRENCES OF 'Ÿ' IN lv_xmldata WITH '&#159;'.
+    REPLACE ALL OCCURRENCES OF '¡' IN lv_xmldata WITH '&#161;'.
+    REPLACE ALL OCCURRENCES OF '¢' IN lv_xmldata WITH '&#162;'.
+    REPLACE ALL OCCURRENCES OF '£' IN lv_xmldata WITH '&#163;'.
+    REPLACE ALL OCCURRENCES OF '¤' IN lv_xmldata WITH '&#164;'.
+    REPLACE ALL OCCURRENCES OF '¥' IN lv_xmldata WITH '&#165;'.
+    REPLACE ALL OCCURRENCES OF '¦' IN lv_xmldata WITH '&#166;'.
+    REPLACE ALL OCCURRENCES OF '§' IN lv_xmldata WITH '&#167;'.
+    REPLACE ALL OCCURRENCES OF '¨' IN lv_xmldata WITH '&#168;'.
+    REPLACE ALL OCCURRENCES OF '©' IN lv_xmldata WITH '&#169;'.
+    REPLACE ALL OCCURRENCES OF 'ª' IN lv_xmldata WITH '&#170;'.
+    REPLACE ALL OCCURRENCES OF '«' IN lv_xmldata WITH '&#171;'.
+    REPLACE ALL OCCURRENCES OF '¬' IN lv_xmldata WITH '&#172;'.
+    REPLACE ALL OCCURRENCES OF '®' IN lv_xmldata WITH '&#174;'.
+    REPLACE ALL OCCURRENCES OF '¯' IN lv_xmldata WITH '&#175;'.
+    REPLACE ALL OCCURRENCES OF '°' IN lv_xmldata WITH '&#176;'.
+    REPLACE ALL OCCURRENCES OF '±' IN lv_xmldata WITH '&#177;'.
+    REPLACE ALL OCCURRENCES OF '²' IN lv_xmldata WITH '&#178;'.
+    REPLACE ALL OCCURRENCES OF '³' IN lv_xmldata WITH '&#179;'.
+    REPLACE ALL OCCURRENCES OF '´' IN lv_xmldata WITH '&#180;'.
+    REPLACE ALL OCCURRENCES OF 'µ' IN lv_xmldata WITH '&#181;'.
+    REPLACE ALL OCCURRENCES OF '¶' IN lv_xmldata WITH '&#182;'.
+    REPLACE ALL OCCURRENCES OF '·' IN lv_xmldata WITH '&#183;'.
+    REPLACE ALL OCCURRENCES OF '¸' IN lv_xmldata WITH '&#184;'.
+    REPLACE ALL OCCURRENCES OF '¹' IN lv_xmldata WITH '&#185;'.
+    REPLACE ALL OCCURRENCES OF 'º' IN lv_xmldata WITH '&#186;'.
+    REPLACE ALL OCCURRENCES OF '»' IN lv_xmldata WITH '&#187;'.
+    REPLACE ALL OCCURRENCES OF '¼' IN lv_xmldata WITH '&#188;'.
+    REPLACE ALL OCCURRENCES OF '½' IN lv_xmldata WITH '&#189;'.
+    REPLACE ALL OCCURRENCES OF '¾' IN lv_xmldata WITH '&#190;'.
+    REPLACE ALL OCCURRENCES OF '¿' IN lv_xmldata WITH '&#191;'.
+    REPLACE ALL OCCURRENCES OF 'À' IN lv_xmldata WITH '&#192;'.
+    REPLACE ALL OCCURRENCES OF 'Á' IN lv_xmldata WITH '&#193;'.
+    REPLACE ALL OCCURRENCES OF 'Â' IN lv_xmldata WITH '&#194;'.
+    REPLACE ALL OCCURRENCES OF 'Ã' IN lv_xmldata WITH '&#195;'.
+    REPLACE ALL OCCURRENCES OF 'Ä' IN lv_xmldata WITH '&#196;'.
+    REPLACE ALL OCCURRENCES OF 'Å' IN lv_xmldata WITH '&#197;'.
+    REPLACE ALL OCCURRENCES OF 'Æ' IN lv_xmldata WITH '&#198;'.
+    REPLACE ALL OCCURRENCES OF 'Ç' IN lv_xmldata WITH '&#199;'.
+    REPLACE ALL OCCURRENCES OF 'È' IN lv_xmldata WITH '&#200;'.
+    REPLACE ALL OCCURRENCES OF 'É' IN lv_xmldata WITH '&#201;'.
+    REPLACE ALL OCCURRENCES OF 'Ê' IN lv_xmldata WITH '&#202;'.
+    REPLACE ALL OCCURRENCES OF 'Ë' IN lv_xmldata WITH '&#203;'.
+    REPLACE ALL OCCURRENCES OF 'Ì' IN lv_xmldata WITH '&#204;'.
+    REPLACE ALL OCCURRENCES OF 'Í' IN lv_xmldata WITH '&#205;'.
+    REPLACE ALL OCCURRENCES OF 'Î' IN lv_xmldata WITH '&#206;'.
+    REPLACE ALL OCCURRENCES OF 'Ï' IN lv_xmldata WITH '&#207;'.
+    REPLACE ALL OCCURRENCES OF 'Ð' IN lv_xmldata WITH '&#208;'.
+    REPLACE ALL OCCURRENCES OF 'Ñ' IN lv_xmldata WITH '&#209;'.
+    REPLACE ALL OCCURRENCES OF 'Ò' IN lv_xmldata WITH '&#210;'.
+    REPLACE ALL OCCURRENCES OF 'Ó' IN lv_xmldata WITH '&#211;'.
+    REPLACE ALL OCCURRENCES OF 'Ô' IN lv_xmldata WITH '&#212;'.
+    REPLACE ALL OCCURRENCES OF 'Õ' IN lv_xmldata WITH '&#213;'.
+    REPLACE ALL OCCURRENCES OF 'Ö' IN lv_xmldata WITH '&#214;'.
+    REPLACE ALL OCCURRENCES OF '×' IN lv_xmldata WITH '&#215;'.
+    REPLACE ALL OCCURRENCES OF 'Ø' IN lv_xmldata WITH '&#216;'.
+    REPLACE ALL OCCURRENCES OF 'Ù' IN lv_xmldata WITH '&#217;'.
+    REPLACE ALL OCCURRENCES OF 'Ú' IN lv_xmldata WITH '&#218;'.
+    REPLACE ALL OCCURRENCES OF 'Û' IN lv_xmldata WITH '&#219;'.
+    REPLACE ALL OCCURRENCES OF 'Ü' IN lv_xmldata WITH '&#220;'.
+    REPLACE ALL OCCURRENCES OF 'Ý' IN lv_xmldata WITH '&#221;'.
+    REPLACE ALL OCCURRENCES OF 'Þ' IN lv_xmldata WITH '&#222;'.
+    REPLACE ALL OCCURRENCES OF 'ß' IN lv_xmldata WITH '&#223;'.
+    REPLACE ALL OCCURRENCES OF 'à' IN lv_xmldata WITH '&#224;'.
+    REPLACE ALL OCCURRENCES OF 'á' IN lv_xmldata WITH '&#225;'.
+    REPLACE ALL OCCURRENCES OF 'â' IN lv_xmldata WITH '&#226;'.
+    REPLACE ALL OCCURRENCES OF 'ã' IN lv_xmldata WITH '&#227;'.
+    REPLACE ALL OCCURRENCES OF 'ä' IN lv_xmldata WITH '&#228;'.
+    REPLACE ALL OCCURRENCES OF 'å' IN lv_xmldata WITH '&#229;'.
+    REPLACE ALL OCCURRENCES OF 'æ' IN lv_xmldata WITH '&#230;'.
+    REPLACE ALL OCCURRENCES OF 'ç' IN lv_xmldata WITH '&#231;'.
+    REPLACE ALL OCCURRENCES OF 'è' IN lv_xmldata WITH '&#232;'.
+    REPLACE ALL OCCURRENCES OF 'é' IN lv_xmldata WITH '&#233;'.
+    REPLACE ALL OCCURRENCES OF 'ê' IN lv_xmldata WITH '&#234;'.
+    REPLACE ALL OCCURRENCES OF 'ë' IN lv_xmldata WITH '&#235;'.
+    REPLACE ALL OCCURRENCES OF 'ì' IN lv_xmldata WITH '&#236;'.
+    REPLACE ALL OCCURRENCES OF 'í' IN lv_xmldata WITH '&#237;'.
+    REPLACE ALL OCCURRENCES OF 'î' IN lv_xmldata WITH '&#238;'.
+    REPLACE ALL OCCURRENCES OF 'ï' IN lv_xmldata WITH '&#239;'.
+    REPLACE ALL OCCURRENCES OF 'ð' IN lv_xmldata WITH '&#240;'.
+    REPLACE ALL OCCURRENCES OF 'ñ' IN lv_xmldata WITH '&#241;'.
+    REPLACE ALL OCCURRENCES OF 'ò' IN lv_xmldata WITH '&#242;'.
+    REPLACE ALL OCCURRENCES OF 'ó' IN lv_xmldata WITH '&#243;'.
+    REPLACE ALL OCCURRENCES OF 'ô' IN lv_xmldata WITH '&#244;'.
+    REPLACE ALL OCCURRENCES OF 'õ' IN lv_xmldata WITH '&#245;'.
+    REPLACE ALL OCCURRENCES OF 'ö' IN lv_xmldata WITH '&#246;'.
+    REPLACE ALL OCCURRENCES OF '÷' IN lv_xmldata WITH '&#247;'.
+    REPLACE ALL OCCURRENCES OF 'ø' IN lv_xmldata WITH '&#248;'.
+    REPLACE ALL OCCURRENCES OF 'ù' IN lv_xmldata WITH '&#249;'.
+    REPLACE ALL OCCURRENCES OF 'ú' IN lv_xmldata WITH '&#250;'.
+    REPLACE ALL OCCURRENCES OF 'û' IN lv_xmldata WITH '&#251;'.
+    REPLACE ALL OCCURRENCES OF 'ü' IN lv_xmldata WITH '&#252;'.
+    REPLACE ALL OCCURRENCES OF '✓' IN lv_xmldata WITH 'a'.
+    REPLACE ALL OCCURRENCES OF 'ý' IN lv_xmldata WITH '&#253;'.
+    REPLACE ALL OCCURRENCES OF PCRE '[\x00-\x08\x0B\x0C\x0E-\x1F]' IN lv_xmldata WITH ''.
+    REPLACE ALL OCCURRENCES OF PCRE '\xA0' IN lv_xmldata WITH ' '.
+*    REPLACE ALL OCCURRENCES OF '&#40;' IN xmldata WITH ''.
+*    REPLACE ALL OCCURRENCES OF '&#41;' IN xmldata WITH ''.
+*    REPLACE ALL OCCURRENCES OF '&#58;' IN xmldata WITH ''.
+*    REPLACE ALL OCCURRENCES OF '&#91;' IN xmldata WITH ''.
+*    REPLACE ALL OCCURRENCES OF '&#93;' IN xmldata WITH ''.
+
+    result_xml = lv_xmldata ."xmldata .
+  ENDMETHOD.
+
+
+  METHOD generate_token.
+
+    DATA url             TYPE string.
+    DATA client_id       TYPE string.
+    DATA client_password TYPE string.
+*    btp_data( IMPORTING client_secret = client_password
+*                        client_id     = client_id
+*                        auth_url      = url  ).
+    url = 'https://dev-tcul4uw9.authentication.jp10.hana.ondemand.com'.
+    client_id = 'sb-a9a11c5f-c8f1-4166-90ca-a438e3d99928!b18606|ads-xsappname!b3446'.
+    client_password = '1c11280f-bc2e-4606-950a-e20ed4628535$gHXQH1O0PAjcLl_YW7J76XhnnopKeY83Xprt0IDtI94='.
+    TRY.
+        DATA(client) = create_client( |{ url }/oauth/token| ).
+      CATCH cx_static_check INTO DATA(lv_cx_static_check).
+        result = lv_cx_static_check->get_longtext( ).
+    ENDTRY.
+    DATA(req) = client->get_http_request(  ).
+
+    req->set_authorization_basic(
+    i_username = client_id
+    i_password = client_password )  .
+    req->set_content_type( 'application/x-www-form-urlencoded'  ).
+    req->set_form_field( EXPORTING i_name  = 'grant_type'
+                                   i_value = 'client_credentials' ) .
+    TRY.
+        DATA(response) = client->execute( if_web_http_client=>post )->get_text(  ).
+      CATCH cx_web_http_client_error INTO DATA(lv_cx_web_http_client_error). "cx_web_message_error.
+        result = lv_cx_web_http_client_error->get_longtext( ).
+        "handle exception
+    ENDTRY.
+    REPLACE ALL OCCURRENCES OF '{"access_token":"' IN response WITH ''.
+    SPLIT response AT '","token_type' INTO DATA(v1) DATA(v2) .
+    result = v1 .
+    TRY.
+        client->close(  ).
+      CATCH cx_web_http_client_error INTO DATA(lv_cx_web_http_client_error2).
+        result = lv_cx_web_http_client_error2->get_longtext( ).
+        "handle exception
+    ENDTRY.
+
+  ENDMETHOD.
+
+
+  METHOD getpdf.
+
+    lv1_url = 'https://adsrestapi-formsprocessing.cfapps.jp10.hana.ondemand.com/v1'.
+*    btp_data( IMPORTING  uri      = lv1_url  ).
+
+
+*    xml_data2 = xmldata.
+    DATA(lv_xmldata2) = Format_xml( xmldata = xmldata ).
+    result  = get_pdf_from_saved_template( template_1 = template
+                                           xmldata_1  = lv_xmldata2 ).
+    IF result IS INITIAL .
+
+      access_token = generate_token( ).
+      DATA url TYPE string.
+*      DATA(gv) = |{ lv1_url }/adsRender/pdf?templateSource=storageName&TraceLevel=2|.
+      DATA(gv) = |https://adsrestapi-formsprocessing.cfapps.jp10.hana.ondemand.com/v1/adsRender/pdf?templateSource=storageName&TraceLevel=2|.
+      DATA(ls_data_xml) = cl_web_http_utility=>encode_base64( lv_xmldata2 ).
+      url = |{ gv }|.
+      TRY.
+          DATA(client) = create_client( url ).
+        CATCH cx_static_check INTO DATA(lv_cx_static_check2).
+          result = lv_cx_static_check2->get_longtext( ).
+          "handle exception
+      ENDTRY.
+      DATA(req) = client->get_http_request(  ).
+      req->set_authorization_bearer( access_token ) .
+
+      DATA(ls_body) = VALUE struct( xdp_template = template
+                                       xml_data = ls_data_xml
+                                        form_type = 'print'
+*                                     form_type = 'interactive'
+                                       form_locale = 'en_US'
+                                       tagged_pdf = '0'
+                                       embed_font = '0' ).
+      DATA(lv_json) = /ui2/cl_json=>serialize( data = ls_body compress = abap_true pretty_name = /ui2/cl_json=>pretty_mode-camel_case ).
+      req->append_text(
+                EXPORTING
+                  data   = lv_json
+              ).
+      req->set_content_type( 'application/json' ).
+      DATA: url_response TYPE string.
+      TRY.
+          url_response = client->execute( if_web_http_client=>post )->get_text( ).
+        CATCH cx_web_http_client_error cx_web_message_error INTO DATA(lv_err).
+          result = lv_err->get_longtext( ).
+          "handle exception
+      ENDTRY.
+      result = url_response .
+
+      FIELD-SYMBOLS:
+        <data>                TYPE data,
+        <field>               TYPE any,
+        <pdf_based64_encoded> TYPE any.
+      DATA : lr_d TYPE string .
+      DATA(lr_d1) = /ui2/cl_json=>generate( json = url_response ).
+      IF lr_d1 IS BOUND.
+        ASSIGN lr_d1->* TO <data>.
+        ASSIGN COMPONENT `fileContent` OF STRUCTURE <data> TO <field>.
+        IF sy-subrc EQ 0.
+          ASSIGN <field>->* TO <pdf_based64_encoded>.
+          result = <pdf_based64_encoded>.
+*          CONCATENATE result xml_data2 into result.
+
+*            out->write( <pdf_based64_encoded> ).
+        ELSE.
+          result = 'ERROR'." ##no_text.
+        ENDIF.
+      ENDIF.
+    ENDIF .
+  ENDMETHOD.
+
+
+  METHOD getxdp.
+    DATA(url) = |{ lv1_url }/v1/forms/{ form }/templates/{ template }|.
+    TRY.
+        DATA(client) = create_client( url ).
+      CATCH cx_static_check INTO DATA(lv_cx_static_check3).
+        result = lv_cx_static_check3->get_longtext( ).
+        " handle exception
+    ENDTRY.
+    DATA(req) = client->get_http_request( ).
+    req->set_authorization_bearer( generate_token( ) ).
+    TRY.
+        DATA(url_response) = client->execute( if_web_http_client=>get )->get_text( ).
+      CATCH cx_web_http_client_error cx_web_message_error INTO DATA(lv_error2).
+        result = lv_error2->get_longtext( ).
+        " handle exception
+    ENDTRY.
+
+
+    DATA result11 TYPE string.
+    FIELD-SYMBOLS <data>                TYPE data.
+    FIELD-SYMBOLS <field>               TYPE any.
+    FIELD-SYMBOLS <pdf_based64_encoded> TYPE any.
+    DATA(lr_d1) = /ui2/cl_json=>generate( json = url_response ).
+    IF lr_d1 IS BOUND.
+      ASSIGN lr_d1->* TO <data>.
+      ASSIGN COMPONENT `xdpTemplate` OF STRUCTURE <data> TO <field>.
+      IF sy-subrc = 0.
+        ASSIGN <field>->* TO <pdf_based64_encoded>.
+        result = <pdf_based64_encoded>.
+      ELSE.
+        result = 'ERROR'.
+      ENDIF.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD get_pdf_from_saved_template.
+* select single * from ztemplate_store
+*         where formtemplate = @template_1
+*         into @data(tab1) .
+*
+*  IF SY-SUBRC <> 0  .
+*      DATA ev_pdf          TYPE xstring.
+*      DATA ev_pages        TYPE int4.
+*      DATA ev_trace_string TYPE string.
+*      DATA iv_xml_data     TYPE xstring.
+*      DATA iv_xdp_layout   TYPE xstring.
+*      DATA iv_locale       TYPE string.
+*      DATA is_options      TYPE cl_fp_ads_util=>ty_gs_options_pdf.
+*      DATA lv_data         TYPE TABLE OF ztemplate_store.
+*      SPLIT template_1 AT '/' INTO DATA(form) DATA(template1).
+*      DATA(xdp) =    getxdp( form     = form
+*                             template = template1 ).
+*
+*    iv_xdp_layout = xco_cp=>string( xdp )->as_xstring( xco_cp_binary=>text_encoding->base64 )->value.
+*
+*    lv_data = VALUE #(  (  formtemplate = template_1
+*                         comments     = 'Uploaded By YCL_TEST_ADOBE'
+*                         attachment   =  iv_xdp_layout
+*                         attach1      =  cl_abap_context_info=>get_system_date(  )
+*                         attach2      =  ' '
+*                         mimetype     = 'application/vnd.adobe.xdp+xml'
+*                         filename     =  |{ template1 }.xdp| ) ) .
+*     MODIFY ztemplate_store FROM TABLE @lv_data .
+*     COMMIT work and wait .
+*
+*
+*     TAB1-attachment  = iv_xdp_layout .
+*ENDIF .
+*
+*try .
+*    cl_fp_ads_util=>render_pdf( EXPORTING is_options      = is_options          "| PDF rendering parameters (optional)
+*                                          iv_xdp_layout   = tab1-attachment     "| Adobe XDP form template
+*                                          iv_xml_data     = xco_cp=>string( cl_web_http_utility=>encode_base64( xmldata_1 ) )->as_xstring( xco_cp_binary=>text_encoding->base64 )->value         "| XML data
+*                                          iv_locale       = 'en_US'             "| Locale for the rending: language_COUNTRY, e.g. en_US
+*                                IMPORTING ev_pages        = ev_pages            "| Number of pages
+*                                          ev_pdf          = ev_pdf              "| PDF rendering result
+*                                          ev_trace_string = ev_trace_string ) . "| Trace string  )
+*  CATCH cx_fp_ads_util INTO data(lx_fp_ads_util).
+*
+*
+*  endtry .
+*
+*result = xco_cp=>xstring( ev_pdf
+*      )->as_string( xco_cp_binary=>text_encoding->base64
+*      )->value .
+
+
+
+  ENDMETHOD.
+
+
+  METHOD if_oo_adt_classrun~main.
+
+
+*    DATA(result) = btp_data(  )  .
+  ENDMETHOD.
+ENDCLASS.
